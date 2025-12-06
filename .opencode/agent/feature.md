@@ -258,11 +258,12 @@ reviewers: []
 
 ## Dependencies
 
-| Package  | Purpose    | Version | Approved |
-| -------- | ---------- | ------- | -------- |
-| pkg-name | why needed | ^x.y.z  | [ ]      |
+| Package  | Purpose    | Approved |
+| -------- | ---------- | -------- |
+| pkg-name | why needed | [ ]      |
 
 **User must approve all dependencies before implementation begins.**
+**Dependencies are installed via `pnpm add <package>` to use the latest versions.**
 
 ## Documentation Updates
 
@@ -281,8 +282,7 @@ reviewers: []
 ## Definition of Done
 
 - [ ] All implementation steps complete
-- [ ] `npm run lint` passes (0 errors, 0 warnings)
-- [ ] `npm test` passes (all tests green)
+- [ ] `pnpm validate:fix` passes
 - [ ] Documentation updated
 - [ ] User acceptance testing passed
 - [ ] Changes committed
