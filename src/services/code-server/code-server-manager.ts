@@ -1,0 +1,237 @@
+/**
+ * CodeServerManager - Manages code-server instances.
+ * Handles starting, stopping, and health checking of code-server processes.
+ */
+
+import type { ResultPromise } from "execa";
+import type { CodeServerConfig, InstanceState } from "./types";
+import { findAvailablePort, spawnProcess } from "../platform/process";
+import { encodePathForUrl } from "../platform/paths";
+import { CodeServerError } from "../errors";
+
+/**
+ * Generate URL for opening a folder in code-server.
+ *
+ * @param port The port code-server is running on
+ * @param folderPath Absolute path to the folder to open
+ * @returns Full URL with folder query parameter
+ */
+export function urlForFolder(port: number, folderPath: string): string {
+  // Handle Windows paths: C:\Users\... -> /C:/Users/...
+  let normalizedPath = folderPath;
+  if (/^[A-Za-z]:/.test(folderPath)) {
+    // Windows absolute path - convert backslashes and prefix with /
+    normalizedPath = "/" + folderPath.replace(/\\/g, "/");
+  }
+
+  // Encode the path but preserve colons for Windows drive letters
+  const encodedPath = encodePathForUrl(normalizedPath).replace(/%3A/g, ":");
+  return `http://localhost:${port}/?folder=${encodedPath}`;
+}
+
+/**
+ * Manager for a code-server instance.
+ * Handles lifecycle management including start, stop, and health checks.
+ */
+export class CodeServerManager {
+  private readonly config: CodeServerConfig;
+  private state: InstanceState = "stopped";
+  private currentPort: number | null = null;
+  private currentPid: number | null = null;
+  private process: ResultPromise | null = null;
+  private startPromise: Promise<number> | null = null;
+
+  constructor(config: CodeServerConfig) {
+    this.config = config;
+  }
+
+  /**
+   * Check if the server is currently running.
+   */
+  isRunning(): boolean {
+    return this.state === "running";
+  }
+
+  /**
+   * Get the current port, or null if not running.
+   */
+  port(): number | null {
+    return this.currentPort;
+  }
+
+  /**
+   * Get the current process ID, or null if not running.
+   */
+  pid(): number | null {
+    return this.currentPid;
+  }
+
+  /**
+   * Get the current state of the server.
+   */
+  getState(): InstanceState {
+    return this.state;
+  }
+
+  /**
+   * Ensure the server is running.
+   * If already running, returns the current port.
+   * If starting, waits for startup to complete.
+   *
+   * @returns Promise resolving to the port number
+   * @throws CodeServerError if startup fails
+   */
+  async ensureRunning(): Promise<number> {
+    // If already running, return current port
+    if (this.state === "running" && this.currentPort !== null) {
+      return this.currentPort;
+    }
+
+    // If already starting, wait for that promise
+    if (this.state === "starting" && this.startPromise !== null) {
+      return this.startPromise;
+    }
+
+    // Start the server
+    this.state = "starting";
+    this.startPromise = this.doStart();
+
+    try {
+      const port = await this.startPromise;
+      this.state = "running";
+      return port;
+    } catch (error: unknown) {
+      this.state = "failed";
+      this.startPromise = null;
+      throw error;
+    }
+  }
+
+  private async doStart(): Promise<number> {
+    // Find an available port
+    const port = await findAvailablePort();
+    this.currentPort = port;
+
+    // Build command arguments
+    const args = [
+      "--port",
+      port.toString(),
+      "--auth",
+      "none",
+      "--extensions-dir",
+      this.config.extensionsDir,
+      "--user-data-dir",
+      this.config.userDataDir,
+    ];
+
+    // Spawn the process
+    try {
+      this.process = spawnProcess("code-server", args, {
+        cwd: this.config.runtimeDir,
+      });
+
+      // Get the PID
+      this.currentPid = this.process.pid ?? null;
+
+      // Wait for health check
+      await this.waitForHealthy(port);
+
+      return port;
+    } catch (error: unknown) {
+      this.currentPort = null;
+      this.currentPid = null;
+      this.process = null;
+
+      const message = error instanceof Error ? error.message : "Unknown error starting code-server";
+      throw new CodeServerError(`Failed to start code-server: ${message}`);
+    }
+  }
+
+  /**
+   * Wait for the server to become healthy.
+   * Retries up to 30 times with 100ms delay (3s total timeout).
+   */
+  private async waitForHealthy(port: number): Promise<void> {
+    const maxRetries = 30;
+    const retryDelay = 100;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const healthy = await this.checkHealth(port);
+        if (healthy) {
+          return;
+        }
+      } catch {
+        // Ignore errors during health check
+      }
+
+      await this.sleep(retryDelay);
+    }
+
+    throw new CodeServerError("Health check timed out after 3 seconds");
+  }
+
+  /**
+   * Check if the server is responding to health checks.
+   */
+  private async checkHealth(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      // Dynamic import to avoid mocking issues
+      import("http").then(({ get }) => {
+        const req = get(`http://localhost:${port}/healthz`, (res) => {
+          resolve(res.statusCode === 200);
+        });
+        req.on("error", () => resolve(false));
+        req.setTimeout(1000, () => {
+          req.destroy();
+          resolve(false);
+        });
+      });
+    });
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Stop the server.
+   * Sends SIGTERM first, then SIGKILL after timeout.
+   *
+   * @throws CodeServerError if stop fails
+   */
+  async stop(): Promise<void> {
+    if (this.state === "stopped" || this.process === null) {
+      return;
+    }
+
+    this.state = "stopping";
+
+    try {
+      // Send SIGTERM for graceful shutdown
+      this.process.kill("SIGTERM");
+
+      // Wait for process to exit (5s timeout)
+      const exitPromise = this.process.catch(() => {
+        // Process terminated
+      });
+
+      const timeoutPromise = this.sleep(5000).then(() => {
+        throw new Error("Process did not exit within 5 seconds");
+      });
+
+      try {
+        await Promise.race([exitPromise, timeoutPromise]);
+      } catch {
+        // Force kill if graceful shutdown failed
+        this.process.kill("SIGKILL");
+      }
+    } finally {
+      this.state = "stopped";
+      this.currentPort = null;
+      this.currentPid = null;
+      this.process = null;
+      this.startPromise = null;
+    }
+  }
+}

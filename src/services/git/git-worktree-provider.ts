@@ -1,0 +1,188 @@
+/**
+ * GitWorktreeProvider - Implementation of IWorkspaceProvider using git worktrees.
+ */
+
+import path from "path";
+import type { IGitClient } from "./git-client";
+import type { IWorkspaceProvider } from "./workspace-provider";
+import type { BaseInfo, RemovalResult, UpdateBasesResult, Workspace } from "./types";
+import { WorkspaceError } from "../errors";
+import { getProjectWorkspacesDir, sanitizeWorkspaceName } from "../platform/paths";
+
+/**
+ * Implementation of IWorkspaceProvider using git worktrees.
+ * Each workspace is a git worktree, allowing parallel work on different branches.
+ */
+export class GitWorktreeProvider implements IWorkspaceProvider {
+  readonly projectRoot: string;
+  private readonly gitClient: IGitClient;
+
+  private constructor(projectRoot: string, gitClient: IGitClient) {
+    this.projectRoot = projectRoot;
+    this.gitClient = gitClient;
+  }
+
+  /**
+   * Factory method to create a GitWorktreeProvider.
+   * Validates that the path is an absolute path to a git repository.
+   *
+   * @param projectRoot Absolute path to the git repository
+   * @param gitClient Git client to use for operations
+   * @returns Promise resolving to a new GitWorktreeProvider
+   * @throws WorkspaceError if path is invalid or not a git repository
+   */
+  static async create(projectRoot: string, gitClient: IGitClient): Promise<GitWorktreeProvider> {
+    // Validate absolute path
+    if (!path.isAbsolute(projectRoot)) {
+      throw new WorkspaceError(`Path must be absolute: ${projectRoot}`);
+    }
+
+    // Validate it's a git repository
+    try {
+      const isRepo = await gitClient.isGitRepository(projectRoot);
+      if (!isRepo) {
+        throw new WorkspaceError(`Path is not a git repository: ${projectRoot}`);
+      }
+    } catch (error: unknown) {
+      if (error instanceof WorkspaceError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : "Unknown error checking repository";
+      throw new WorkspaceError(`Failed to validate repository: ${message}`);
+    }
+
+    return new GitWorktreeProvider(projectRoot, gitClient);
+  }
+
+  async discover(): Promise<readonly Workspace[]> {
+    const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
+
+    // Filter out the main worktree
+    return worktrees
+      .filter((wt) => !wt.isMain)
+      .map((wt) => ({
+        name: wt.name,
+        path: wt.path,
+        branch: wt.branch,
+      }));
+  }
+
+  async listBases(): Promise<readonly BaseInfo[]> {
+    const branches = await this.gitClient.listBranches(this.projectRoot);
+
+    return branches.map((branch) => ({
+      name: branch.name,
+      isRemote: branch.isRemote,
+    }));
+  }
+
+  async updateBases(): Promise<UpdateBasesResult> {
+    const remotes = await this.gitClient.listRemotes(this.projectRoot);
+
+    const fetchedRemotes: string[] = [];
+    const failedRemotes: { remote: string; error: string }[] = [];
+
+    for (const remote of remotes) {
+      try {
+        await this.gitClient.fetch(this.projectRoot, remote);
+        fetchedRemotes.push(remote);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown fetch error";
+        failedRemotes.push({ remote, error: errorMessage });
+      }
+    }
+
+    return { fetchedRemotes, failedRemotes };
+  }
+
+  async createWorkspace(name: string, baseBranch: string): Promise<Workspace> {
+    // Sanitize the name for filesystem (/ -> %)
+    const sanitizedName = sanitizeWorkspaceName(name);
+
+    // Compute the worktree path
+    const workspacesDir = getProjectWorkspacesDir(this.projectRoot);
+    const worktreePath = path.join(workspacesDir, sanitizedName);
+
+    // Create the branch
+    try {
+      await this.gitClient.createBranch(this.projectRoot, name, baseBranch);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error creating branch";
+      throw new WorkspaceError(`Failed to create branch: ${message}`);
+    }
+
+    // Create the worktree
+    try {
+      await this.gitClient.addWorktree(this.projectRoot, worktreePath, name);
+    } catch (error: unknown) {
+      // Rollback: delete the branch we just created
+      try {
+        await this.gitClient.deleteBranch(this.projectRoot, name);
+      } catch {
+        // Ignore rollback errors
+      }
+
+      const message = error instanceof Error ? error.message : "Unknown error creating worktree";
+      throw new WorkspaceError(`Failed to create worktree: ${message}`);
+    }
+
+    return {
+      name,
+      path: worktreePath,
+      branch: name,
+    };
+  }
+
+  async removeWorkspace(workspacePath: string, deleteBase: boolean): Promise<RemovalResult> {
+    // Normalize paths for comparison
+    const normalizedWorkspacePath = path.normalize(workspacePath).replace(/\/$/, "");
+    const normalizedProjectRoot = path.normalize(this.projectRoot).replace(/\/$/, "");
+
+    // Cannot remove main worktree
+    if (normalizedWorkspacePath === normalizedProjectRoot) {
+      throw new WorkspaceError("Cannot remove the main worktree");
+    }
+
+    // Get the branch name before removal
+    const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
+    const worktree = worktrees.find(
+      (wt) => path.normalize(wt.path).replace(/\/$/, "") === normalizedWorkspacePath
+    );
+    const branchName = worktree?.branch;
+
+    // Remove the worktree
+    await this.gitClient.removeWorktree(this.projectRoot, workspacePath);
+
+    // Prune stale worktree entries
+    await this.gitClient.pruneWorktrees(this.projectRoot);
+
+    // Optionally delete the branch
+    let baseDeleted = false;
+    if (deleteBase && branchName) {
+      try {
+        await this.gitClient.deleteBranch(this.projectRoot, branchName);
+        baseDeleted = true;
+      } catch {
+        // Branch deletion can fail (e.g., if branch is checked out elsewhere)
+        // This is not a critical error
+        baseDeleted = false;
+      }
+    }
+
+    return {
+      workspaceRemoved: true,
+      baseDeleted,
+    };
+  }
+
+  async isDirty(workspacePath: string): Promise<boolean> {
+    const status = await this.gitClient.getStatus(workspacePath);
+    return status.isDirty;
+  }
+
+  isMainWorkspace(workspacePath: string): boolean {
+    const normalizedWorkspacePath = path.normalize(workspacePath).replace(/\/$/, "");
+    const normalizedProjectRoot = path.normalize(this.projectRoot).replace(/\/$/, "");
+    return normalizedWorkspacePath === normalizedProjectRoot;
+  }
+}
