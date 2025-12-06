@@ -1,10 +1,7 @@
 ---
 description: Reviews documentation quality and AI agent prompt clarity
 mode: subagent
-model: anthropic/claude-sonnet-4-5
-thinking:
-  type: enabled
-  budgetTokens: 8000
+model: anthropic/review
 tools:
   write: false
   edit: false

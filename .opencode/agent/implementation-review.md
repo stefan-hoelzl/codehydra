@@ -1,10 +1,7 @@
 ---
 description: Reviews implementation to verify it followed the approved plan
 mode: subagent
-model: anthropic/claude-sonnet-4-5
-thinking:
-  type: enabled
-  budgetTokens: 10000
+model: anthropic/review
 tools:
   write: false
   edit: false

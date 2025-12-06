@@ -393,7 +393,7 @@ These reviewers analyze the **plan** before implementation begins:
 
 | Reviewer           | Use When                                               |
 | ------------------ | ------------------------------------------------------ |
-| @review-svelte     | UI components, Svelte 5, CSS, HTML, UX changes         |
+| @review-ui         | UI components, Svelte 5, CSS, HTML, UX changes         |
 | @review-typescript | TypeScript code, patterns, clean code                  |
 | @review-electron   | Electron security, IPC, process architecture           |
 | @review-arch       | System architecture, component integration             |
