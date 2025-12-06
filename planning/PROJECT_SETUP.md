@@ -1,5 +1,5 @@
 ---
-status: IMPLEMENTING
+status: COMPLETED
 last_updated: 2025-12-06
 reviewers: [review-typescript, review-electron, review-arch, review-docs]
 ---
