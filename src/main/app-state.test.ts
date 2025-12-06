@@ -1,0 +1,385 @@
+// @vitest-environment node
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+import type { IViewManager } from "./managers/view-manager.interface";
+
+// Mock services
+const { mockProjectStore, mockWorkspaceProvider, mockViewManager, mockCreateGitWorktreeProvider } =
+  vi.hoisted(() => {
+    const mockProvider: {
+      discover: ReturnType<typeof vi.fn>;
+      createWorkspace: ReturnType<typeof vi.fn>;
+      removeWorkspace: ReturnType<typeof vi.fn>;
+      listBases: ReturnType<typeof vi.fn>;
+      updateBases: ReturnType<typeof vi.fn>;
+      isDirty: ReturnType<typeof vi.fn>;
+      projectRoot: string;
+      isMainWorkspace: ReturnType<typeof vi.fn>;
+    } = {
+      projectRoot: "/project",
+      discover: vi.fn(() =>
+        Promise.resolve([
+          { name: "feature-1", path: "/project/.worktrees/feature-1", branch: "feature-1" },
+        ])
+      ),
+      isMainWorkspace: vi.fn(() => false),
+      createWorkspace: vi.fn((name: string) =>
+        Promise.resolve({
+          name,
+          path: `/project/.worktrees/${name}`,
+          branch: name,
+        })
+      ),
+      removeWorkspace: vi.fn(() => Promise.resolve({ workspaceRemoved: true, baseDeleted: false })),
+      listBases: vi.fn(() =>
+        Promise.resolve([
+          { name: "main", isRemote: false },
+          { name: "origin/main", isRemote: true },
+        ])
+      ),
+      updateBases: vi.fn(() => Promise.resolve({ fetchedRemotes: ["origin"], failedRemotes: [] })),
+      isDirty: vi.fn(() => Promise.resolve(false)),
+    };
+
+    const mockStore = {
+      saveProject: vi.fn(() => Promise.resolve()),
+      removeProject: vi.fn(() => Promise.resolve()),
+      loadAllProjects: vi.fn(() => Promise.resolve([] as string[])),
+    };
+
+    const mockView: {
+      getUIView: ReturnType<typeof vi.fn>;
+      createWorkspaceView: ReturnType<typeof vi.fn>;
+      destroyWorkspaceView: ReturnType<typeof vi.fn>;
+      getWorkspaceView: ReturnType<typeof vi.fn>;
+      updateBounds: ReturnType<typeof vi.fn>;
+      setActiveWorkspace: ReturnType<typeof vi.fn>;
+      focusActiveWorkspace: ReturnType<typeof vi.fn>;
+      focusUI: ReturnType<typeof vi.fn>;
+    } = {
+      getUIView: vi.fn(),
+      createWorkspaceView: vi.fn(),
+      destroyWorkspaceView: vi.fn(),
+      getWorkspaceView: vi.fn(),
+      updateBounds: vi.fn(),
+      setActiveWorkspace: vi.fn(),
+      focusActiveWorkspace: vi.fn(),
+      focusUI: vi.fn(),
+    };
+
+    return {
+      mockProjectStore: mockStore,
+      mockWorkspaceProvider: mockProvider,
+      mockViewManager: mockView,
+      mockCreateGitWorktreeProvider: vi.fn(() => Promise.resolve(mockProvider)),
+    };
+  });
+
+vi.mock("../services", async () => {
+  const actual = await vi.importActual("../services");
+  return {
+    ...actual,
+    createGitWorktreeProvider: mockCreateGitWorktreeProvider,
+  };
+});
+
+import { AppState } from "./app-state";
+import type { ProjectStore } from "../services";
+
+describe("AppState", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProjectStore.loadAllProjects.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe("constructor", () => {
+    it("creates an AppState instance", () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      expect(appState).toBeInstanceOf(AppState);
+    });
+  });
+
+  describe("openProject", () => {
+    it("validates path is a git repository", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+
+      expect(mockCreateGitWorktreeProvider).toHaveBeenCalledWith("/project");
+    });
+
+    it("discovers workspaces from git worktrees", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+
+      expect(mockWorkspaceProvider.discover).toHaveBeenCalled();
+    });
+
+    it("creates WebContentsView for each workspace", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+
+      expect(mockViewManager.createWorkspaceView).toHaveBeenCalledWith(
+        "/project/.worktrees/feature-1",
+        expect.stringContaining("http://localhost:8080")
+      );
+    });
+
+    it("sets first workspace as active", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+
+      expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith(
+        "/project/.worktrees/feature-1"
+      );
+    });
+
+    it("persists project via ProjectStore", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+
+      expect(mockProjectStore.saveProject).toHaveBeenCalledWith("/project");
+    });
+
+    it("returns Project object", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      const project = await appState.openProject("/project");
+
+      expect(project).toEqual({
+        path: "/project",
+        name: "project",
+        workspaces: [
+          { name: "feature-1", path: "/project/.worktrees/feature-1", branch: "feature-1" },
+        ],
+      });
+    });
+
+    it("handles project with zero workspaces", async () => {
+      mockWorkspaceProvider.discover.mockResolvedValueOnce([]);
+
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      const project = await appState.openProject("/project");
+
+      expect(project.workspaces).toEqual([]);
+      expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe("closeProject", () => {
+    it("destroys all workspace views", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      appState.closeProject("/project");
+
+      expect(mockViewManager.destroyWorkspaceView).toHaveBeenCalledWith(
+        "/project/.worktrees/feature-1"
+      );
+    });
+
+    it("removes project from internal state", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      appState.closeProject("/project");
+
+      expect(appState.getProject("/project")).toBeUndefined();
+    });
+  });
+
+  describe("getProject", () => {
+    it("returns project for open path", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      const project = appState.getProject("/project");
+
+      expect(project?.path).toBe("/project");
+    });
+
+    it("returns undefined for non-existent path", () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      expect(appState.getProject("/nonexistent")).toBeUndefined();
+    });
+  });
+
+  describe("getAllProjects", () => {
+    it("returns all open projects", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      const projects = appState.getAllProjects();
+
+      expect(projects).toHaveLength(1);
+      expect(projects[0]?.path).toBe("/project");
+    });
+  });
+
+  describe("getWorkspaceProvider", () => {
+    it("returns cached provider for open project", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      const provider = appState.getWorkspaceProvider("/project");
+
+      expect(provider).toBe(mockWorkspaceProvider);
+    });
+
+    it("returns undefined for non-existent project", () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      expect(appState.getWorkspaceProvider("/nonexistent")).toBeUndefined();
+    });
+  });
+
+  describe("getWorkspaceUrl", () => {
+    it("generates code-server URL with folder parameter", () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      const url = appState.getWorkspaceUrl("/path/to/workspace");
+
+      expect(url).toContain("http://localhost:8080");
+      expect(url).toContain("folder=");
+    });
+  });
+
+  describe("loadPersistedProjects", () => {
+    it("loads projects from ProjectStore", async () => {
+      const projectPaths = ["/project"];
+      mockProjectStore.loadAllProjects.mockResolvedValue(projectPaths);
+
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.loadPersistedProjects();
+
+      expect(mockProjectStore.loadAllProjects).toHaveBeenCalled();
+      expect(mockCreateGitWorktreeProvider).toHaveBeenCalledWith("/project");
+    });
+
+    it("skips invalid projects", async () => {
+      const projectPaths = ["/invalid"];
+      mockProjectStore.loadAllProjects.mockResolvedValue(projectPaths);
+      mockCreateGitWorktreeProvider.mockRejectedValueOnce(new Error("Not a git repo"));
+
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      // Should not throw
+      await appState.loadPersistedProjects();
+
+      expect(appState.getAllProjects()).toHaveLength(0);
+    });
+  });
+
+  describe("findProjectForWorkspace", () => {
+    it("finds project containing workspace", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      const project = appState.findProjectForWorkspace("/project/.worktrees/feature-1");
+
+      expect(project?.path).toBe("/project");
+    });
+
+    it("returns undefined for unknown workspace", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        8080
+      );
+
+      await appState.openProject("/project");
+      const project = appState.findProjectForWorkspace("/other/.worktrees/unknown");
+
+      expect(project).toBeUndefined();
+    });
+  });
+});
