@@ -29,11 +29,12 @@
 
 ## Key Concepts
 
-| Concept         | Description                                                            |
-| --------------- | ---------------------------------------------------------------------- |
-| Project         | Git repository path (container, not viewable) - the main git directory |
-| Workspace       | Git worktree (viewable in code-server) - NOT the main directory        |
-| WebContentsView | Electron view for embedding (not iframe)                               |
+| Concept         | Description                                                                         |
+| --------------- | ----------------------------------------------------------------------------------- |
+| Project         | Git repository path (container, not viewable) - the main git directory              |
+| Workspace       | Git worktree (viewable in code-server) - NOT the main directory                     |
+| WebContentsView | Electron view for embedding (not iframe)                                            |
+| Shortcut Mode   | Keyboard-driven navigation activated by Alt+X, shows overlay with workspace actions |
 
 ## Project Structure (after Phase 1)
 

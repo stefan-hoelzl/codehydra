@@ -16,7 +16,9 @@
 html,
 body,
 #app {
+  height: 100%;
   background: transparent;
+  overflow: hidden;
 }
 
 body {

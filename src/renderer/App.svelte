@@ -15,13 +15,18 @@
     removeWorkspace,
   } from "$lib/stores/projects.svelte.js";
   import { dialogState, openCreateDialog, openRemoveDialog } from "$lib/stores/dialogs.svelte.js";
+  import {
+    shortcutModeActive,
+    handleShortcutEnable,
+    handleShortcutDisable,
+    handleKeyUp,
+    handleWindowBlur,
+  } from "$lib/stores/shortcuts.svelte.js";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import CreateWorkspaceDialog from "$lib/components/CreateWorkspaceDialog.svelte";
   import RemoveWorkspaceDialog from "$lib/components/RemoveWorkspaceDialog.svelte";
+  import ShortcutOverlay from "$lib/components/ShortcutOverlay.svelte";
   import type { ProjectPath } from "$lib/api";
-
-  // Shortcut mode state for keyboard navigation
-  let shortcutModeActive = $state(false);
 
   // Sync dialog state with main process z-order
   $effect(() => {
@@ -29,47 +34,15 @@
     void api.setDialogMode(isDialogOpen);
   });
 
-  // Subscribe to shortcut enable events from main process
+  // Subscribe to shortcut events from main process
   $effect(() => {
-    const unsubscribe = api.onShortcutEnable(() => {
-      shortcutModeActive = true;
-      console.log("KEYBOARD_WIRING: shortcut mode enabled");
-    });
-    return unsubscribe;
+    const unsubEnable = api.onShortcutEnable(handleShortcutEnable);
+    const unsubDisable = api.onShortcutDisable(handleShortcutDisable);
+    return () => {
+      unsubEnable();
+      unsubDisable();
+    };
   });
-
-  // Subscribe to shortcut disable events from main process (handles race condition)
-  $effect(() => {
-    const unsubscribe = api.onShortcutDisable(() => {
-      deactivateShortcutMode("main-process-disable");
-    });
-    return unsubscribe;
-  });
-
-  /**
-   * Deactivates shortcut mode and returns focus to workspace.
-   * Used by both keyup and blur handlers for consistent cleanup.
-   */
-  function deactivateShortcutMode(reason: string): void {
-    if (!shortcutModeActive) return;
-    shortcutModeActive = false;
-    console.log(`KEYBOARD_WIRING: shortcut mode disabled (${reason})`);
-    // Fire-and-forget pattern - see AGENTS.md IPC Patterns
-    void api.setDialogMode(false);
-    void api.focusActiveWorkspace();
-  }
-
-  function handleKeyUp(event: KeyboardEvent): void {
-    // Ignore auto-repeat events at UI layer as well
-    if (event.repeat) return;
-    if (event.key === "Alt" && shortcutModeActive) {
-      deactivateShortcutMode("alt-release");
-    }
-  }
-
-  function handleWindowBlur(): void {
-    deactivateShortcutMode("blur");
-  }
 
   // Set up initialization and event subscriptions on mount
   $effect(() => {
@@ -175,13 +148,13 @@
   <RemoveWorkspaceDialog open={true} workspacePath={dialogState.value.workspacePath} />
 {/if}
 
+<ShortcutOverlay active={shortcutModeActive.value} />
+
 <style>
   .app {
     display: flex;
-    height: 100vh;
+    height: 100%;
     color: var(--ch-foreground);
-    /* TODO: Transparency between WebContentsViews not working on Linux.
-       Investigate in KEYBOARD_ACTIVATION plan. For now, use opaque background. */
-    background: var(--ch-background);
+    background: transparent; /* Allow VS Code to show through UI layer */
   }
 </style>

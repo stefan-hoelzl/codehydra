@@ -91,9 +91,9 @@ async function initialize(): Promise<void> {
   const uiView = viewManager.getUIView();
   await uiView.webContents.loadFile(nodePath.join(__dirname, "../renderer/index.html"));
 
-  // 8. Open DevTools in development only
+  // 8. Open DevTools in development only (detached to avoid interfering with UI layer)
   if (!app.isPackaged) {
-    uiView.webContents.openDevTools({ mode: "bottom" });
+    uiView.webContents.openDevTools({ mode: "detach" });
   }
 
   // 9. Load persisted projects

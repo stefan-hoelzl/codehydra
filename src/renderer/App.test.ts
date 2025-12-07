@@ -55,6 +55,7 @@ vi.mock("$lib/api", () => mockApi);
 import App from "./App.svelte";
 import * as projectsStore from "$lib/stores/projects.svelte.js";
 import * as dialogsStore from "$lib/stores/dialogs.svelte.js";
+import * as shortcutsStore from "$lib/stores/shortcuts.svelte.js";
 
 describe("App component", () => {
   beforeEach(() => {
@@ -62,6 +63,7 @@ describe("App component", () => {
     // Reset stores before each test
     projectsStore.reset();
     dialogsStore.reset();
+    shortcutsStore.reset();
     // Default to returning empty projects
     mockApi.listProjects.mockResolvedValue([]);
   });
@@ -299,7 +301,7 @@ describe("App component", () => {
   });
 
   describe("shortcut mode handling", () => {
-    it("app-subscribes-on-mount: subscribes to onShortcutEnable via $effect", async () => {
+    it("should-subscribe-to-shortcut-enable-on-mount: subscribes to onShortcutEnable via $effect", async () => {
       render(App);
 
       await waitFor(() => {
@@ -307,24 +309,44 @@ describe("App component", () => {
       });
     });
 
-    it("app-unsubscribe-on-cleanup: unsubscribe called when component unmounts", async () => {
+    it("should-subscribe-to-shortcut-disable-on-mount: subscribes to onShortcutDisable via $effect", async () => {
+      render(App);
+
+      await waitFor(() => {
+        expect(mockApi.onShortcutDisable).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("should-cleanup-subscriptions-on-unmount: unsubscribe called when component unmounts", async () => {
       const unsubShortcutEnable = vi.fn();
+      const unsubShortcutDisable = vi.fn();
       mockApi.onShortcutEnable.mockReturnValue(unsubShortcutEnable);
+      mockApi.onShortcutDisable.mockReturnValue(unsubShortcutDisable);
 
       const { unmount } = render(App);
 
       await waitFor(() => {
         expect(mockApi.onShortcutEnable).toHaveBeenCalled();
+        expect(mockApi.onShortcutDisable).toHaveBeenCalled();
       });
 
       unmount();
 
       expect(unsubShortcutEnable).toHaveBeenCalledTimes(1);
+      expect(unsubShortcutDisable).toHaveBeenCalledTimes(1);
     });
 
-    it("app-logs-on-shortcut-enable: logs 'shortcut mode enabled' on ENABLE received", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    it("should-render-shortcut-overlay-component: ShortcutOverlay is rendered", async () => {
+      render(App);
 
+      // The overlay should always be in the DOM (hidden when inactive)
+      // Find the shortcut overlay by its unique class
+      const overlay = document.querySelector(".shortcut-overlay");
+      expect(overlay).toBeInTheDocument();
+      expect(overlay).toHaveAttribute("role", "status");
+    });
+
+    it("should-pass-active-prop-to-overlay: overlay shows when shortcut mode active", async () => {
       let shortcutEnableCallback: (() => void) | null = null;
       (
         mockApi.onShortcutEnable as unknown as {
@@ -344,86 +366,14 @@ describe("App component", () => {
       // Trigger shortcut enable
       shortcutEnableCallback!();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("KEYBOARD_WIRING: shortcut mode enabled")
-      );
-
-      consoleSpy.mockRestore();
-    });
-
-    it("app-logs-on-alt-keyup: logs 'shortcut mode disabled' on Alt keyup", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
-
-      render(App);
-
+      // Overlay should now be active (aria-hidden=false)
       await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
+        const overlay = screen.getByRole("status");
+        expect(overlay).toHaveClass("active");
       });
-
-      // Enable shortcut mode first
-      shortcutEnableCallback!();
-
-      // Clear previous logs
-      consoleSpy.mockClear();
-
-      // Simulate Alt keyup
-      window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt" }));
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("KEYBOARD_WIRING: shortcut mode disabled")
-      );
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("alt-release"));
-
-      consoleSpy.mockRestore();
     });
 
-    it("app-logs-on-window-blur: logs 'shortcut mode disabled (blur)' on window blur", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
-
-      render(App);
-
-      await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
-      });
-
-      // Enable shortcut mode first
-      shortcutEnableCallback!();
-
-      // Clear previous logs
-      consoleSpy.mockClear();
-
-      // Simulate window blur
-      window.dispatchEvent(new Event("blur"));
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("KEYBOARD_WIRING: shortcut mode disabled")
-      );
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("blur"));
-
-      consoleSpy.mockRestore();
-    });
-
-    it("app-keyup-calls-dialog-mode-false: Alt keyup calls setDialogMode(false) and focusActiveWorkspace()", async () => {
+    it("should-wire-keyup-handler-to-window: Alt keyup disables shortcut mode", async () => {
       let shortcutEnableCallback: (() => void) | null = null;
       (
         mockApi.onShortcutEnable as unknown as {
@@ -454,7 +404,7 @@ describe("App component", () => {
       expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
     });
 
-    it("app-blur-calls-dialog-mode-false: window blur calls setDialogMode(false) and focusActiveWorkspace()", async () => {
+    it("should-wire-blur-handler-to-window: window blur disables shortcut mode", async () => {
       let shortcutEnableCallback: (() => void) | null = null;
       (
         mockApi.onShortcutEnable as unknown as {
@@ -485,9 +435,7 @@ describe("App component", () => {
       expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
     });
 
-    it("does not log or call setDialogMode when shortcut mode is not active", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
+    it("does not call setDialogMode when shortcut mode is not active", async () => {
       render(App);
 
       // Wait for component to mount
@@ -495,19 +443,14 @@ describe("App component", () => {
         expect(mockApi.onShortcutEnable).toHaveBeenCalled();
       });
 
-      // Clear initial calls
-      consoleSpy.mockClear();
+      // Clear initial calls from dialog state sync
       mockApi.setDialogMode.mockClear();
 
       // Simulate Alt keyup without shortcut mode being enabled
       window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt" }));
 
-      // Should not log (no shortcut mode active)
-      expect(consoleSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining("KEYBOARD_WIRING: shortcut mode disabled")
-      );
-
-      consoleSpy.mockRestore();
+      // setDialogMode should not be called when shortcut mode is not active
+      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
     });
   });
 });

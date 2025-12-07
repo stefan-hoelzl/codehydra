@@ -34,6 +34,8 @@ type EventCallbacks = {
   onWorkspaceCreated: ((event: WorkspaceCreatedEvent) => void) | null;
   onWorkspaceRemoved: ((event: WorkspaceRemovedEvent) => void) | null;
   onWorkspaceSwitched: ((event: WorkspaceSwitchedEvent) => void) | null;
+  onShortcutEnable: (() => void) | null;
+  onShortcutDisable: (() => void) | null;
 };
 
 // Create mock API functions with callback capture
@@ -43,6 +45,8 @@ const callbacks: EventCallbacks = {
   onWorkspaceCreated: null,
   onWorkspaceRemoved: null,
   onWorkspaceSwitched: null,
+  onShortcutEnable: null,
+  onShortcutDisable: null,
 };
 
 const mockApi = vi.hoisted(() => ({
@@ -77,8 +81,15 @@ const mockApi = vi.hoisted(() => ({
     callbacks.onWorkspaceSwitched = cb;
     return vi.fn();
   }),
-  onShortcutEnable: vi.fn(() => vi.fn()),
-  onShortcutDisable: vi.fn(() => vi.fn()),
+  onShortcutEnable: vi.fn((cb: () => void): Unsubscribe => {
+    callbacks.onShortcutEnable = cb;
+    return vi.fn();
+  }),
+  onShortcutDisable: vi.fn((cb: () => void): Unsubscribe => {
+    callbacks.onShortcutDisable = cb;
+    return vi.fn();
+  }),
+  focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the API module
@@ -88,6 +99,7 @@ vi.mock("$lib/api", () => mockApi);
 import App from "../App.svelte";
 import * as projectsStore from "$lib/stores/projects.svelte.js";
 import * as dialogsStore from "$lib/stores/dialogs.svelte.js";
+import * as shortcutsStore from "$lib/stores/shortcuts.svelte.js";
 
 // Helper to create mock workspace
 function createWorkspace(name: string, projectPath: string): Workspace {
@@ -112,6 +124,7 @@ describe("Integration tests", () => {
     vi.clearAllMocks();
     projectsStore.reset();
     dialogsStore.reset();
+    shortcutsStore.reset();
 
     // Reset callbacks
     callbacks.onProjectOpened = null;
@@ -119,6 +132,8 @@ describe("Integration tests", () => {
     callbacks.onWorkspaceCreated = null;
     callbacks.onWorkspaceRemoved = null;
     callbacks.onWorkspaceSwitched = null;
+    callbacks.onShortcutEnable = null;
+    callbacks.onShortcutDisable = null;
 
     // Default mocks
     mockApi.listProjects.mockResolvedValue([]);
@@ -251,8 +266,8 @@ describe("Integration tests", () => {
         expect(screen.getByText("feature-x")).toBeInTheDocument();
       });
 
-      // Click remove workspace button
-      const removeButton = screen.getByLabelText(/remove workspace/i);
+      // Click remove workspace button (use getByRole to target the button specifically)
+      const removeButton = screen.getByRole("button", { name: /remove workspace/i });
       await fireEvent.click(removeButton);
 
       // Verify dialog opens
@@ -397,8 +412,8 @@ describe("Integration tests", () => {
         expect(screen.getByText("feature-x")).toBeInTheDocument();
       });
 
-      // Open dialog
-      const removeButton = screen.getByLabelText(/remove workspace/i);
+      // Open dialog (use getByRole to target the button specifically)
+      const removeButton = screen.getByRole("button", { name: /remove workspace/i });
       await fireEvent.click(removeButton);
 
       await waitFor(() => {
@@ -584,6 +599,49 @@ describe("Integration tests", () => {
       const featureItem = screen.getByText("feature-x").closest("li");
       expect(featureItem).toHaveAttribute("aria-current", "true");
       expect(mainItem).not.toHaveAttribute("aria-current", "true");
+    });
+  });
+
+  describe("keyboard activation", () => {
+    it("keyboard-activation-full-flow: Alt+X → overlay shows → Alt release → overlay hides → APIs called", async () => {
+      render(App);
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(screen.getByText("No projects open.")).toBeInTheDocument();
+      });
+
+      // Clear any calls from initialization
+      mockApi.setDialogMode.mockClear();
+      mockApi.focusActiveWorkspace.mockClear();
+
+      // Verify overlay exists but is initially inactive (opacity 0)
+      // Use { hidden: true } because aria-hidden="true" excludes from accessible tree
+      const overlay = screen.getByRole("status", { hidden: true });
+      expect(overlay).toHaveClass("shortcut-overlay");
+      expect(overlay).not.toHaveClass("active");
+
+      // Step 1: Simulate shortcut enable event (Alt+X pressed)
+      callbacks.onShortcutEnable!();
+
+      // Step 2: Verify overlay becomes active
+      await waitFor(() => {
+        expect(overlay).toHaveClass("active");
+      });
+      expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+
+      // Step 3: Simulate Alt keyup event
+      await fireEvent.keyUp(window, { key: "Alt" });
+
+      // Step 4: Verify overlay becomes inactive
+      await waitFor(() => {
+        expect(overlay).not.toHaveClass("active");
+      });
+      expect(shortcutsStore.shortcutModeActive.value).toBe(false);
+
+      // Step 5: Verify APIs were called
+      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
     });
   });
 });

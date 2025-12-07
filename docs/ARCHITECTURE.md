@@ -201,6 +201,35 @@ All URLs opened from code-server → external system browser:
 - Implemented via `setWindowOpenHandler` returning `{ action: 'deny' }`
 - Platform-specific: `xdg-open` (Linux), `open` (macOS), `start` (Windows)
 
+## Keyboard Capture System
+
+CodeHydra uses a two-phase keyboard capture system to enable shortcuts inside VS Code views.
+
+### Phase 1: Activation Detection (Main Process)
+
+The `ShortcutController` uses Electron's `before-input-event` API to intercept keyboard events
+before they reach VS Code. It detects the Alt+X activation sequence:
+
+- Alt keydown → Enter ALT_WAITING state, prevent event
+- X keydown (while ALT_WAITING) → Activate shortcut mode, focus UI layer
+- Non-X keydown (while ALT_WAITING) → Let through to VS Code with altKey modifier
+- Alt keyup → Always suppressed (VS Code never sees Alt-only events)
+
+### Phase 2: Action Handling (UI Layer)
+
+Once activated, the UI layer has focus and handles keys directly via DOM events:
+
+- Action keys (0-9, arrows, Enter, Delete) → Execute workspace actions
+- Alt keyup → Exit shortcut mode, return focus to VS Code
+- Window blur → Exit shortcut mode (handles Alt+Tab)
+
+### Key Files
+
+| File                                          | Purpose                            |
+| --------------------------------------------- | ---------------------------------- |
+| `src/main/shortcut-controller.ts`             | Activation detection state machine |
+| `src/renderer/lib/stores/shortcuts.svelte.ts` | UI layer state and handlers        |
+
 ## Data Flow
 
 ### Opening a Project

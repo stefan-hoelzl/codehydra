@@ -67,9 +67,10 @@ export class WindowManager {
 
   /**
    * Returns the current content bounds of the window.
+   * Uses getContentBounds() to get the actual client area (excluding title bar).
    */
   getBounds(): ContentBounds {
-    const bounds = this.window.getBounds();
+    const bounds = this.window.getContentBounds();
     return {
       width: bounds.width,
       height: bounds.height,
