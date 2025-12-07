@@ -178,6 +178,15 @@ describe("preload API", () => {
 
       expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("ui:set-dialog-mode", { isOpen: true });
     });
+
+    it("focusActiveWorkspace calls ipcRenderer.invoke with correct channel", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue(undefined);
+
+      const focusActiveWorkspace = exposedApi.focusActiveWorkspace as () => Promise<void>;
+      await focusActiveWorkspace();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("ui:focus-active-workspace");
+    });
   });
 
   describe("event subscriptions", () => {
@@ -278,6 +287,45 @@ describe("preload API", () => {
       onProjectOpened(callback);
 
       expect(callback).toHaveBeenCalledWith(mockEventData);
+    });
+
+    describe("onShortcutEnable", () => {
+      it("preload-subscription-exists: onShortcutEnable exists on exposed API", () => {
+        expect(exposedApi.onShortcutEnable).toBeDefined();
+        expect(typeof exposedApi.onShortcutEnable).toBe("function");
+      });
+
+      it("preload-subscription-cleanup: returns cleanup function", () => {
+        const callback = vi.fn();
+        const onShortcutEnable = exposedApi.onShortcutEnable as (cb: () => void) => () => void;
+        const unsubscribe = onShortcutEnable(callback);
+
+        expect(mockIpcRenderer.on).toHaveBeenCalledWith("shortcut:enable", expect.any(Function));
+        expect(unsubscribe).toBeInstanceOf(Function);
+
+        unsubscribe();
+        expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
+          "shortcut:enable",
+          expect.any(Function)
+        );
+      });
+
+      it("preload-subscription-callback: callback invoked on event with no arguments", () => {
+        const callback = vi.fn();
+
+        // Capture the handler passed to ipcRenderer.on
+        mockIpcRenderer.on.mockImplementation((_channel, handler) => {
+          // Simulate IPC event with no data
+          handler({});
+        });
+
+        const onShortcutEnable = exposedApi.onShortcutEnable as (cb: () => void) => () => void;
+        onShortcutEnable(callback);
+
+        // Callback should be invoked with no arguments
+        expect(callback).toHaveBeenCalledTimes(1);
+        expect(callback).toHaveBeenCalledWith(undefined);
+      });
     });
   });
 

@@ -129,6 +129,8 @@ export interface UISetDialogModePayload {
   readonly isOpen: boolean;
 }
 
+// No payload needed for focus-active-workspace
+
 // ============ Event Payload Types ============
 
 export interface ProjectOpenedEvent {
@@ -170,6 +172,7 @@ export interface IpcCommands {
   };
   "workspace:is-dirty": { payload: WorkspaceIsDirtyPayload; response: boolean };
   "ui:set-dialog-mode": { payload: UISetDialogModePayload; response: void };
+  "ui:focus-active-workspace": { payload: void; response: void };
 }
 
 export interface IpcEvents {
@@ -195,10 +198,14 @@ export const IpcChannels = {
   WORKSPACE_UPDATE_BASES: "workspace:update-bases",
   WORKSPACE_IS_DIRTY: "workspace:is-dirty",
   UI_SET_DIALOG_MODE: "ui:set-dialog-mode",
+  UI_FOCUS_ACTIVE_WORKSPACE: "ui:focus-active-workspace",
   // Events
   PROJECT_OPENED: "project:opened",
   PROJECT_CLOSED: "project:closed",
   WORKSPACE_CREATED: "workspace:created",
   WORKSPACE_REMOVED: "workspace:removed",
   WORKSPACE_SWITCHED: "workspace:switched",
+  // Shortcut events (main → renderer)
+  SHORTCUT_ENABLE: "shortcut:enable",
+  SHORTCUT_DISABLE: "shortcut:disable",
 } as const satisfies Record<string, string>;

@@ -19,11 +19,14 @@ const mockApi: Api = {
   updateBases: vi.fn().mockResolvedValue(undefined),
   isWorkspaceDirty: vi.fn().mockResolvedValue(false),
   setDialogMode: vi.fn().mockResolvedValue(undefined),
+  focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
   onProjectOpened: vi.fn(() => vi.fn()),
   onProjectClosed: vi.fn(() => vi.fn()),
   onWorkspaceCreated: vi.fn(() => vi.fn()),
   onWorkspaceRemoved: vi.fn(() => vi.fn()),
   onWorkspaceSwitched: vi.fn(() => vi.fn()),
+  onShortcutEnable: vi.fn(() => vi.fn()),
+  onShortcutDisable: vi.fn(() => vi.fn()),
 };
 
 // Set up window.api

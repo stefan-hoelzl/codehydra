@@ -167,6 +167,24 @@ describe("createUISetDialogModeHandler", () => {
   });
 });
 
+describe("createUIFocusActiveWorkspaceHandler", () => {
+  beforeEach(() => {
+    mockHandle.mockClear();
+  });
+
+  it("calls viewManager.focusActiveWorkspace", async () => {
+    const mockFocusActiveWorkspace = vi.fn();
+    const mockViewManager = { focusActiveWorkspace: mockFocusActiveWorkspace };
+
+    const { createUIFocusActiveWorkspaceHandler } = await import("./handlers");
+    const handler = createUIFocusActiveWorkspaceHandler(mockViewManager);
+
+    await handler({} as never, undefined);
+
+    expect(mockFocusActiveWorkspace).toHaveBeenCalled();
+  });
+});
+
 describe("emitEvent", () => {
   beforeEach(() => {
     mockSend.mockClear();

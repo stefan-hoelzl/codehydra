@@ -20,11 +20,56 @@
   import RemoveWorkspaceDialog from "$lib/components/RemoveWorkspaceDialog.svelte";
   import type { ProjectPath } from "$lib/api";
 
+  // Shortcut mode state for keyboard navigation
+  let shortcutModeActive = $state(false);
+
   // Sync dialog state with main process z-order
   $effect(() => {
     const isDialogOpen = dialogState.value.type !== "closed";
     void api.setDialogMode(isDialogOpen);
   });
+
+  // Subscribe to shortcut enable events from main process
+  $effect(() => {
+    const unsubscribe = api.onShortcutEnable(() => {
+      shortcutModeActive = true;
+      console.log("KEYBOARD_WIRING: shortcut mode enabled");
+    });
+    return unsubscribe;
+  });
+
+  // Subscribe to shortcut disable events from main process (handles race condition)
+  $effect(() => {
+    const unsubscribe = api.onShortcutDisable(() => {
+      deactivateShortcutMode("main-process-disable");
+    });
+    return unsubscribe;
+  });
+
+  /**
+   * Deactivates shortcut mode and returns focus to workspace.
+   * Used by both keyup and blur handlers for consistent cleanup.
+   */
+  function deactivateShortcutMode(reason: string): void {
+    if (!shortcutModeActive) return;
+    shortcutModeActive = false;
+    console.log(`KEYBOARD_WIRING: shortcut mode disabled (${reason})`);
+    // Fire-and-forget pattern - see AGENTS.md IPC Patterns
+    void api.setDialogMode(false);
+    void api.focusActiveWorkspace();
+  }
+
+  function handleKeyUp(event: KeyboardEvent): void {
+    // Ignore auto-repeat events at UI layer as well
+    if (event.repeat) return;
+    if (event.key === "Alt" && shortcutModeActive) {
+      deactivateShortcutMode("alt-release");
+    }
+  }
+
+  function handleWindowBlur(): void {
+    deactivateShortcutMode("blur");
+  }
 
   // Set up initialization and event subscriptions on mount
   $effect(() => {
@@ -108,6 +153,8 @@
   }
 </script>
 
+<svelte:window onkeyup={handleKeyUp} onblur={handleWindowBlur} />
+
 <main class="app">
   <Sidebar
     projects={projects.value}
@@ -133,5 +180,8 @@
     display: flex;
     height: 100vh;
     color: var(--ch-foreground);
+    /* TODO: Transparency between WebContentsViews not working on Linux.
+       Investigate in KEYBOARD_ACTIVATION plan. For now, use opaque background. */
+    background: var(--ch-background);
   }
 </style>

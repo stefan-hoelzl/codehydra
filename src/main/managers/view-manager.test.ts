@@ -2,6 +2,19 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+// Mock ShortcutController before imports
+const mockShortcutController = vi.hoisted(() => ({
+  registerView: vi.fn(),
+  unregisterView: vi.fn(),
+  dispose: vi.fn(),
+}));
+
+vi.mock("../shortcut-controller", () => ({
+  ShortcutController: vi.fn(function () {
+    return mockShortcutController;
+  }),
+}));
+
 // Mock Electron and external-url before imports
 const { mockWindowManager, MockWebContentsViewClass, mockOpenExternal } = vi.hoisted(() => {
   const createMockView = () => ({
@@ -101,7 +114,6 @@ describe("ViewManager", () => {
     it("creates a ViewManager instance", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -111,7 +123,6 @@ describe("ViewManager", () => {
     it("creates UI layer WebContentsView with security settings", () => {
       ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -128,7 +139,6 @@ describe("ViewManager", () => {
     it("adds UI layer to window", () => {
       ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -138,7 +148,6 @@ describe("ViewManager", () => {
     it("sets transparent background on UI layer", () => {
       ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -149,7 +158,6 @@ describe("ViewManager", () => {
     it("subscribes to window resize events", () => {
       ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -161,7 +169,6 @@ describe("ViewManager", () => {
     it("returns the UI layer WebContentsView", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -173,22 +180,20 @@ describe("ViewManager", () => {
   });
 
   describe("createWorkspaceView", () => {
-    it("creates WebContentsView with security settings", () => {
+    it("creates WebContentsView with security settings (no preload)", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
       manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
 
-      // Second call should be for workspace view
+      // Second call should be for workspace view - no preload script
       expect(MockWebContentsViewClass.mock.calls[1]?.[0]).toEqual({
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
           sandbox: true,
-          preload: "/path/to/webview-preload.js",
         },
       });
     });
@@ -196,7 +201,6 @@ describe("ViewManager", () => {
     it("loads the code-server URL", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -211,7 +215,6 @@ describe("ViewManager", () => {
     it("adds workspace view to window on top (normal state - workspace receives events)", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -229,7 +232,6 @@ describe("ViewManager", () => {
     it("configures window open handler", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -242,7 +244,6 @@ describe("ViewManager", () => {
     it("returns the created view", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -260,7 +261,6 @@ describe("ViewManager", () => {
     it("removes view from window", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -273,7 +273,6 @@ describe("ViewManager", () => {
     it("closes webContents", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -288,7 +287,6 @@ describe("ViewManager", () => {
     it("removes view from internal map", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -301,7 +299,6 @@ describe("ViewManager", () => {
     it("does not throw when view is already destroyed", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -318,7 +315,6 @@ describe("ViewManager", () => {
     it("skips webContents.close when already destroyed", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -338,7 +334,6 @@ describe("ViewManager", () => {
     it("handles errors gracefully when view operations fail", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -360,7 +355,6 @@ describe("ViewManager", () => {
     it("skips removeChildView when window is destroyed", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -386,7 +380,6 @@ describe("ViewManager", () => {
     it("returns the view for existing workspace", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -400,7 +393,6 @@ describe("ViewManager", () => {
     it("returns undefined for non-existent workspace", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -415,7 +407,6 @@ describe("ViewManager", () => {
       mockWindowManager.getBounds.mockReturnValue({ width: 1400, height: 900 });
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -434,7 +425,6 @@ describe("ViewManager", () => {
       mockWindowManager.getBounds.mockReturnValue({ width: 1400, height: 900 });
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -455,7 +445,6 @@ describe("ViewManager", () => {
       mockWindowManager.getBounds.mockReturnValue({ width: 1400, height: 900 });
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -478,7 +467,6 @@ describe("ViewManager", () => {
       mockWindowManager.getBounds.mockReturnValue({ width: 600, height: 400 });
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -501,7 +489,6 @@ describe("ViewManager", () => {
     it("updates active workspace path", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -519,7 +506,6 @@ describe("ViewManager", () => {
     it("handles null active workspace", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -540,7 +526,6 @@ describe("ViewManager", () => {
     it("focuses the active workspace view", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -556,7 +541,6 @@ describe("ViewManager", () => {
     it("does nothing when no active workspace", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -569,7 +553,6 @@ describe("ViewManager", () => {
     it("focuses the UI layer view", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -584,7 +567,6 @@ describe("ViewManager", () => {
     it("calls openExternal for external URLs", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -605,7 +587,6 @@ describe("ViewManager", () => {
     it("prevents navigation away from code-server URL", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -633,7 +614,6 @@ describe("ViewManager", () => {
     it("allows navigation within code-server origin", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -664,7 +644,6 @@ describe("ViewManager", () => {
     it("moves UI layer to top when isOpen is true", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -682,7 +661,6 @@ describe("ViewManager", () => {
     it("moves UI layer to bottom when isOpen is false", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -702,7 +680,6 @@ describe("ViewManager", () => {
     it("is idempotent - multiple calls with same value are safe", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -722,7 +699,6 @@ describe("ViewManager", () => {
     it("does not throw when window is destroyed", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -740,7 +716,6 @@ describe("ViewManager", () => {
     it("does not affect workspace views - they remain accessible", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -764,7 +739,6 @@ describe("ViewManager", () => {
 
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -776,7 +750,6 @@ describe("ViewManager", () => {
     it("destroys all workspace views", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -795,7 +768,6 @@ describe("ViewManager", () => {
     it("closes UI view", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -809,7 +781,6 @@ describe("ViewManager", () => {
     it("does not throw when views are already destroyed", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -829,7 +800,6 @@ describe("ViewManager", () => {
     it("skips close on already destroyed UI view", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -848,7 +818,6 @@ describe("ViewManager", () => {
     it("handles errors gracefully when view operations fail during cleanup", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -872,7 +841,6 @@ describe("ViewManager", () => {
     it("handles window being destroyed during cleanup", () => {
       const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
         uiPreloadPath: "/path/to/preload.js",
-        webviewPreloadPath: "/path/to/webview-preload.js",
         codeServerPort: 8080,
       });
 
@@ -887,6 +855,81 @@ describe("ViewManager", () => {
 
       // Reset for other tests
       mockWindow.isDestroyed = vi.fn(() => false);
+    });
+  });
+
+  describe("ShortcutController integration", () => {
+    beforeEach(() => {
+      // Reset ShortcutController mock
+      mockShortcutController.registerView.mockClear();
+      mockShortcutController.unregisterView.mockClear();
+      mockShortcutController.dispose.mockClear();
+    });
+
+    it("viewmanager-creates-controller: creates ShortcutController in factory", async () => {
+      const { ShortcutController } = (await import("../shortcut-controller")) as unknown as {
+        ShortcutController: ReturnType<typeof vi.fn>;
+      };
+
+      ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      expect(ShortcutController).toHaveBeenCalledWith(mockWindowManager.getWindow(), {
+        setDialogMode: expect.any(Function),
+        focusUI: expect.any(Function),
+        getUIWebContents: expect.any(Function),
+      });
+    });
+
+    it("viewmanager-registers-controller: createWorkspaceView registers with controller", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+
+      expect(mockShortcutController.registerView).toHaveBeenCalled();
+    });
+
+    it("viewmanager-unregisters-controller: destroyWorkspaceView unregisters from controller", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+      manager.destroyWorkspaceView("/path/to/workspace");
+
+      expect(mockShortcutController.unregisterView).toHaveBeenCalled();
+    });
+
+    it("viewmanager-disposes-controller: destroy calls controller.dispose", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.destroy();
+
+      expect(mockShortcutController.dispose).toHaveBeenCalled();
+    });
+
+    it("viewmanager-no-preload: workspace views created without preload script", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+
+      // Second call is for workspace view - should NOT have preload
+      const workspaceViewConfig = MockWebContentsViewClass.mock.calls[1]?.[0] as {
+        webPreferences?: { preload?: string };
+      };
+      expect(workspaceViewConfig.webPreferences?.preload).toBeUndefined();
     });
   });
 });

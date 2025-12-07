@@ -21,11 +21,14 @@ export const {
   updateBases,
   isWorkspaceDirty,
   setDialogMode,
+  focusActiveWorkspace,
   onProjectOpened,
   onProjectClosed,
   onWorkspaceCreated,
   onWorkspaceRemoved,
   onWorkspaceSwitched,
+  onShortcutEnable,
+  onShortcutDisable,
 } = window.api;
 
 // Re-export types for convenience

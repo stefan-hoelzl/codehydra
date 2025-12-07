@@ -13,11 +13,16 @@
   margin: 0;
 }
 
+html,
+body,
+#app {
+  background: transparent;
+}
+
 body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   font-family: var(--vscode-font-family, system-ui, sans-serif);
-  background: var(--ch-background);
   color: var(--ch-foreground);
 }
 

@@ -77,6 +77,8 @@ const mockApi = vi.hoisted(() => ({
     callbacks.onWorkspaceSwitched = cb;
     return vi.fn();
   }),
+  onShortcutEnable: vi.fn(() => vi.fn()),
+  onShortcutDisable: vi.fn(() => vi.fn()),
 }));
 
 // Mock the API module

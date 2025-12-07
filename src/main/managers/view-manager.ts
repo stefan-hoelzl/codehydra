@@ -3,10 +3,11 @@
  * Handles UI layer, workspace views, bounds, and focus management.
  */
 
-import { WebContentsView } from "electron";
+import { WebContentsView, type WebContents } from "electron";
 import type { IViewManager, Unsubscribe } from "./view-manager.interface";
 import type { WindowManager } from "./window-manager";
 import { openExternal } from "../utils/external-url";
+import { ShortcutController } from "../shortcut-controller";
 
 /**
  * Sidebar width in pixels.
@@ -25,8 +26,6 @@ const MIN_HEIGHT = 600;
 export interface ViewManagerConfig {
   /** Path to the UI layer preload script */
   readonly uiPreloadPath: string;
-  /** Path to the webview preload script */
-  readonly webviewPreloadPath: string;
   /** Code-server port number */
   readonly codeServerPort: number;
 }
@@ -39,6 +38,7 @@ export class ViewManager implements IViewManager {
   private readonly windowManager: WindowManager;
   private readonly config: ViewManagerConfig;
   private readonly uiView: WebContentsView;
+  private readonly shortcutController: ShortcutController;
   /**
    * Map of workspace paths to their WebContentsViews.
    *
@@ -54,11 +54,13 @@ export class ViewManager implements IViewManager {
   private constructor(
     windowManager: WindowManager,
     config: ViewManagerConfig,
-    uiView: WebContentsView
+    uiView: WebContentsView,
+    shortcutController: ShortcutController
   ) {
     this.windowManager = windowManager;
     this.config = config;
     this.uiView = uiView;
+    this.shortcutController = shortcutController;
 
     // Subscribe to resize events
     this.unsubscribeResize = this.windowManager.onResize(() => {
@@ -90,12 +92,24 @@ export class ViewManager implements IViewManager {
     // Add UI layer to window
     windowManager.getWindow().contentView.addChildView(uiView);
 
-    const manager = new ViewManager(windowManager, config, uiView);
+    // Use a holder object to break the circular dependency:
+    // ShortcutController needs ViewManager methods, ViewManager needs ShortcutController
+    const viewManagerHolder: { instance: ViewManager | null } = { instance: null };
+
+    // Create ShortcutController with deps that reference the holder
+    const shortcutController = new ShortcutController(windowManager.getWindow(), {
+      setDialogMode: (isOpen) => viewManagerHolder.instance?.setDialogMode(isOpen),
+      focusUI: () => viewManagerHolder.instance?.focusUI(),
+      getUIWebContents: () => viewManagerHolder.instance?.getUIWebContents() ?? null,
+    });
+
+    const viewManager = new ViewManager(windowManager, config, uiView, shortcutController);
+    viewManagerHolder.instance = viewManager;
 
     // Initial bounds update
-    manager.updateBounds();
+    viewManager.updateBounds();
 
-    return manager;
+    return viewManager;
   }
 
   /**
@@ -103,6 +117,17 @@ export class ViewManager implements IViewManager {
    */
   getUIView(): WebContentsView {
     return this.uiView;
+  }
+
+  /**
+   * Returns the UI layer WebContents for IPC communication.
+   * Used by ShortcutController to send events to the UI.
+   */
+  getUIWebContents(): WebContents | null {
+    if (this.uiView.webContents.isDestroyed()) {
+      return null;
+    }
+    return this.uiView.webContents;
   }
 
   /**
@@ -114,12 +139,12 @@ export class ViewManager implements IViewManager {
    */
   createWorkspaceView(workspacePath: string, url: string): WebContentsView {
     // Create workspace view with security settings
+    // Note: No preload script - keyboard capture is handled via main-process before-input-event
     const view = new WebContentsView({
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
-        preload: this.config.webviewPreloadPath,
       },
     });
 
@@ -157,6 +182,9 @@ export class ViewManager implements IViewManager {
     // Store in map
     this.workspaceViews.set(workspacePath, view);
 
+    // Register with shortcut controller for Alt+X detection
+    this.shortcutController.registerView(view.webContents);
+
     // Update bounds
     this.updateBounds();
 
@@ -173,6 +201,9 @@ export class ViewManager implements IViewManager {
     if (!view) {
       return;
     }
+
+    // Unregister from shortcut controller
+    this.shortcutController.unregisterView(view.webContents);
 
     // Remove from map first to ensure cleanup even if view is destroyed
     this.workspaceViews.delete(workspacePath);
@@ -313,6 +344,9 @@ export class ViewManager implements IViewManager {
   destroy(): void {
     // Unsubscribe from resize events
     this.unsubscribeResize();
+
+    // Dispose shortcut controller
+    this.shortcutController.dispose();
 
     // Destroy all workspace views
     for (const path of this.workspaceViews.keys()) {

@@ -112,6 +112,17 @@ export function createUISetDialogModeHandler(
   };
 }
 
+/**
+ * Creates handler for ui:focus-active-workspace command.
+ */
+export function createUIFocusActiveWorkspaceHandler(
+  viewManager: Pick<IViewManager, "focusActiveWorkspace">
+): (event: IpcMainInvokeEvent, payload: void) => Promise<void> {
+  return async () => {
+    viewManager.focusActiveWorkspace();
+  };
+}
+
 // Import handlers and schemas
 import {
   createProjectOpenHandler,
@@ -192,5 +203,10 @@ export function registerAllHandlers(appState: AppState, viewManager: IViewManage
     "ui:set-dialog-mode",
     UISetDialogModePayloadSchema,
     createUISetDialogModeHandler(viewManager)
+  );
+  registerHandler(
+    "ui:focus-active-workspace",
+    null,
+    createUIFocusActiveWorkspaceHandler(viewManager)
   );
 }

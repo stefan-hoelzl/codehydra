@@ -96,6 +96,12 @@ export interface Api {
    */
   setDialogMode(isOpen: boolean): Promise<void>;
 
+  /**
+   * Focus the active workspace view.
+   * Used to return focus to VS Code after shortcut mode ends.
+   */
+  focusActiveWorkspace(): Promise<void>;
+
   // ============ Event Subscriptions ============
 
   /**
@@ -132,6 +138,25 @@ export interface Api {
    * @returns Unsubscribe function to remove the listener
    */
   onWorkspaceSwitched(callback: (event: WorkspaceSwitchedEvent) => void): Unsubscribe;
+
+  // ============ Shortcut Events ============
+
+  /**
+   * Subscribe to shortcut enable events.
+   * Fired when Alt+X is pressed in a workspace view to activate shortcut mode.
+   * @param callback - Called when shortcut mode should be enabled
+   * @returns Unsubscribe function to remove the listener
+   */
+  onShortcutEnable(callback: () => void): Unsubscribe;
+
+  /**
+   * Subscribe to shortcut disable events.
+   * Fired when Alt is released while shortcut mode is active.
+   * Handles race condition where Alt keyup is caught by workspace view before focus switches.
+   * @param callback - Called when shortcut mode should be disabled
+   * @returns Unsubscribe function to remove the listener
+   */
+  onShortcutDisable(callback: () => void): Unsubscribe;
 }
 
 declare global {

@@ -77,7 +77,6 @@ async function initialize(): Promise<void> {
   // 4. Create ViewManager
   viewManager = ViewManager.create(windowManager, {
     uiPreloadPath: nodePath.join(__dirname, "../preload/index.cjs"),
-    webviewPreloadPath: nodePath.join(__dirname, "../preload/webview-preload.cjs"),
     codeServerPort: port,
   });
 

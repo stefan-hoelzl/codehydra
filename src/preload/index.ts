@@ -113,6 +113,13 @@ contextBridge.exposeInMainWorld("api", {
   setDialogMode: (isOpen: boolean): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.UI_SET_DIALOG_MODE, { isOpen }),
 
+  /**
+   * Focus the active workspace view.
+   * Used to return focus to VS Code after shortcut mode ends.
+   */
+  focusActiveWorkspace: (): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.UI_FOCUS_ACTIVE_WORKSPACE),
+
   // ============ Event Subscriptions ============
 
   onProjectOpened: createEventSubscription<ProjectOpenedEvent>(IpcChannels.PROJECT_OPENED),
@@ -122,4 +129,8 @@ contextBridge.exposeInMainWorld("api", {
   onWorkspaceSwitched: createEventSubscription<WorkspaceSwitchedEvent>(
     IpcChannels.WORKSPACE_SWITCHED
   ),
+
+  // Shortcut events
+  onShortcutEnable: createEventSubscription<void>(IpcChannels.SHORTCUT_ENABLE),
+  onShortcutDisable: createEventSubscription<void>(IpcChannels.SHORTCUT_DISABLE),
 });
