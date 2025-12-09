@@ -387,7 +387,7 @@ reviewers: []
 | pkg-name | why needed | [ ]      |
 
 **User must approve all dependencies before implementation begins.**
-**Dependencies are installed via `pnpm add <package>` to use the latest versions.**
+**Dependencies are installed via `npm add <package>` to use the latest versions.**
 
 ## Documentation Updates
 
@@ -406,7 +406,7 @@ reviewers: []
 ## Definition of Done
 
 - [ ] All implementation steps complete
-- [ ] `pnpm validate:fix` passes
+- [ ] `npm run validate:fix` passes
 - [ ] Documentation updated
 - [ ] User acceptance testing passed
 - [ ] Changes committed
