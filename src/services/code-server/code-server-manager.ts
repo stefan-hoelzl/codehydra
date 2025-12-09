@@ -150,6 +150,7 @@ export class CodeServerManager {
       port.toString(),
       "--auth",
       "none",
+      "--disable-workspace-trust",
       "--extensions-dir",
       this.config.extensionsDir,
       "--user-data-dir",
