@@ -20,6 +20,15 @@ import type {
 import type { Unsubscribe } from "@shared/electron-api";
 
 /**
+ * Optional hooks for domain events.
+ * These are called after the store update for additional side effects.
+ */
+export interface DomainEventHooks {
+  /** Called after a project is added to the store */
+  onProjectOpenedHook?: (project: Project) => void;
+}
+
+/**
  * Function type for unsubscribing from events.
  */
 type CleanupFunction = () => void;
@@ -66,6 +75,7 @@ export interface DomainStores {
  *
  * @param api - The API object with event subscription methods
  * @param stores - The store update functions
+ * @param hooks - Optional hooks for additional side effects after store updates
  * @returns A cleanup function to unsubscribe from all events
  *
  * @example
@@ -74,19 +84,28 @@ export interface DomainStores {
  *   addProject: (p) => projectsStore.addProject(p),
  *   removeProject: (path) => projectsStore.removeProject(path),
  *   // ... more store functions
+ * }, {
+ *   onProjectOpenedHook: (project) => {
+ *     // Additional side effects after project added
+ *   }
  * });
  *
  * // On unmount:
  * cleanup();
  * ```
  */
-export function setupDomainEvents(api: DomainEventApi, stores: DomainStores): CleanupFunction {
+export function setupDomainEvents(
+  api: DomainEventApi,
+  stores: DomainStores,
+  hooks?: DomainEventHooks
+): CleanupFunction {
   const unsubscribes: CleanupFunction[] = [];
 
   // Project events
   unsubscribes.push(
     api.onProjectOpened((event) => {
       stores.addProject(event.project);
+      hooks?.onProjectOpenedHook?.(event.project);
     })
   );
 

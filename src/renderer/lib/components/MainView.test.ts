@@ -367,4 +367,263 @@ describe("MainView component", () => {
       });
     });
   });
+
+  describe("auto-open project picker", () => {
+    it("auto-opens project picker on mount when projects array is empty", async () => {
+      mockApi.listProjects.mockResolvedValue([]);
+      mockApi.selectFolder.mockResolvedValue(null);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(mockApi.selectFolder).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("does NOT auto-open picker when projects exist", async () => {
+      const existingProject: Project = {
+        path: asProjectPath("/test/project"),
+        name: "test-project",
+        workspaces: [],
+      };
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(projectsStore.loadingState.value).toBe("loaded");
+      });
+
+      // Give time for any potential auto-open to trigger
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockApi.selectFolder).not.toHaveBeenCalled();
+    });
+
+    it("returns to EmptyState when picker is cancelled", async () => {
+      mockApi.listProjects.mockResolvedValue([]);
+      mockApi.selectFolder.mockResolvedValue(null);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(mockApi.selectFolder).toHaveBeenCalled();
+      });
+
+      // Should show EmptyState after cancel (no projects)
+      await waitFor(() => {
+        expect(screen.getByText(/no projects/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("auto-open create dialog", () => {
+    it("auto-opens create dialog when project:opened event has no workspaces", async () => {
+      let projectOpenedCallback: ((event: ProjectOpenedEvent) => void) | null = null;
+      (
+        mockApi.onProjectOpened as unknown as {
+          mockImplementation: (
+            fn: (cb: (event: ProjectOpenedEvent) => void) => Unsubscribe
+          ) => void;
+        }
+      ).mockImplementation((cb) => {
+        projectOpenedCallback = cb;
+        return vi.fn();
+      });
+
+      // Start with one project so auto-open picker doesn't trigger
+      const existingProject: Project = {
+        path: asProjectPath("/test/project"),
+        name: "test-project",
+        workspaces: [
+          {
+            path: asWorkspacePath("/test/.worktrees/feature"),
+            name: "feature",
+            branch: "feature",
+          },
+        ],
+      };
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(projectOpenedCallback).not.toBeNull();
+      });
+
+      // Simulate opening a project with no workspaces
+      const emptyProject: Project = {
+        path: asProjectPath("/test/empty-project"),
+        name: "empty-project",
+        workspaces: [],
+      };
+      projectOpenedCallback!({ project: emptyProject });
+
+      await waitFor(() => {
+        expect(dialogsStore.dialogState.value.type).toBe("create");
+        if (dialogsStore.dialogState.value.type === "create") {
+          expect(dialogsStore.dialogState.value.projectPath).toBe("/test/empty-project");
+        }
+      });
+    });
+
+    it("does NOT auto-open dialog when project has workspaces", async () => {
+      let projectOpenedCallback: ((event: ProjectOpenedEvent) => void) | null = null;
+      (
+        mockApi.onProjectOpened as unknown as {
+          mockImplementation: (
+            fn: (cb: (event: ProjectOpenedEvent) => void) => Unsubscribe
+          ) => void;
+        }
+      ).mockImplementation((cb) => {
+        projectOpenedCallback = cb;
+        return vi.fn();
+      });
+
+      // Start with one project
+      const existingProject: Project = {
+        path: asProjectPath("/test/project"),
+        name: "test-project",
+        workspaces: [],
+      };
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(projectOpenedCallback).not.toBeNull();
+      });
+
+      // Simulate opening a project WITH workspaces
+      const projectWithWorkspaces: Project = {
+        path: asProjectPath("/test/full-project"),
+        name: "full-project",
+        workspaces: [
+          {
+            path: asWorkspacePath("/test/.worktrees/main"),
+            name: "main",
+            branch: "main",
+          },
+        ],
+      };
+      projectOpenedCallback!({ project: projectWithWorkspaces });
+
+      // Give time for any auto-open to trigger
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(dialogsStore.dialogState.value.type).toBe("closed");
+    });
+
+    it("does NOT auto-open dialog when another dialog is already open", async () => {
+      let projectOpenedCallback: ((event: ProjectOpenedEvent) => void) | null = null;
+      (
+        mockApi.onProjectOpened as unknown as {
+          mockImplementation: (
+            fn: (cb: (event: ProjectOpenedEvent) => void) => Unsubscribe
+          ) => void;
+        }
+      ).mockImplementation((cb) => {
+        projectOpenedCallback = cb;
+        return vi.fn();
+      });
+
+      // Start with one project
+      const existingProject: Project = {
+        path: asProjectPath("/test/project"),
+        name: "test-project",
+        workspaces: [
+          {
+            path: asWorkspacePath("/test/.worktrees/feature"),
+            name: "feature",
+            branch: "feature",
+          },
+        ],
+      };
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(projectOpenedCallback).not.toBeNull();
+      });
+
+      // Open a remove dialog first
+      dialogsStore.openRemoveDialog("/test/.worktrees/feature", null);
+
+      expect(dialogsStore.dialogState.value.type).toBe("remove");
+
+      // Simulate opening a project with no workspaces
+      const emptyProject: Project = {
+        path: asProjectPath("/test/empty-project"),
+        name: "empty-project",
+        workspaces: [],
+      };
+      projectOpenedCallback!({ project: emptyProject });
+
+      // Give time for any auto-open to trigger
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should still be remove dialog, not auto-opened create
+      expect(dialogsStore.dialogState.value.type).toBe("remove");
+    });
+
+    it("handles rapid project:opened events (only one dialog opens)", async () => {
+      let projectOpenedCallback: ((event: ProjectOpenedEvent) => void) | null = null;
+      (
+        mockApi.onProjectOpened as unknown as {
+          mockImplementation: (
+            fn: (cb: (event: ProjectOpenedEvent) => void) => Unsubscribe
+          ) => void;
+        }
+      ).mockImplementation((cb) => {
+        projectOpenedCallback = cb;
+        return vi.fn();
+      });
+
+      // Start with one project so auto-open picker doesn't trigger
+      const existingProject: Project = {
+        path: asProjectPath("/test/project"),
+        name: "test-project",
+        workspaces: [
+          {
+            path: asWorkspacePath("/test/.worktrees/feature"),
+            name: "feature",
+            branch: "feature",
+          },
+        ],
+      };
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
+      render(MainView);
+
+      await waitFor(() => {
+        expect(projectOpenedCallback).not.toBeNull();
+      });
+
+      // Simulate rapid project:opened events for empty projects
+      const emptyProject1: Project = {
+        path: asProjectPath("/test/empty-project-1"),
+        name: "empty-project-1",
+        workspaces: [],
+      };
+      const emptyProject2: Project = {
+        path: asProjectPath("/test/empty-project-2"),
+        name: "empty-project-2",
+        workspaces: [],
+      };
+
+      // Fire both events rapidly
+      projectOpenedCallback!({ project: emptyProject1 });
+      projectOpenedCallback!({ project: emptyProject2 });
+
+      await waitFor(() => {
+        expect(dialogsStore.dialogState.value.type).toBe("create");
+      });
+
+      // Only the first project's dialog should be open (guard prevents second)
+      if (dialogsStore.dialogState.value.type === "create") {
+        expect(dialogsStore.dialogState.value.projectPath).toBe("/test/empty-project-1");
+      }
+    });
+  });
 });

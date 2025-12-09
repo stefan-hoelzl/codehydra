@@ -136,6 +136,15 @@ On first application launch, a setup screen appears before the main interface:
 
 ### First Launch
 
+On first launch (after VS Code setup completes), the application automatically opens the system folder picker to streamline the onboarding experience:
+
+1. App loads with empty state
+2. Folder picker opens automatically
+3. User selects a git repository folder
+4. If project has no worktrees, create workspace dialog opens automatically (see Opening a Project flow)
+
+**If user cancels the folder picker**, they see the empty state:
+
 ```
 ┌────────────────────────┐
 │  PROJECTS              │
@@ -146,7 +155,7 @@ On first application launch, a setup screen appears before the main interface:
 └────────────────────────┘
 ```
 
-User sees empty state with "Open Project" button.
+They can click "Open Project" to try again.
 
 ### Opening a Project
 

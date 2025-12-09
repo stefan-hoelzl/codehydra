@@ -166,6 +166,12 @@ describe("Integration tests", () => {
 
   describe("happy paths", () => {
     it("open project: selectFolder returns path → openProject → project:opened event → UI shows project in sidebar", async () => {
+      // Start with an existing project to avoid auto-open picker
+      const existingProject = createProject("existing", [
+        createWorkspace("main", "/test/existing"),
+      ]);
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
       const projectPath = "/test/my-project";
       mockApi.selectFolder.mockResolvedValue(projectPath);
 
@@ -173,7 +179,7 @@ describe("Integration tests", () => {
 
       // Wait for initial load
       await waitFor(() => {
-        expect(screen.getByText("No projects open.")).toBeInTheDocument();
+        expect(screen.getByText("existing")).toBeInTheDocument();
       });
 
       // Click Open Project button
@@ -194,7 +200,7 @@ describe("Integration tests", () => {
       const newProject = createProject("my-project", [createWorkspace("main", projectPath)]);
       callbacks.onProjectOpened!({ project: newProject });
 
-      // Verify project appears in sidebar
+      // Verify new project appears in sidebar
       await waitFor(() => {
         expect(screen.getByText("my-project")).toBeInTheDocument();
       });
@@ -357,12 +363,18 @@ describe("Integration tests", () => {
 
   describe("error paths", () => {
     it("selectFolder returns null (user cancelled) → no action taken", async () => {
+      // Start with an existing project to avoid auto-open picker
+      const existingProject = createProject("existing", [
+        createWorkspace("main", "/test/existing"),
+      ]);
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
       mockApi.selectFolder.mockResolvedValue(null);
 
       render(App);
 
       await waitFor(() => {
-        expect(screen.getByText("No projects open.")).toBeInTheDocument();
+        expect(screen.getByText("existing")).toBeInTheDocument();
       });
 
       const openButton = screen.getByRole("button", { name: /open project/i });
@@ -375,8 +387,8 @@ describe("Integration tests", () => {
       // openProject should NOT be called
       expect(mockApi.openProject).not.toHaveBeenCalled();
 
-      // UI should remain unchanged
-      expect(screen.getByText("No projects open.")).toBeInTheDocument();
+      // Existing project should still be shown
+      expect(screen.getByText("existing")).toBeInTheDocument();
     });
 
     it("API rejection during load → loadingState is 'error', loadingError has message", async () => {
@@ -903,6 +915,121 @@ describe("Integration tests", () => {
       await waitFor(() => {
         expect(mockApi.switchWorkspace).toHaveBeenCalledWith(ws.path, false);
       });
+    });
+  });
+
+  describe("onboarding flow", () => {
+    it("complete-onboarding-flow: empty state → auto-open picker → select folder → project with 0 workspaces → auto-open create dialog", async () => {
+      // Start with no projects (empty state)
+      mockApi.listProjects.mockResolvedValue([]);
+
+      // Defer folder selection to simulate user selecting a folder
+      let folderPromiseResolve: (value: string | null) => void = () => {};
+      mockApi.selectFolder.mockImplementation(() => {
+        return new Promise((resolve) => {
+          folderPromiseResolve = resolve;
+        });
+      });
+
+      render(App);
+
+      // Wait for MainView to load (should see EmptyState briefly, then folder picker auto-opens)
+      await waitFor(() => {
+        expect(mockApi.listProjects).toHaveBeenCalled();
+      });
+
+      // Verify folder picker was automatically triggered (auto-open on empty state)
+      await waitFor(() => {
+        expect(mockApi.selectFolder).toHaveBeenCalledTimes(1);
+      });
+
+      // Simulate user selecting a folder
+      const selectedPath = "/test/new-project";
+      folderPromiseResolve(selectedPath);
+
+      // Verify openProject was called with the selected path
+      await waitFor(() => {
+        expect(mockApi.openProject).toHaveBeenCalledWith(selectedPath);
+      });
+
+      // Simulate project:opened event with a project that has NO workspaces
+      const emptyProject = createProject("new-project", []);
+      callbacks.onProjectOpened!({ project: emptyProject });
+
+      // Verify create workspace dialog auto-opens because project has 0 workspaces
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
+        expect(screen.getByText("Create Workspace")).toBeInTheDocument();
+      });
+
+      // Verify dialog is for the correct project
+      expect(dialogsStore.dialogState.value.type).toBe("create");
+      if (dialogsStore.dialogState.value.type === "create") {
+        expect(dialogsStore.dialogState.value.projectPath).toBe("/test/new-project");
+      }
+    });
+
+    it("auto-open-picker-cancelled: empty state → picker cancelled → EmptyState shown", async () => {
+      mockApi.listProjects.mockResolvedValue([]);
+      mockApi.selectFolder.mockResolvedValue(null); // User cancels
+
+      render(App);
+
+      // Wait for auto-open
+      await waitFor(() => {
+        expect(mockApi.selectFolder).toHaveBeenCalled();
+      });
+
+      // Verify EmptyState is shown after cancel
+      await waitFor(() => {
+        expect(screen.getByText("No projects open.")).toBeInTheDocument();
+      });
+
+      // Verify openProject was NOT called
+      expect(mockApi.openProject).not.toHaveBeenCalled();
+    });
+
+    it("project-with-workspaces-no-auto-dialog: opening project with workspaces does not auto-open dialog", async () => {
+      const existingProject = createProject("existing", [
+        createWorkspace("main", "/test/existing"),
+      ]);
+      mockApi.listProjects.mockResolvedValue([existingProject]);
+
+      render(App);
+
+      // Wait for load
+      await waitFor(() => {
+        expect(screen.getByText("existing")).toBeInTheDocument();
+      });
+
+      // Open another project with workspaces
+      const projectPath = "/test/another-project";
+      mockApi.selectFolder.mockResolvedValue(projectPath);
+
+      // Click Open Project button
+      const openButton = screen.getByRole("button", { name: /open project/i });
+      await fireEvent.click(openButton);
+
+      await waitFor(() => {
+        expect(mockApi.openProject).toHaveBeenCalledWith(projectPath);
+      });
+
+      // Simulate project:opened with workspaces
+      const newProject = createProject("another-project", [
+        createWorkspace("develop", "/test/another-project"),
+      ]);
+      callbacks.onProjectOpened!({ project: newProject });
+
+      // Verify project is added
+      await waitFor(() => {
+        expect(screen.getByText("another-project")).toBeInTheDocument();
+      });
+
+      // Give time for any auto-open to trigger
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify NO dialog opened
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
   });
 

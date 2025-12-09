@@ -51,48 +51,66 @@
     void api.setDialogMode(isDialogOpen);
   });
 
-  // Focus first focusable element on mount for accessibility
-  onMount(async () => {
-    // Wait for DOM to settle before focusing
-    await tick();
-    const firstFocusable = containerRef?.querySelector<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    firstFocusable?.focus();
-  });
-
   // Initialize and subscribe to domain events on mount
-  $effect(() => {
-    // Initialize - load projects
-    api
-      .listProjects()
-      .then((p) => {
+  onMount(() => {
+    // Initialize - load projects and optionally auto-open picker
+    const initProjects = async (): Promise<void> => {
+      try {
+        const p = await api.listProjects();
         setProjects(p);
         setLoaded();
-      })
-      .catch((err: unknown) => {
+
+        // Auto-open project picker when no projects exist (first launch experience)
+        if (p.length === 0) {
+          await handleOpenProject();
+        }
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load projects");
-      });
+      }
+    };
+    void initProjects();
 
     // Initialize - load agent statuses
-    api
-      .getAllAgentStatuses()
-      .then((statuses) => {
+    const initAgentStatuses = async (): Promise<void> => {
+      try {
+        const statuses = await api.getAllAgentStatuses();
         setAllStatuses(statuses);
-      })
-      .catch(() => {
+      } catch {
         // Agent status is optional, don't fail if it doesn't work
-      });
+      }
+    };
+    void initAgentStatuses();
 
     // Subscribe to domain events using helper
-    const cleanup = setupDomainEvents(api, {
-      addProject,
-      removeProject,
-      addWorkspace,
-      removeWorkspace,
-      setActiveWorkspace,
-      updateAgentStatus: updateStatus,
-    });
+    const cleanup = setupDomainEvents(
+      api,
+      {
+        addProject,
+        removeProject,
+        addWorkspace,
+        removeWorkspace,
+        setActiveWorkspace,
+        updateAgentStatus: updateStatus,
+      },
+      {
+        // Auto-open create dialog when project has no workspaces
+        onProjectOpenedHook: (project) => {
+          if (project.workspaces.length === 0 && dialogState.value.type === "closed") {
+            openCreateDialog(project.path, null);
+          }
+        },
+      }
+    );
+
+    // Focus first focusable element after DOM settles
+    const initFocus = async (): Promise<void> => {
+      await tick();
+      const firstFocusable = containerRef?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      firstFocusable?.focus();
+    };
+    void initFocus();
 
     // Cleanup subscriptions on unmount
     return cleanup;
