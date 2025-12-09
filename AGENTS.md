@@ -15,7 +15,7 @@
 | Backend         | Node.js services                         |
 | Testing         | Vitest                                   |
 | Build           | Vite                                     |
-| Package Manager | pnpm                                     |
+| Package Manager | npm                                      |
 
 ## Key Documents
 
@@ -180,8 +180,8 @@ agentStatusManager.onStatusChanged((path, status, counts) => {
 ## Development Workflow
 
 - TDD: failing test → implement → refactor
-- Scripts: `pnpm dev`, `pnpm build`, `pnpm test`, `pnpm lint`
-- Use `pnpm add <package>` for dependencies (never edit package.json manually)
+- Scripts: `npm run dev`, `npm run build`, `npm test`, `npm run lint`
+- Use `npm install <package>` for dependencies (never edit package.json manually)
 
 ## Code Quality Standards
 
@@ -207,14 +207,14 @@ agentStatusManager.onStatusChanged((path, status, counts) => {
 
 ## Validation Commands
 
-| Check      | Command           | Requirement   |
-| ---------- | ----------------- | ------------- |
-| TypeScript | pnpm check        | Zero errors   |
-| ESLint     | pnpm lint         | Zero errors   |
-| Prettier   | pnpm format:check | All formatted |
-| Tests      | pnpm test         | All passing   |
-| Build      | pnpm build        | Completes     |
+| Check      | Command              | Requirement   |
+| ---------- | -------------------- | ------------- |
+| TypeScript | npm run check        | Zero errors   |
+| ESLint     | npm run lint         | Zero errors   |
+| Prettier   | npm run format:check | All formatted |
+| Tests      | npm test             | All passing   |
+| Build      | npm run build        | Completes     |
 
-**Recommended**: Use `pnpm validate:fix` to auto-fix formatting/linting issues before validation. This saves cycles on small errors.
+**Recommended**: Use `npm run validate:fix` to auto-fix formatting/linting issues before validation. This saves cycles on small errors.
 
 Run all checks before marking any task complete.

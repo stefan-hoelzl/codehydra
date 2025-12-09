@@ -15,25 +15,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "svelte-check --tsconfig ./tsconfig.web.json --fail-on-warnings",
-    "validate": "pnpm format:check && pnpm lint && pnpm check && pnpm test && pnpm build",
-    "validate:fix": "pnpm format && pnpm lint:fix && pnpm check && pnpm test && pnpm build"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "validate": "npm run format:check && npm run lint && npm run check && npm run test && npm run build",
+    "validate:fix": "npm run format && npm run lint:fix && npm run check && npm run test && npm run build",
+    "postinstall": "patch-package"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.22.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ],
-    "patchedDependencies": {
-      "systeminformation@5.27.11": "patches/systeminformation@5.27.11.patch"
-    }
-  },
   "dependencies": {
     "@vscode-elements/elements": "^2.3.1",
     "@vscode/codicons": "^0.0.43",
@@ -52,6 +40,7 @@
     "@testing-library/svelte": "^5.2.9",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.10.1",
+    "code-server": "*",
     "electron": "^39.2.6",
     "electron-vite": "^4.0.1",
     "eslint": "^9.39.1",
