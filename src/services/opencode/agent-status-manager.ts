@@ -26,8 +26,11 @@ class OpenCodeProvider implements IDisposable {
 
   /**
    * Sync clients with discovered ports.
+   * Returns ports that were newly added (need initialization).
    */
-  syncClients(ports: Set<number>): void {
+  syncClients(ports: Set<number>): Set<number> {
+    const newPorts = new Set<number>();
+
     // Remove clients for ports that no longer exist
     for (const [port, client] of this.clients) {
       if (!ports.has(port)) {
@@ -36,15 +39,17 @@ class OpenCodeProvider implements IDisposable {
       }
     }
 
-    // Add clients for new ports
+    // Add clients for new ports (don't connect yet - need to fetch root sessions first)
     for (const port of ports) {
       if (!this.clients.has(port)) {
         const client = new OpenCodeClient(port);
         client.onSessionEvent((event) => this.handleSessionEvent(event));
-        client.connect();
         this.clients.set(port, client);
+        newPorts.add(port);
       }
     }
+
+    return newPorts;
   }
 
   /**
@@ -84,7 +89,24 @@ class OpenCodeProvider implements IDisposable {
   }
 
   /**
+   * Initialize new clients by fetching root sessions and connecting.
+   * Must be called after syncClients for newly added ports.
+   */
+  async initializeNewClients(newPorts: Set<number>): Promise<void> {
+    for (const port of newPorts) {
+      const client = this.clients.get(port);
+      if (client) {
+        // Fetch root sessions first to identify which sessions to track
+        await client.fetchRootSessions();
+        // Then connect to SSE for real-time updates
+        client.connect();
+      }
+    }
+  }
+
+  /**
    * Fetch initial session statuses from all clients.
+   * Only returns statuses for root sessions (without parentID).
    */
   async fetchStatuses(): Promise<void> {
     for (const client of this.clients.values()) {
@@ -156,9 +178,12 @@ export class AgentStatusManager implements IDisposable {
 
     // Get current ports for this workspace
     const ports = this.discoveryService.getPortsForWorkspace(path);
-    provider.syncClients(ports);
+    const newPorts = provider.syncClients(ports);
 
-    // Fetch initial statuses
+    // Initialize new clients (fetch root sessions + connect SSE)
+    await provider.initializeNewClients(newPorts);
+
+    // Fetch initial statuses (only root sessions)
     await provider.fetchStatuses();
 
     this.providers.set(path, provider);
@@ -217,9 +242,12 @@ export class AgentStatusManager implements IDisposable {
   private handleInstancesChanged(workspace: WorkspacePath, ports: Set<number>): void {
     const provider = this.providers.get(workspace);
     if (provider) {
-      provider.syncClients(ports);
-      // Fetch statuses from new/updated clients, then update
-      void provider.fetchStatuses().then(() => this.updateStatus(workspace));
+      const newPorts = provider.syncClients(ports);
+      // Initialize new clients (fetch root sessions + connect SSE), then fetch statuses
+      void provider
+        .initializeNewClients(newPorts)
+        .then(() => provider.fetchStatuses())
+        .then(() => this.updateStatus(workspace));
     }
   }
 

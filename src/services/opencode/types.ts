@@ -70,6 +70,22 @@ export interface SessionInfo {
  */
 export type SessionStatusResponse = readonly SessionInfo[];
 
+/**
+ * Full session data from OpenCode /session endpoint.
+ * Used to determine parent/child relationships.
+ */
+export interface Session {
+  readonly id: string;
+  readonly parentID?: string;
+  readonly directory: string;
+  readonly title: string;
+}
+
+/**
+ * Response from OpenCode /session endpoint.
+ */
+export type SessionListResponse = readonly Session[];
+
 // ============ Session Status ============
 
 /**

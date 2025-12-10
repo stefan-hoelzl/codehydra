@@ -76,6 +76,10 @@ describe("AgentStatusManager", () => {
     });
 
     it("gets ports from discovery service", async () => {
+      // Mock fetch for /session call (root sessions discovery)
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify([]), { status: 200 })
+      );
       vi.mocked(mockDiscoveryService.getPortsForWorkspace).mockReturnValue(new Set([8080]));
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath);
@@ -84,7 +88,7 @@ describe("AgentStatusManager", () => {
     });
 
     it("shows idle status when connected but no sessions", async () => {
-      // Mock fetch to return empty session array (OpenCode connected but no active sessions)
+      // Mock fetch to return empty arrays for both /session and /session/status
       const fetchSpy = vi
         .spyOn(globalThis, "fetch")
         .mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
@@ -206,16 +210,33 @@ describe("AgentStatusManager", () => {
     });
 
     it("fetches statuses from new clients and updates status", async () => {
-      // Mock fetch to return session data (OpenCode returns a direct array)
-      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(
-          JSON.stringify([
-            { id: "session-1", status: "idle" },
-            { id: "session-2", status: "busy" },
-          ]),
-          { status: 200 }
-        )
-      );
+      // Mock fetch for both /session (root sessions) and /session/status calls
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
+        const urlStr = url.toString();
+        if (urlStr.includes("/session/status")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { id: "session-1", status: "idle" },
+                { id: "session-2", status: "busy" },
+              ]),
+              { status: 200 }
+            )
+          );
+        } else if (urlStr.endsWith("/session")) {
+          // Return root sessions (no parentID)
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { id: "session-1", directory: "/test", title: "Session 1" },
+                { id: "session-2", directory: "/test", title: "Session 2" },
+              ]),
+              { status: 200 }
+            )
+          );
+        }
+        return Promise.resolve(new Response("", { status: 404 }));
+      });
 
       const listener = vi.fn();
       manager.onStatusChanged(listener);
