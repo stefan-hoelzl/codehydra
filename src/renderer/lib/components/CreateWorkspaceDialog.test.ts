@@ -382,6 +382,48 @@ describe("CreateWorkspaceDialog component", () => {
     });
   });
 
+  describe("branch dropdown integration", () => {
+    // Integration test verifying the branch dropdown works correctly within the dialog context.
+    // This tests the mousedown selection pattern that prevents blur-before-click timing issues.
+    it("branch dropdown click selection works within dialog", async () => {
+      render(CreateWorkspaceDialog, { props: defaultProps });
+      await vi.runAllTimersAsync();
+
+      const branchCombobox = screen.getByRole("combobox");
+      await fireEvent.focus(branchCombobox);
+
+      // Use mouseDown to select (matches the actual handler pattern)
+      const option = screen.getByText("develop");
+      await fireEvent.mouseDown(option);
+
+      // Verify selection occurred - the input should now show the selected value
+      expect((branchCombobox as HTMLInputElement).value).toBe("develop");
+
+      // Verify dropdown closed after selection
+      expect(branchCombobox).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("branch dropdown is visible and not clipped by dialog overflow", async () => {
+      render(CreateWorkspaceDialog, { props: defaultProps });
+      await vi.runAllTimersAsync();
+
+      const branchCombobox = screen.getByRole("combobox");
+      await fireEvent.focus(branchCombobox);
+
+      // Verify the listbox is rendered with fixed positioning
+      const listbox = screen.getByRole("listbox");
+      expect(listbox).toBeInTheDocument();
+
+      // Verify it has inline positioning styles (indicating position: fixed is being used)
+      expect(listbox.style.top).toBeTruthy();
+      expect(listbox.style.left).toBeTruthy();
+      expect(listbox.style.width).toBeTruthy();
+
+      // Verify the CSS class is applied (which contains position: fixed)
+      expect(listbox.classList.contains("branch-listbox")).toBe(true);
+    });
+  });
+
   describe("error handling", () => {
     it('api.createWorkspace failure displays error in role="alert"', async () => {
       mockCreateWorkspace.mockRejectedValue(new Error("Network error"));

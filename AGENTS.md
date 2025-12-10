@@ -130,6 +130,48 @@ This pattern is used when:
 2. Immediate UI response is more important than confirmation
 3. The renderer should not block on the main process
 
+## UI Patterns
+
+### Dropdown Selection with Mousedown
+
+For custom dropdown components, use `onmousedown` with `preventDefault()` instead of `onclick` for option selection. This prevents the blur-before-click timing issue.
+
+**Problem**: Browser event sequence for click is: `mousedown → blur → mouseup → click`. When clicking a dropdown option, the input loses focus during `mousedown`, causing the dropdown to close before `click` fires.
+
+**Solution**: Handle selection in `mousedown` with `preventDefault()`:
+
+```svelte
+<li
+  role="option"
+  onmousedown={(e: MouseEvent) => {
+    e.preventDefault(); // Prevents input blur
+    selectOption(option.value);
+  }}
+>
+  {option.label}
+</li>
+```
+
+**Testing Note**: Use `fireEvent.mouseDown()` in tests, not `fireEvent.click()`, since the handler is on mousedown. Add a comment explaining this pattern in tests.
+
+### Fixed Positioning for Dropdown Overflow
+
+When dropdowns appear inside containers with `overflow: auto/hidden`, use `position: fixed` to escape clipping:
+
+```typescript
+// Calculate position from input element
+const rect = inputRef.getBoundingClientRect();
+dropdownPosition = {
+  top: rect.bottom,
+  left: rect.left,
+  width: rect.width,
+};
+
+// Apply via inline styles with position: fixed in CSS
+```
+
+Remember to recalculate position on window resize when the dropdown is open.
+
 ## OpenCode Integration
 
 ### Agent Status Store (Svelte 5 Runes)

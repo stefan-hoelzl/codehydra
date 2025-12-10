@@ -17,6 +17,10 @@
   let isOpen = $state(false);
   let highlightedIndex = $state(-1);
 
+  // Positioning state for fixed dropdown
+  let inputRef: HTMLInputElement | undefined = $state(undefined);
+  let dropdownPosition = $state<{ top: number; left: number; width: number } | null>(null);
+
   // Debounce state
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let debouncedFilter = $state("");
@@ -28,6 +32,31 @@
 
   // IDs for ARIA
   const listboxId = $derived(`branch-listbox-${projectPath.replace(/\//g, "-")}`);
+
+  /**
+   * Calculate dropdown position based on input element's screen position.
+   * Uses fixed positioning to escape dialog overflow clipping.
+   */
+  function updateDropdownPosition(): void {
+    if (!inputRef) return;
+    const rect = inputRef.getBoundingClientRect();
+    dropdownPosition = {
+      top: rect.bottom,
+      left: rect.left,
+      width: rect.width,
+    };
+  }
+
+  // Handle window resize while dropdown is open
+  $effect(() => {
+    if (!isOpen) return;
+
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+    };
+  });
 
   // Load branches on mount
   $effect(() => {
@@ -159,13 +188,22 @@
     onSelect(name);
   }
 
-  function handleOptionClick(name: string): void {
+  /**
+   * Handle mousedown on options to prevent blur and select in one action.
+   *
+   * Browser event sequence for click: mousedown -> blur -> mouseup -> click
+   * Without preventDefault(), the input loses focus before click fires,
+   * closing the dropdown and making click selection impossible.
+   */
+  function handleOptionMouseDown(event: MouseEvent, name: string): void {
+    event.preventDefault();
     selectBranch(name);
   }
 </script>
 
 <div class="branch-dropdown">
   <input
+    bind:this={inputRef}
     type="text"
     role="combobox"
     aria-expanded={isOpen}
@@ -186,8 +224,13 @@
     <div class="loading-indicator" role="status">Loading branches...</div>
   {:else if error}
     <div class="error-message" role="alert">{error}</div>
-  {:else if isOpen}
-    <ul id={listboxId} class="branch-listbox" role="listbox">
+  {:else if isOpen && dropdownPosition}
+    <ul
+      id={listboxId}
+      class="branch-listbox"
+      role="listbox"
+      style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; width: {dropdownPosition.width}px;"
+    >
       {#if allOptions.length === 0}
         <li class="no-results">No branches found</li>
       {:else}
@@ -200,8 +243,7 @@
               class="branch-option"
               class:highlighted={highlightedIndex === i}
               aria-selected={highlightedIndex === i}
-              onclick={() => handleOptionClick(branch.name)}
-              onkeydown={(e) => e.key === "Enter" && handleOptionClick(branch.name)}
+              onmousedown={(e: MouseEvent) => handleOptionMouseDown(e, branch.name)}
             >
               {branch.name}
             </li>
@@ -217,8 +259,7 @@
               class="branch-option"
               class:highlighted={highlightedIndex === localBranches.length + i}
               aria-selected={highlightedIndex === localBranches.length + i}
-              onclick={() => handleOptionClick(branch.name)}
-              onkeydown={(e) => e.key === "Enter" && handleOptionClick(branch.name)}
+              onmousedown={(e: MouseEvent) => handleOptionMouseDown(e, branch.name)}
             >
               {branch.name}
             </li>
@@ -269,10 +310,8 @@
   }
 
   .branch-listbox {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
+    /* Fixed positioning escapes dialog overflow clipping */
+    position: fixed;
     max-height: 200px;
     overflow-y: auto;
     background: var(--ch-input-bg);
@@ -283,6 +322,7 @@
     padding: 0;
     margin: 0;
     z-index: 100;
+    box-sizing: border-box;
   }
 
   .group-header {

@@ -378,7 +378,7 @@ describe("BranchDropdown component", () => {
   });
 
   describe("selection", () => {
-    it("clicking an option selects it", async () => {
+    it("mousedown on option prevents blur and selects branch", async () => {
       const onSelect = vi.fn();
       render(BranchDropdown, { props: { ...defaultProps, onSelect } });
 
@@ -388,7 +388,43 @@ describe("BranchDropdown component", () => {
       await fireEvent.focus(input);
 
       const option = screen.getByText("develop");
-      await fireEvent.click(option);
+
+      // Create mousedown event to verify preventDefault is called
+      const mousedownEvent = new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+      });
+      const preventDefaultSpy = vi.spyOn(mousedownEvent, "preventDefault");
+
+      option.dispatchEvent(mousedownEvent);
+
+      // Wait for any async effects
+      await tick();
+
+      // Verify preventDefault was called (prevents input blur)
+      expect(preventDefaultSpy).toHaveBeenCalled();
+
+      // Verify selection occurred
+      expect(onSelect).toHaveBeenCalledWith("develop");
+    });
+
+    // Note: Selection is handled via onmousedown, not onclick.
+    // In real browsers, clicking triggers: mousedown -> blur -> mouseup -> click
+    // The blur happens BEFORE click, closing the dropdown before onclick fires.
+    // We use onmousedown with preventDefault() to prevent blur and select in one action.
+    // fireEvent.click() doesn't replicate this blur-before-click timing issue,
+    // so we test with fireEvent.mouseDown() which matches our actual handler.
+    it("selecting an option via mousedown works correctly", async () => {
+      const onSelect = vi.fn();
+      render(BranchDropdown, { props: { ...defaultProps, onSelect } });
+
+      await vi.runAllTimersAsync();
+
+      const input = screen.getByRole("combobox");
+      await fireEvent.focus(input);
+
+      const option = screen.getByText("develop");
+      await fireEvent.mouseDown(option);
 
       expect(onSelect).toHaveBeenCalledWith("develop");
     });
@@ -400,6 +436,69 @@ describe("BranchDropdown component", () => {
 
       const input = screen.getByRole("combobox") as HTMLInputElement;
       expect(input.value).toBe("main");
+    });
+  });
+
+  describe("positioning", () => {
+    it("dropdown uses fixed positioning when open", async () => {
+      render(BranchDropdown, { props: defaultProps });
+
+      await vi.runAllTimersAsync();
+
+      const input = screen.getByRole("combobox");
+      await fireEvent.focus(input);
+
+      const listbox = screen.getByRole("listbox");
+
+      // Verify fixed positioning via inline styles (set by component)
+      // Note: JSDOM doesn't apply CSS from <style> blocks, so we verify
+      // the inline styles that the component sets for fixed positioning
+      expect(listbox.style.top).toBeTruthy();
+      expect(listbox.style.left).toBeTruthy();
+      expect(listbox.style.width).toBeTruthy();
+
+      // Verify the CSS class is applied (which contains position: fixed)
+      expect(listbox.classList.contains("branch-listbox")).toBe(true);
+    });
+
+    it("dropdown position updates on window resize", async () => {
+      render(BranchDropdown, { props: defaultProps });
+
+      await vi.runAllTimersAsync();
+
+      const input = screen.getByRole("combobox");
+      await fireEvent.focus(input);
+
+      const listbox = screen.getByRole("listbox");
+      const initialTop = listbox.style.top;
+
+      // Mock getBoundingClientRect to simulate position change
+      const originalGetBoundingClientRect = input.getBoundingClientRect;
+      input.getBoundingClientRect = () => ({
+        top: 200,
+        left: 50,
+        width: 300,
+        height: 30,
+        right: 350,
+        bottom: 230,
+        x: 50,
+        y: 200,
+        toJSON: () => ({}),
+      });
+
+      // Trigger resize event
+      window.dispatchEvent(new Event("resize"));
+      await tick();
+
+      // Position should have been recalculated
+      const newTop = listbox.style.top;
+
+      // Restore original
+      input.getBoundingClientRect = originalGetBoundingClientRect;
+
+      // The top position should be different after resize
+      // (Since we changed getBoundingClientRect to return a different value)
+      expect(newTop).not.toBe(initialTop);
     });
   });
 });
