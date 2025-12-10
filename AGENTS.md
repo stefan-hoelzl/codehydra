@@ -232,11 +232,16 @@ agentStatusManager.onStatusChanged((path, status, counts) => {
 
 When merging a worktree branch into `main`:
 
-1. **Always use fast-forward merge** - never create merge commits
-2. **Switch to the directory where `main` is checked out** (typically the root repo)
-3. **Run the merge there**
+1. **First rebase onto main** - ensure your branch is up-to-date with main
+2. **Always use fast-forward merge** - never create merge commits
+3. **Switch to the directory where `main` is checked out** (typically the root repo)
+4. **Run the merge there**
 
 ```bash
+# In the worktree directory, rebase onto main first
+git rebase main
+
+# Then switch to main checkout and merge
 cd /path/to/main/checkout
 git merge --ff-only <worktree-branch>
 ```
