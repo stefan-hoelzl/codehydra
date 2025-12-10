@@ -2,9 +2,16 @@
  * Tests for domain event subscription helper.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Project, ProjectPath } from "@shared/ipc";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type {
+  Project,
+  ProjectPath,
+  AgentStatusChangedEvent,
+  WorkspaceRemovedEvent,
+  WorkspacePath,
+} from "@shared/ipc";
 import { setupDomainEvents, type DomainEventApi, type DomainStores } from "./domain-events";
+import { AgentNotificationService } from "$lib/services/agent-notifications";
 
 // Helper to create typed ProjectPath
 function asProjectPath(path: string): ProjectPath {
@@ -130,6 +137,112 @@ describe("setupDomainEvents", () => {
       expect(unsubFns.workspaceRemoved).toHaveBeenCalled();
       expect(unsubFns.workspaceSwitched).toHaveBeenCalled();
       expect(unsubFns.agentStatusChanged).toHaveBeenCalled();
+    });
+  });
+
+  describe("agent notifications", () => {
+    let agentStatusCallback: ((event: AgentStatusChangedEvent) => void) | null = null;
+    let mockNotificationService: AgentNotificationService;
+
+    beforeEach(() => {
+      agentStatusCallback = null;
+      // Create a fresh mock notification service for each test
+      mockNotificationService = new AgentNotificationService();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("calls notification service on agent status change", () => {
+      const handleStatusChangeSpy = vi.spyOn(mockNotificationService, "handleStatusChange");
+
+      mockApi.onAgentStatusChanged = vi.fn((cb) => {
+        agentStatusCallback = cb;
+        return vi.fn();
+      });
+
+      setupDomainEvents(mockApi, mockStores, undefined, {
+        notificationService: mockNotificationService,
+      });
+
+      // Simulate agent status change event
+      const event: AgentStatusChangedEvent = {
+        workspacePath: "/test/workspace" as WorkspacePath,
+        status: { status: "idle", counts: { idle: 1, busy: 0 } },
+      };
+      agentStatusCallback!(event);
+
+      // Verify notification service was called with workspace path and counts
+      expect(handleStatusChangeSpy).toHaveBeenCalledWith("/test/workspace", { idle: 1, busy: 0 });
+    });
+
+    it("calls notification service after updating store", () => {
+      const callOrder: string[] = [];
+
+      mockStores.updateAgentStatus = vi.fn(() => {
+        callOrder.push("store");
+      });
+
+      vi.spyOn(mockNotificationService, "handleStatusChange").mockImplementation(() => {
+        callOrder.push("notification");
+      });
+
+      mockApi.onAgentStatusChanged = vi.fn((cb) => {
+        agentStatusCallback = cb;
+        return vi.fn();
+      });
+
+      setupDomainEvents(mockApi, mockStores, undefined, {
+        notificationService: mockNotificationService,
+      });
+
+      // Simulate agent status change event
+      const event: AgentStatusChangedEvent = {
+        workspacePath: "/test/workspace" as WorkspacePath,
+        status: { status: "busy", counts: { idle: 0, busy: 2 } },
+      };
+      agentStatusCallback!(event);
+
+      // Verify order: store update first, then notification
+      expect(callOrder).toEqual(["store", "notification"]);
+    });
+  });
+
+  describe("workspace removal cleanup", () => {
+    let workspaceRemovedCallback: ((event: WorkspaceRemovedEvent) => void) | null = null;
+    let mockNotificationService: AgentNotificationService;
+
+    beforeEach(() => {
+      workspaceRemovedCallback = null;
+      mockNotificationService = new AgentNotificationService();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("cleans up notification service when workspace is removed", () => {
+      const removeWorkspaceSpy = vi.spyOn(mockNotificationService, "removeWorkspace");
+
+      mockApi.onWorkspaceRemoved = vi.fn((cb) => {
+        workspaceRemovedCallback = cb;
+        return vi.fn();
+      });
+
+      setupDomainEvents(mockApi, mockStores, undefined, {
+        notificationService: mockNotificationService,
+      });
+
+      // Simulate workspace removed event
+      const event: WorkspaceRemovedEvent = {
+        projectPath: "/test/project" as ProjectPath,
+        workspacePath: "/test/workspace" as WorkspacePath,
+      };
+      workspaceRemovedCallback!(event);
+
+      // Verify notification service cleanup was called
+      expect(removeWorkspaceSpy).toHaveBeenCalledWith("/test/workspace");
     });
   });
 });

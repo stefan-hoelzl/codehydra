@@ -18,6 +18,7 @@ import type {
   AgentStatusChangedEvent,
 } from "@shared/ipc";
 import type { Unsubscribe } from "@shared/electron-api";
+import { AgentNotificationService } from "$lib/services/agent-notifications";
 
 /**
  * Optional hooks for domain events.
@@ -68,6 +69,14 @@ export interface DomainStores {
 }
 
 /**
+ * Options for setting up domain events.
+ */
+export interface DomainEventOptions {
+  /** Optional notification service for DI (created automatically if not provided) */
+  notificationService?: AgentNotificationService;
+}
+
+/**
  * Sets up all domain event subscriptions.
  *
  * This helper centralizes the wiring between IPC events and store updates.
@@ -76,6 +85,7 @@ export interface DomainStores {
  * @param api - The API object with event subscription methods
  * @param stores - The store update functions
  * @param hooks - Optional hooks for additional side effects after store updates
+ * @param options - Optional configuration including DI dependencies
  * @returns A cleanup function to unsubscribe from all events
  *
  * @example
@@ -97,9 +107,13 @@ export interface DomainStores {
 export function setupDomainEvents(
   api: DomainEventApi,
   stores: DomainStores,
-  hooks?: DomainEventHooks
+  hooks?: DomainEventHooks,
+  options?: DomainEventOptions
 ): CleanupFunction {
   const unsubscribes: CleanupFunction[] = [];
+
+  // Create notification service if not provided (DI pattern)
+  const notificationService = options?.notificationService ?? new AgentNotificationService();
 
   // Project events
   unsubscribes.push(
@@ -125,6 +139,8 @@ export function setupDomainEvents(
   unsubscribes.push(
     api.onWorkspaceRemoved((event) => {
       stores.removeWorkspace(event.projectPath, event.workspacePath);
+      // Clean up notification service tracking to prevent memory leaks
+      notificationService.removeWorkspace(event.workspacePath);
     })
   );
 
@@ -138,6 +154,8 @@ export function setupDomainEvents(
   unsubscribes.push(
     api.onAgentStatusChanged((event) => {
       stores.updateAgentStatus(event.workspacePath, event.status);
+      // Play chime when idle count increases (agent finished work)
+      notificationService.handleStatusChange(event.workspacePath, event.status.counts);
     })
   );
 
