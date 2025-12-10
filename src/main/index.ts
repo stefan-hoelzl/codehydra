@@ -52,28 +52,21 @@ function redirectElectronDataPaths(): void {
 redirectElectronDataPaths();
 
 /**
- * Workaround for Chromium/Electron GPU process crashes on Linux.
+ * Workaround for Chromium/Electron GPU process crashes.
  *
  * On Linux 6.12+ with AMD GPUs (especially in Wayland + container environments),
- * the GPU process intermittently crashes with errors like:
- * - "eglDupNativeFenceFDANDROID duplication failure"
- * - "GPU process exited unexpectedly: exit_code=133"
+ * the GPU process intermittently crashes. In container environments (e.g., toolbox),
+ * GPU context resets can propagate to the host compositor causing full session crashes.
  *
- * This causes temporary black screens while the GPU process recovers.
- *
- * Flags applied:
- * - disable-gpu-memory-buffer-video-frames: Prevents GPU memory buffer issues
- * - disable-explicit-dma-fences: Disables explicit DMA fence synchronization
- *   which is the root cause of eglDupNativeFenceFDANDROID errors
- *
- * References:
- * - https://github.com/electron/electron/issues/45862
- * - https://github.com/electron/electron/issues/32317
- * - https://wiki.archlinux.org/title/Chromium#Wayland_hardware_acceleration_buffer_handle_is_null_errors
+ * Set CODEHYDRA_DISABLE_HARDWARE_ACCELERATION=true to completely disable
+ * hardware acceleration. Performance will be reduced but GPU crashes will
+ * be prevented.
  */
-if (process.platform === "linux") {
-  app.commandLine.appendSwitch("disable-gpu-memory-buffer-video-frames");
-  app.commandLine.appendSwitch("disable-explicit-dma-fences");
+if (process.env.CODEHYDRA_DISABLE_HARDWARE_ACCELERATION === "true") {
+  console.log(
+    "[CodeHydra] Hardware acceleration disabled via CODEHYDRA_DISABLE_HARDWARE_ACCELERATION=true"
+  );
+  app.disableHardwareAcceleration();
 }
 
 /**
