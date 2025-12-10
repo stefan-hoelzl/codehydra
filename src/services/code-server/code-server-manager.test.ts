@@ -6,11 +6,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CodeServerManager, urlForFolder } from "./code-server-manager";
+import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
 
-// Mock the process module
+// Mock the process module - only findAvailablePort is mocked
+// ProcessRunner is injected via DI, so spawnProcess is no longer needed
 vi.mock("../platform/process", () => ({
   findAvailablePort: vi.fn().mockResolvedValue(8080),
-  spawnProcess: vi.fn(),
 }));
 
 // Mock http module for health checks
@@ -53,14 +54,19 @@ describe("urlForFolder", () => {
 
 describe("CodeServerManager", () => {
   let manager: CodeServerManager;
+  let mockProcessRunner: ReturnType<typeof createMockProcessRunner>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    manager = new CodeServerManager({
-      runtimeDir: "/tmp/code-server-runtime",
-      extensionsDir: "/tmp/code-server-extensions",
-      userDataDir: "/tmp/code-server-user-data",
-    });
+    mockProcessRunner = createMockProcessRunner();
+    manager = new CodeServerManager(
+      {
+        runtimeDir: "/tmp/code-server-runtime",
+        extensionsDir: "/tmp/code-server-extensions",
+        userDataDir: "/tmp/code-server-user-data",
+      },
+      mockProcessRunner
+    );
   });
 
   afterEach(async () => {
@@ -112,16 +118,7 @@ describe("CodeServerManager", () => {
 
   describe("ensureRunning", () => {
     it("returns same port when already running", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockReturnThis(),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock successful health check
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -144,16 +141,7 @@ describe("CodeServerManager", () => {
     });
 
     it("returns same port for concurrent calls", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn with delay
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockReturnThis(),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock health check with delay to simulate startup time
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -169,23 +157,14 @@ describe("CodeServerManager", () => {
       const [port1, port2] = await Promise.all([manager.ensureRunning(), manager.ensureRunning()]);
 
       expect(port1).toBe(port2);
-      // spawnProcess should only be called once
-      expect(spawnProcess).toHaveBeenCalledTimes(1);
+      // processRunner.run should only be called once
+      expect(mockProcessRunner.run).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("onPidChanged", () => {
     it("calls callback when PID changes during startup", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockReturnThis(),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock successful health check
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -206,16 +185,7 @@ describe("CodeServerManager", () => {
     });
 
     it("calls callback with null when server stops", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock successful health check
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -239,16 +209,7 @@ describe("CodeServerManager", () => {
     });
 
     it("returns unsubscribe function", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockReturnThis(),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock successful health check
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -272,16 +233,7 @@ describe("CodeServerManager", () => {
     });
 
     it("supports multiple listeners", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockReturnThis(),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock successful health check
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -307,16 +259,7 @@ describe("CodeServerManager", () => {
 
   describe("stop", () => {
     it("transitions state correctly", async () => {
-      const { spawnProcess } = await import("../platform/process");
       const { get } = await import("http");
-
-      // Mock successful spawn
-      const mockProcess = {
-        pid: 12345,
-        kill: vi.fn(),
-        catch: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(spawnProcess).mockReturnValue(mockProcess as never);
 
       // Mock successful health check
       vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
@@ -348,6 +291,147 @@ describe("CodeServerManager", () => {
       await expect(manager.stop()).resolves.toBeUndefined();
 
       expect(manager.getState()).toBe("stopped");
+    });
+  });
+});
+
+/**
+ * Tests for CodeServerManager with ProcessRunner DI.
+ * These tests verify the new interface using dependency injection.
+ */
+describe("CodeServerManager (with ProcessRunner DI)", () => {
+  describe("constructor", () => {
+    it("accepts ProcessRunner as second parameter", () => {
+      const processRunner = createMockProcessRunner();
+      const config = {
+        runtimeDir: "/tmp/code-server-runtime",
+        extensionsDir: "/tmp/code-server-extensions",
+        userDataDir: "/tmp/code-server-user-data",
+      };
+
+      // This should compile and work once the constructor is updated
+      const manager = new CodeServerManager(config, processRunner);
+
+      expect(manager).toBeInstanceOf(CodeServerManager);
+    });
+
+    it("uses provided ProcessRunner for spawning processes", async () => {
+      const mockProc = createMockSpawnedProcess({ pid: 99999 });
+      const processRunner = createMockProcessRunner(mockProc);
+      const config = {
+        runtimeDir: "/tmp/code-server-runtime",
+        extensionsDir: "/tmp/code-server-extensions",
+        userDataDir: "/tmp/code-server-user-data",
+      };
+
+      const manager = new CodeServerManager(config, processRunner);
+
+      // Mock successful health check
+      const { get } = await import("http");
+      vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
+        const cb = callback as (res: { statusCode: number }) => void;
+        setTimeout(() => cb({ statusCode: 200 }), 0);
+        return {
+          on: vi.fn().mockReturnThis(),
+          setTimeout: vi.fn().mockReturnThis(),
+        } as never;
+      });
+
+      await manager.ensureRunning();
+
+      expect(processRunner.run).toHaveBeenCalledWith(
+        "code-server",
+        expect.arrayContaining(["--port", "8080", "--auth", "none"]),
+        expect.objectContaining({ cwd: config.runtimeDir })
+      );
+      expect(manager.pid()).toBe(99999);
+    });
+  });
+
+  describe("stop with timeout escalation", () => {
+    it("sends SIGTERM first and waits for graceful exit", async () => {
+      // Process exits cleanly after SIGTERM
+      const mockProc = createMockSpawnedProcess({
+        pid: 12345,
+        killResult: true,
+        waitResult: { exitCode: 0, stdout: "", stderr: "" },
+      });
+      const processRunner = createMockProcessRunner(mockProc);
+      const config = {
+        runtimeDir: "/tmp/code-server-runtime",
+        extensionsDir: "/tmp/code-server-extensions",
+        userDataDir: "/tmp/code-server-user-data",
+      };
+
+      const manager = new CodeServerManager(config, processRunner);
+
+      // Mock successful health check
+      const { get } = await import("http");
+      vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
+        const cb = callback as (res: { statusCode: number }) => void;
+        setTimeout(() => cb({ statusCode: 200 }), 0);
+        return {
+          on: vi.fn().mockReturnThis(),
+          setTimeout: vi.fn().mockReturnThis(),
+        } as never;
+      });
+
+      await manager.ensureRunning();
+      await manager.stop();
+
+      // Should send SIGTERM
+      expect(mockProc.kill).toHaveBeenCalledWith("SIGTERM");
+      // Should wait for process to exit
+      expect(mockProc.wait).toHaveBeenCalledWith(5000);
+      // Should NOT send SIGKILL if process exits cleanly
+      expect(mockProc.kill).not.toHaveBeenCalledWith("SIGKILL");
+    });
+
+    it("escalates to SIGKILL when process does not exit within timeout", async () => {
+      let waitCallCount = 0;
+      const mockProc = createMockSpawnedProcess({
+        pid: 12345,
+        killResult: true,
+        // First wait returns running:true (timeout), second returns completed after SIGKILL
+        waitResult: () => {
+          waitCallCount++;
+          if (waitCallCount === 1) {
+            return Promise.resolve({ exitCode: null, stdout: "", stderr: "", running: true });
+          }
+          return Promise.resolve({ exitCode: null, stdout: "", stderr: "", signal: "SIGKILL" });
+        },
+      });
+      const processRunner = createMockProcessRunner(mockProc);
+      const config = {
+        runtimeDir: "/tmp/code-server-runtime",
+        extensionsDir: "/tmp/code-server-extensions",
+        userDataDir: "/tmp/code-server-user-data",
+      };
+
+      const manager = new CodeServerManager(config, processRunner);
+
+      // Mock successful health check
+      const { get } = await import("http");
+      vi.mocked(get).mockImplementation((_url: unknown, callback: unknown) => {
+        const cb = callback as (res: { statusCode: number }) => void;
+        setTimeout(() => cb({ statusCode: 200 }), 0);
+        return {
+          on: vi.fn().mockReturnThis(),
+          setTimeout: vi.fn().mockReturnThis(),
+        } as never;
+      });
+
+      await manager.ensureRunning();
+      await manager.stop();
+
+      // Should send SIGTERM first
+      expect(mockProc.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
+      // Should wait with timeout
+      expect(mockProc.wait).toHaveBeenNthCalledWith(1, 5000);
+      // Should escalate to SIGKILL
+      expect(mockProc.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
+      // Should wait for final exit
+      expect(mockProc.wait).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -3,9 +3,8 @@
  * Handles starting, stopping, and health checking of code-server processes.
  */
 
-import type { ResultPromise } from "execa";
 import type { CodeServerConfig, InstanceState } from "./types";
-import { findAvailablePort, spawnProcess } from "../platform/process";
+import { findAvailablePort, type ProcessRunner, type SpawnedProcess } from "../platform/process";
 import { encodePathForUrl } from "../platform/paths";
 import { CodeServerError } from "../errors";
 
@@ -45,15 +44,17 @@ export function urlForFolder(port: number, folderPath: string): string {
  */
 export class CodeServerManager {
   private readonly config: CodeServerConfig;
+  private readonly processRunner: ProcessRunner;
   private state: InstanceState = "stopped";
   private currentPort: number | null = null;
   private currentPid: number | null = null;
-  private process: ResultPromise | null = null;
+  private process: SpawnedProcess | null = null;
   private startPromise: Promise<number> | null = null;
   private readonly pidListeners = new Set<PidChangedCallback>();
 
-  constructor(config: CodeServerConfig) {
+  constructor(config: CodeServerConfig, processRunner: ProcessRunner) {
     this.config = config;
+    this.processRunner = processRunner;
   }
 
   /**
@@ -172,7 +173,7 @@ export class CodeServerManager {
         }
       }
 
-      this.process = spawnProcess("code-server", args, {
+      this.process = this.processRunner.run("code-server", args, {
         cwd: this.config.runtimeDir,
         env: cleanEnv,
       });
@@ -253,7 +254,8 @@ export class CodeServerManager {
    * @throws CodeServerError if stop fails
    */
   async stop(): Promise<void> {
-    if (this.state === "stopped" || this.process === null) {
+    const proc = this.process;
+    if (this.state === "stopped" || proc === null) {
       return;
     }
 
@@ -261,22 +263,15 @@ export class CodeServerManager {
 
     try {
       // Send SIGTERM for graceful shutdown
-      this.process.kill("SIGTERM");
+      proc.kill("SIGTERM");
 
       // Wait for process to exit (5s timeout)
-      const exitPromise = this.process.catch(() => {
-        // Process terminated
-      });
+      const result = await proc.wait(5000);
 
-      const timeoutPromise = this.sleep(5000).then(() => {
-        throw new Error("Process did not exit within 5 seconds");
-      });
-
-      try {
-        await Promise.race([exitPromise, timeoutPromise]);
-      } catch {
-        // Force kill if graceful shutdown failed
-        this.process.kill("SIGKILL");
+      // If still running after timeout, escalate to SIGKILL
+      if (result.running) {
+        proc.kill("SIGKILL");
+        await proc.wait();
       }
     } finally {
       this.state = "stopped";

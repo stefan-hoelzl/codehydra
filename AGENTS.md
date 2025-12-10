@@ -206,7 +206,7 @@ export function updateAgentStatus(
 
 ### Service Dependency Injection Pattern
 
-OpenCode services use constructor DI for testability (NOT singletons):
+Services use constructor DI for testability (NOT singletons):
 
 ```typescript
 // Service with injected dependencies
@@ -218,19 +218,75 @@ class DiscoveryService {
   ) {}
 }
 
-// Services owned and wired by AppState
-class AppState {
-  readonly discoveryService: DiscoveryService;
-  readonly agentStatusManager: AgentStatusManager;
+// Services owned and wired in main process
+// Example from bootstrap() and startServices():
+const processRunner = new ExecaProcessRunner();
+vscodeSetupService = new VscodeSetupService(processRunner, "code-server");
+codeServerManager = new CodeServerManager(config, processRunner);
+```
 
-  constructor() {
-    const portScanner = new NetstatPortScanner();
-    const processTree = new PidtreeProvider();
-    const instanceProbe = new HttpInstanceProbe();
-    this.discoveryService = new DiscoveryService(portScanner, processTree, instanceProbe);
-    this.agentStatusManager = new AgentStatusManager();
-  }
+### ProcessRunner Pattern
+
+`ProcessRunner` provides a unified interface for spawning processes:
+
+```typescript
+// ProcessRunner returns a SpawnedProcess handle synchronously
+const proc = runner.run("code-server", ["--port", "8080"], { cwd: "/app", env: cleanEnv });
+console.log(`PID: ${proc.pid}`);
+
+// Wait for completion (never throws for exit status)
+const result = await proc.wait();
+if (result.exitCode !== 0) {
+  console.error(result.stderr);
 }
+```
+
+**SpawnedProcess Handle:**
+
+| Property/Method  | Description                                                      |
+| ---------------- | ---------------------------------------------------------------- |
+| `pid`            | Process ID (undefined if spawn failed)                           |
+| `kill(signal?)`  | Send signal (default: SIGTERM). Returns true if sent.            |
+| `wait(timeout?)` | Wait for exit. Returns `ProcessResult` with exitCode/signal/etc. |
+
+**Graceful Shutdown with Timeout Escalation:**
+
+```typescript
+// Send SIGTERM and wait up to 5s
+proc.kill("SIGTERM");
+const result = await proc.wait(5000);
+
+// If still running after timeout, escalate to SIGKILL
+if (result.running) {
+  proc.kill("SIGKILL");
+  await proc.wait();
+}
+```
+
+**ProcessResult Fields:**
+
+| Field      | Type             | Description                                         |
+| ---------- | ---------------- | --------------------------------------------------- |
+| `exitCode` | `number \| null` | Exit code (null if killed/timeout/spawn error)      |
+| `signal`   | `string?`        | Signal name if killed (e.g., "SIGTERM")             |
+| `running`  | `boolean?`       | True if still running after wait(timeout)           |
+| `stdout`   | `string`         | Captured stdout                                     |
+| `stderr`   | `string`         | Captured stderr (includes spawn errors like ENOENT) |
+
+**Testing with Mocks:**
+
+```typescript
+import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
+
+// Create mock with controllable behavior
+const mockProc = createMockSpawnedProcess({
+  pid: 12345,
+  waitResult: { exitCode: 0, stdout: "output", stderr: "" },
+});
+const runner = createMockProcessRunner(mockProc);
+
+// Inject into service
+const service = new SomeService(runner);
 ```
 
 ### SSE Connection Lifecycle

@@ -2,7 +2,8 @@
  * Types for VS Code setup service.
  */
 
-// Re-export ProcessRunner and ProcessResult from platform/process.ts
+// Re-export ProcessRunner from platform/process.
+// VscodeSetupService now uses the SpawnedProcess pattern via .wait().
 export type { ProcessRunner, ProcessResult } from "../platform/process";
 
 /**

@@ -1,7 +1,13 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VscodeSetupService } from "./vscode-setup-service";
-import { CURRENT_SETUP_VERSION, type SetupMarker, type ProcessRunner } from "./types";
+import {
+  CURRENT_SETUP_VERSION,
+  type SetupMarker,
+  type ProcessRunner,
+  type ProcessResult,
+} from "./types";
+import type { SpawnedProcess } from "../platform/process";
 import * as fs from "node:fs/promises";
 
 // Mock fs/promises
@@ -15,6 +21,17 @@ vi.mock("../platform/paths", () => ({
   getVscodeUserDataDir: vi.fn(() => "/mock/vscode/user-data"),
   getVscodeSetupMarkerPath: vi.fn(() => "/mock/vscode/.setup-completed"),
 }));
+
+/**
+ * Create a mock SpawnedProcess with controllable wait() result.
+ */
+function createMockSpawnedProcess(result: ProcessResult): SpawnedProcess {
+  return {
+    pid: 12345,
+    kill: vi.fn().mockReturnValue(true),
+    wait: vi.fn().mockResolvedValue(result),
+  };
+}
 
 describe("VscodeSetupService", () => {
   let mockProcessRunner: ProcessRunner;
@@ -173,11 +190,13 @@ describe("VscodeSetupService", () => {
 
   describe("installMarketplaceExtensions", () => {
     it("runs code-server to install opencode extension", async () => {
-      vi.mocked(mockProcessRunner.run).mockResolvedValue({
-        stdout: "Extension 'sst-dev.opencode' was successfully installed.",
-        stderr: "",
-        exitCode: 0,
-      });
+      vi.mocked(mockProcessRunner.run).mockReturnValue(
+        createMockSpawnedProcess({
+          stdout: "Extension 'sst-dev.opencode' was successfully installed.",
+          stderr: "",
+          exitCode: 0,
+        })
+      );
       const progressCallback = vi.fn();
 
       const service = new VscodeSetupService(mockProcessRunner, "/mock/code-server");
@@ -197,11 +216,13 @@ describe("VscodeSetupService", () => {
     });
 
     it("returns error on non-zero exit code", async () => {
-      vi.mocked(mockProcessRunner.run).mockResolvedValue({
-        stdout: "",
-        stderr: "Failed to install extension",
-        exitCode: 1,
-      });
+      vi.mocked(mockProcessRunner.run).mockReturnValue(
+        createMockSpawnedProcess({
+          stdout: "",
+          stderr: "Failed to install extension",
+          exitCode: 1,
+        })
+      );
 
       const service = new VscodeSetupService(mockProcessRunner, "/mock/code-server");
       const result = await service.installMarketplaceExtensions();
@@ -216,8 +237,14 @@ describe("VscodeSetupService", () => {
       });
     });
 
-    it("returns error on process failure", async () => {
-      vi.mocked(mockProcessRunner.run).mockRejectedValue(new Error("ENOENT"));
+    it("returns binary-not-found error when spawn fails", async () => {
+      vi.mocked(mockProcessRunner.run).mockReturnValue(
+        createMockSpawnedProcess({
+          stdout: "",
+          stderr: "spawn ENOENT: code-server not found",
+          exitCode: null,
+        })
+      );
 
       const service = new VscodeSetupService(mockProcessRunner, "/mock/code-server");
       const result = await service.installMarketplaceExtensions();
@@ -330,11 +357,13 @@ describe("VscodeSetupService", () => {
       // Mock all file operations
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-      vi.mocked(mockProcessRunner.run).mockResolvedValue({
-        stdout: "Extension installed",
-        stderr: "",
-        exitCode: 0,
-      });
+      vi.mocked(mockProcessRunner.run).mockReturnValue(
+        createMockSpawnedProcess({
+          stdout: "Extension installed",
+          stderr: "",
+          exitCode: 0,
+        })
+      );
 
       const progressCallback = vi.fn();
       const service = new VscodeSetupService(mockProcessRunner, "/mock/code-server");
@@ -357,11 +386,13 @@ describe("VscodeSetupService", () => {
       vi.mocked(fs.access).mockRejectedValue(error);
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-      vi.mocked(mockProcessRunner.run).mockResolvedValue({
-        stdout: "",
-        stderr: "Failed",
-        exitCode: 1,
-      });
+      vi.mocked(mockProcessRunner.run).mockReturnValue(
+        createMockSpawnedProcess({
+          stdout: "",
+          stderr: "Failed",
+          exitCode: 1,
+        })
+      );
 
       const service = new VscodeSetupService(mockProcessRunner, "/mock/code-server");
       const result = await service.setup();

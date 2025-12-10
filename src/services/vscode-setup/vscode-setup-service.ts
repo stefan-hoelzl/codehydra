@@ -228,36 +228,38 @@ module.exports = { activate, deactivate };
   async installMarketplaceExtensions(onProgress?: ProgressCallback): Promise<SetupResult> {
     onProgress?.({ step: "extensions", message: "Installing OpenCode extension..." });
 
-    try {
-      const result = await this.processRunner.run(this.codeServerBinaryPath, [
-        "--install-extension",
-        "sst-dev.opencode",
-        "--extensions-dir",
-        getVscodeExtensionsDir(),
-      ]);
+    const proc = this.processRunner.run(this.codeServerBinaryPath, [
+      "--install-extension",
+      "sst-dev.opencode",
+      "--extensions-dir",
+      getVscodeExtensionsDir(),
+    ]);
+    const result = await proc.wait();
 
-      if (result.exitCode !== 0) {
+    if (result.exitCode !== 0) {
+      // Check for binary-not-found errors (ENOENT in stderr)
+      if (result.stderr.includes("ENOENT") || result.stderr.includes("spawn")) {
         return {
           success: false,
           error: {
-            type: "network",
-            message: "Failed to install OpenCode extension",
-            code: "EXTENSION_INSTALL_FAILED",
+            type: "binary-not-found",
+            message: result.stderr || "Failed to run code-server",
+            code: "BINARY_ERROR",
           },
         };
       }
 
-      return { success: true };
-    } catch (error) {
       return {
         success: false,
         error: {
-          type: "binary-not-found",
-          message: error instanceof Error ? error.message : String(error),
-          code: "BINARY_ERROR",
+          type: "network",
+          message: "Failed to install OpenCode extension",
+          code: "EXTENSION_INSTALL_FAILED",
         },
       };
     }
+
+    return { success: true };
   }
 
   /**

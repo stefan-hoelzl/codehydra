@@ -18,6 +18,7 @@ import {
   type ProcessRunner,
   type ProcessResult,
 } from "./types";
+import type { SpawnedProcess } from "../platform/process";
 import {
   createMockSetupState,
   verifySetupCompleted,
@@ -49,16 +50,27 @@ describe("VscodeSetupService Integration", () => {
   }
 
   /**
+   * Creates a mock SpawnedProcess with controllable wait() result.
+   */
+  function createMockSpawnedProcess(result: ProcessResult): SpawnedProcess {
+    return {
+      pid: 12345,
+      kill: vi.fn().mockReturnValue(true),
+      wait: vi.fn().mockResolvedValue(result),
+    };
+  }
+
+  /**
    * Creates a mock ProcessRunner that simulates code-server.
    */
   function createMockProcessRunner(exitCode = 0, stderr = ""): ProcessRunner {
     return {
-      async run(): Promise<ProcessResult> {
-        return {
+      run(): SpawnedProcess {
+        return createMockSpawnedProcess({
           stdout: exitCode === 0 ? "Extension 'sst-dev.opencode' was successfully installed." : "",
           stderr,
           exitCode,
-        };
+        });
       },
     };
   }
@@ -304,26 +316,8 @@ describe("VscodeSetupService Integration", () => {
    */
   describe.skip("Network-dependent tests (manual only)", () => {
     it("extension install with real code-server", async () => {
-      const { execa } = await import("execa");
-      const realProcessRunner: ProcessRunner = {
-        async run(command: string, args: readonly string[]): Promise<ProcessResult> {
-          try {
-            const result = await execa(command, args as string[], { timeout: 120000 });
-            return {
-              stdout: result.stdout,
-              stderr: result.stderr,
-              exitCode: result.exitCode ?? 0,
-            };
-          } catch (error) {
-            const execaError = error as { exitCode?: number; stderr?: string };
-            return {
-              stdout: "",
-              stderr: execaError.stderr ?? String(error),
-              exitCode: execaError.exitCode ?? 1,
-            };
-          }
-        },
-      };
+      const { ExecaProcessRunner } = await import("../platform/process");
+      const realProcessRunner = new ExecaProcessRunner();
 
       const service = new VscodeSetupService(realProcessRunner, getCodeServerTestPath());
 

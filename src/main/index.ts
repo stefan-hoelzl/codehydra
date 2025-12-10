@@ -91,6 +91,12 @@ let agentStatusManager: AgentStatusManager | null = null;
 let scanInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
+ * Shared ProcessRunner instance for both VscodeSetupService and CodeServerManager.
+ * Created once in bootstrap() and reused for all process spawning.
+ */
+let processRunner: ExecaProcessRunner | null = null;
+
+/**
  * Setup service for first-run configuration.
  */
 let vscodeSetupService: VscodeSetupService | null = null;
@@ -158,7 +164,12 @@ async function startServices(): Promise<void> {
     mkdir(config.userDataDir, { recursive: true }),
   ]);
 
-  codeServerManager = new CodeServerManager(config);
+  // Guard: processRunner must be initialized by bootstrap()
+  if (!processRunner) {
+    throw new Error("ProcessRunner not initialized - startServices called before bootstrap");
+  }
+
+  codeServerManager = new CodeServerManager(config, processRunner);
 
   try {
     await codeServerManager.ensureRunning();
@@ -380,7 +391,8 @@ async function bootstrap(): Promise<void> {
   Menu.setApplicationMenu(null);
 
   // 2. Create VscodeSetupService early (needed for setup:ready handler)
-  const processRunner = new ExecaProcessRunner();
+  // Store processRunner in module-level variable for reuse by CodeServerManager
+  processRunner = new ExecaProcessRunner();
   vscodeSetupService = new VscodeSetupService(processRunner, "code-server");
 
   // 3. Check if setup is already complete (determines code-server startup)

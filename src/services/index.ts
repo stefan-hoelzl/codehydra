@@ -57,8 +57,15 @@ export {
   encodePathForUrl,
   projectDirName,
 } from "./platform/paths";
-export { findAvailablePort, spawnProcess } from "./platform/process";
-export type { SpawnProcessOptions } from "./platform/process";
+
+// Process utilities
+export { findAvailablePort, ExecaProcessRunner } from "./platform/process";
+export type {
+  ProcessRunner,
+  ProcessResult,
+  ProcessOptions,
+  SpawnedProcess,
+} from "./platform/process";
 
 // VSCode setup
 export { VscodeSetupService, CURRENT_SETUP_VERSION } from "./vscode-setup";
@@ -70,9 +77,9 @@ export type {
   SetupProgress,
   ProgressCallback,
   SetupMarker,
-  ProcessRunner,
-  ProcessResult,
 } from "./vscode-setup";
+// Note: ProcessRunner and ProcessResult are exported from platform/process.
+// VscodeSetupService uses ProcessRunner via vscode-setup/types.ts re-export.
 
 /**
  * Factory function to create a GitWorktreeProvider with a SimpleGitClient.
