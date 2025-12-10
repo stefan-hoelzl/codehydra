@@ -129,6 +129,10 @@ describe("VscodeSetupService Integration", () => {
       expect(settings["workbench.colorTheme"]).toBe("Default Dark+");
       expect(settings["workbench.startupEditor"]).toBe("none");
       expect(settings["telemetry.telemetryLevel"]).toBe("off");
+      // Verify auto-detect system theme settings
+      expect(settings["window.autoDetectColorScheme"]).toBe(true);
+      expect(settings["workbench.preferredDarkColorTheme"]).toBe("Default Dark+");
+      expect(settings["workbench.preferredLightColorTheme"]).toBe("Default Light+");
 
       const keybindings = JSON.parse(await readFile(join(userDir, "keybindings.json"), "utf-8"));
       expect(keybindings).toEqual([]);

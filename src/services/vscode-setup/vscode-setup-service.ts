@@ -195,9 +195,13 @@ module.exports = { activate, deactivate };
     await mkdir(userDir, { recursive: true });
 
     // VS Code settings
+    // Auto-detect system theme so VS Code matches the UI layer's prefers-color-scheme
     const settings: VscodeSettings = {
       "workbench.startupEditor": "none",
       "workbench.colorTheme": "Default Dark+",
+      "window.autoDetectColorScheme": true,
+      "workbench.preferredDarkColorTheme": "Default Dark+",
+      "workbench.preferredLightColorTheme": "Default Light+",
       "extensions.autoUpdate": false,
       "telemetry.telemetryLevel": "off",
       "window.menuBarVisibility": "hidden",

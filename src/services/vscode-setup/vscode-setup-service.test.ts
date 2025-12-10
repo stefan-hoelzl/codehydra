@@ -371,6 +371,9 @@ describe("VscodeSetupService", () => {
       expect(settings).toEqual({
         "workbench.startupEditor": "none",
         "workbench.colorTheme": "Default Dark+",
+        "window.autoDetectColorScheme": true,
+        "workbench.preferredDarkColorTheme": "Default Dark+",
+        "workbench.preferredLightColorTheme": "Default Light+",
         "extensions.autoUpdate": false,
         "telemetry.telemetryLevel": "off",
         "window.menuBarVisibility": "hidden",

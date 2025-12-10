@@ -10,7 +10,7 @@ export type { ProcessRunner, ProcessResult } from "../platform/process";
  * Current version of the setup process.
  * Increment when setup steps change to force re-setup on existing installs.
  */
-export const CURRENT_SETUP_VERSION = 1;
+export const CURRENT_SETUP_VERSION = 2;
 
 /**
  * Setup steps for progress tracking.
@@ -70,6 +70,9 @@ export type SetupResult =
 export interface VscodeSettings {
   readonly "workbench.startupEditor": string;
   readonly "workbench.colorTheme": string;
+  readonly "window.autoDetectColorScheme": boolean;
+  readonly "workbench.preferredDarkColorTheme": string;
+  readonly "workbench.preferredLightColorTheme": string;
   readonly "extensions.autoUpdate": boolean;
   readonly "telemetry.telemetryLevel": string;
   readonly "window.menuBarVisibility": string;

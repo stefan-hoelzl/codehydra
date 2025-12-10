@@ -54,7 +54,16 @@ export async function createMockSetupState(options: {
     await mkdir(userDir, { recursive: true });
     await writeFile(
       join(userDir, "settings.json"),
-      JSON.stringify({ "workbench.colorTheme": "Default Dark+" }, null, 2),
+      JSON.stringify(
+        {
+          "workbench.colorTheme": "Default Dark+",
+          "window.autoDetectColorScheme": true,
+          "workbench.preferredDarkColorTheme": "Default Dark+",
+          "workbench.preferredLightColorTheme": "Default Light+",
+        },
+        null,
+        2
+      ),
       "utf-8"
     );
     await writeFile(join(userDir, "keybindings.json"), "[]", "utf-8");
