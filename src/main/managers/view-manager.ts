@@ -299,12 +299,21 @@ export class ViewManager implements IViewManager {
   /**
    * Sets the active workspace.
    * Active workspace has full content bounds, others have zero bounds.
+   * By default, focuses the workspace view so it receives keyboard input.
    *
    * @param workspacePath - Path to the workspace to activate, or null for none
+   * @param focus - Whether to focus the workspace view (default: true)
    */
-  setActiveWorkspace(workspacePath: string | null): void {
+  setActiveWorkspace(workspacePath: string | null, focus: boolean = true): void {
     this.activeWorkspacePath = workspacePath;
     this.updateBounds();
+
+    if (focus && workspacePath) {
+      const view = this.workspaceViews.get(workspacePath);
+      if (view) {
+        view.webContents.focus();
+      }
+    }
   }
 
   /**
@@ -318,6 +327,7 @@ export class ViewManager implements IViewManager {
 
   /**
    * Focuses the active workspace view.
+   * Use this to return focus to the workspace (e.g., after exiting shortcut mode).
    */
   focusActiveWorkspace(): void {
     if (!this.activeWorkspacePath) {

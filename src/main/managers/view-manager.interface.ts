@@ -52,10 +52,12 @@ export interface IViewManager {
   /**
    * Sets the active workspace.
    * Active workspace has full content bounds, others have zero bounds.
+   * By default, focuses the workspace view so it receives keyboard input.
    *
    * @param workspacePath - Path to the workspace to activate, or null for none
+   * @param focus - Whether to focus the workspace view (default: true)
    */
-  setActiveWorkspace(workspacePath: string | null): void;
+  setActiveWorkspace(workspacePath: string | null, focus?: boolean): void;
 
   /**
    * Gets the active workspace path.
@@ -66,6 +68,7 @@ export interface IViewManager {
 
   /**
    * Focuses the active workspace view.
+   * Use this to return focus to the workspace (e.g., after exiting shortcut mode).
    */
   focusActiveWorkspace(): void;
 

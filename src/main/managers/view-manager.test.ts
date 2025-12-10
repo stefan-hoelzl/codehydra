@@ -520,6 +520,49 @@ describe("ViewManager", () => {
       const lastCall = setBoundsCalls[setBoundsCalls.length - 1];
       expect(lastCall?.[0]).toEqual({ x: 0, y: 0, width: 0, height: 0 });
     });
+
+    it("focuses the workspace view by default", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      expect(workspaceView?.webContents.focus).toHaveBeenCalled();
+    });
+
+    it("skips focus when focus parameter is false", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      workspaceView?.webContents.focus.mockClear();
+
+      manager.setActiveWorkspace("/path/to/workspace", false);
+
+      expect(workspaceView?.webContents.focus).not.toHaveBeenCalled();
+    });
+
+    it("does not focus when workspace path is null", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      workspaceView?.webContents.focus.mockClear();
+
+      manager.setActiveWorkspace(null);
+
+      expect(workspaceView?.webContents.focus).not.toHaveBeenCalled();
+    });
   });
 
   describe("focusActiveWorkspace", () => {
@@ -530,11 +573,12 @@ describe("ViewManager", () => {
       });
 
       manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
-      manager.setActiveWorkspace("/path/to/workspace");
+      manager.setActiveWorkspace("/path/to/workspace", false); // Set active without focusing
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      workspaceView?.webContents.focus.mockClear();
 
       manager.focusActiveWorkspace();
 
-      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
       expect(workspaceView?.webContents.focus).toHaveBeenCalled();
     });
 

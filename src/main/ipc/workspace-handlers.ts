@@ -31,7 +31,7 @@ export function createWorkspaceCreateHandler(
     AppState,
     "getProject" | "getWorkspaceProvider" | "getWorkspaceUrl" | "addWorkspace"
   >,
-  viewManager: Pick<IViewManager, "setActiveWorkspace" | "focusActiveWorkspace">
+  viewManager: Pick<IViewManager, "setActiveWorkspace">
 ): (event: IpcMainInvokeEvent, payload: WorkspaceCreatePayload) => Promise<Workspace> {
   return async (_event, payload) => {
     const project = appState.getProject(payload.projectPath);
@@ -50,9 +50,8 @@ export function createWorkspaceCreateHandler(
     // Add workspace to app state (this also creates the view)
     appState.addWorkspace(payload.projectPath, workspace);
 
-    // Set as active workspace
+    // Set as active workspace (focuses by default)
     viewManager.setActiveWorkspace(workspace.path);
-    viewManager.focusActiveWorkspace();
 
     // Emit event
     emitEvent("workspace:created", {
@@ -153,7 +152,7 @@ function findNextWorkspace(
  */
 export function createWorkspaceSwitchHandler(
   appState: Pick<AppState, "findProjectForWorkspace">,
-  viewManager: Pick<IViewManager, "setActiveWorkspace" | "focusActiveWorkspace" | "focusUI">
+  viewManager: Pick<IViewManager, "setActiveWorkspace" | "focusUI">
 ): (event: IpcMainInvokeEvent, payload: WorkspaceSwitchPayload) => Promise<void> {
   return async (_event, payload) => {
     const project = appState.findProjectForWorkspace(payload.workspacePath);
@@ -161,12 +160,8 @@ export function createWorkspaceSwitchHandler(
       throw new WorkspaceError("Workspace not found", "WORKSPACE_NOT_FOUND");
     }
 
-    viewManager.setActiveWorkspace(payload.workspacePath);
-
-    // Only focus workspace if not explicitly skipped (e.g., during shortcut mode navigation)
-    if (payload.focusWorkspace !== false) {
-      viewManager.focusActiveWorkspace();
-    }
+    // Set active workspace, skipping focus if explicitly requested (e.g., during shortcut mode navigation)
+    viewManager.setActiveWorkspace(payload.workspacePath, payload.focusWorkspace !== false);
 
     // Emit event
     emitEvent("workspace:switched", {

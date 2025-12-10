@@ -117,8 +117,8 @@ describe("workspace:create handler", () => {
 
     expect(mockProvider.createWorkspace).toHaveBeenCalledWith("feature-branch", "main");
     expect(mockAppState.addWorkspace).toHaveBeenCalledWith("/test/repo", workspace);
+    // setActiveWorkspace is called without focus parameter (defaults to true)
     expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith(workspace.path);
-    expect(mockViewManager.focusActiveWorkspace).toHaveBeenCalled();
     expect(result).toEqual(workspace);
   });
 
@@ -250,11 +250,14 @@ describe("workspace:switch handler", () => {
 
     await handler(mockEvent, payload);
 
-    expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith("/test/repo/.worktrees/ws1");
-    expect(mockViewManager.focusActiveWorkspace).toHaveBeenCalled();
+    // setActiveWorkspace is called with focus=true (default)
+    expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith(
+      "/test/repo/.worktrees/ws1",
+      true
+    );
   });
 
-  it("focuses UI instead of workspace when focusWorkspace is false", async () => {
+  it("skips focus when focusWorkspace is false", async () => {
     const mockAppState = createMockAppState();
     const mockViewManager = createMockViewManager();
 
@@ -274,8 +277,11 @@ describe("workspace:switch handler", () => {
 
     await handler(mockEvent, payload);
 
-    expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith("/test/repo/.worktrees/ws1");
-    expect(mockViewManager.focusActiveWorkspace).not.toHaveBeenCalled();
+    // setActiveWorkspace is called with focus=false
+    expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith(
+      "/test/repo/.worktrees/ws1",
+      false
+    );
   });
 
   it("throws for workspace from closed project", async () => {
