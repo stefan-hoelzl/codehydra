@@ -52,6 +52,26 @@ function redirectElectronDataPaths(): void {
 redirectElectronDataPaths();
 
 /**
+ * Workaround for Chromium/Electron GPU process crashes on Linux.
+ *
+ * On Linux 6.12+ with AMD GPUs (especially in Wayland + container environments),
+ * the GPU process intermittently crashes with errors like:
+ * - "eglDupNativeFenceFDANDROID duplication failure"
+ * - "GPU process exited unexpectedly: exit_code=133"
+ *
+ * This causes temporary black screens while the GPU process recovers.
+ * Disabling GPU memory buffer video frames prevents these crashes.
+ *
+ * References:
+ * - https://github.com/electron/electron/issues/45862
+ * - https://github.com/electron/electron/issues/32317
+ * - https://wiki.archlinux.org/title/Chromium#Wayland_hardware_acceleration_buffer_handle_is_null_errors
+ */
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("disable-gpu-memory-buffer-video-frames");
+}
+
+/**
  * Creates the code-server configuration.
  */
 function createCodeServerConfig(): CodeServerConfig {
