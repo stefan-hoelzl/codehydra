@@ -255,6 +255,83 @@ This is triggered by:
 
 The main process ViewManager handles the z-order swap using `contentView.addChildView()` reordering.
 
+## Theming System
+
+CodeHydra uses a CSS custom properties system for theming, with support for both VS Code integration and standalone operation.
+
+### CSS Variable Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CSS THEMING ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  variables.css                                                          │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │  :root {                                                          │  │
+│  │    --ch-foreground: var(--vscode-foreground, #cccccc);            │  │
+│  │    --ch-agent-idle: var(--ch-success); /* Reference semantic */   │  │
+│  │  }                                                                │  │
+│  │  @media (prefers-color-scheme: light) { ... light fallbacks ... } │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                              │                                          │
+│                              ▼                                          │
+│  Components use --ch-* variables exclusively                            │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │  .indicator--idle { background: var(--ch-agent-idle); }           │  │
+│  │  .dialog-overlay { background: var(--ch-overlay-bg); }            │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Variable Categories
+
+| Category    | Variables                                                     | Purpose                  |
+| ----------- | ------------------------------------------------------------- | ------------------------ |
+| Core        | `--ch-foreground`, `--ch-background`                          | Base text and background |
+| Border      | `--ch-border`, `--ch-input-border`, `--ch-input-hover-border` | Borders and dividers     |
+| Interactive | `--ch-button-bg`, `--ch-button-fg`, `--ch-button-hover-bg`    | Buttons, inputs, forms   |
+| Focus       | `--ch-focus-border`                                           | Focus indicators         |
+| Semantic    | `--ch-success`, `--ch-danger`, `--ch-warning`                 | Status colors            |
+| Agent       | `--ch-agent-idle`, `--ch-agent-busy`                          | Agent status (semantic)  |
+| Overlay     | `--ch-overlay-bg`, `--ch-shadow-color`, `--ch-shadow`         | Modals, tooltips         |
+| Layout      | `--ch-sidebar-width`, `--ch-dialog-max-width`                 | Sizing (theme-agnostic)  |
+
+### VS Code Variable Fallback Pattern
+
+Variables use `var(--vscode-*, fallback)` for dual-mode operation:
+
+```css
+--ch-foreground: var(--vscode-foreground, #cccccc);
+```
+
+- **In code-server context**: VS Code injects `--vscode-*` variables, which take precedence
+- **In standalone mode**: Fallback values are used, controlled by `prefers-color-scheme`
+
+### Light/Dark Theme Switching
+
+Light and dark themes only change fallback values via `@media` query:
+
+```css
+:root {
+  --ch-foreground: var(--vscode-foreground, #cccccc); /* Dark fallback */
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ch-foreground: var(--vscode-foreground, #3c3c3c); /* Light fallback */
+  }
+}
+```
+
+This approach means:
+
+- VS Code theme takes precedence when running in code-server
+- System preference controls standalone appearance
+- No JavaScript needed for theme switching
+- Layout variables (widths, spacing) are NOT in the media query
+
 ## OpenCode Integration
 
 The OpenCode integration provides real-time agent status monitoring for AI agents running in each workspace.

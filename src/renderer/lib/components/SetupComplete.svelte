@@ -34,7 +34,7 @@
 
   .checkmark {
     font-size: 3rem;
-    color: var(--ch-success, #4ec9b0);
+    color: var(--ch-success);
     margin-bottom: 1rem;
   }
 

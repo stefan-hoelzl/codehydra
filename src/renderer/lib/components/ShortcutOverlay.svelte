@@ -27,7 +27,7 @@
 -->
 <div class="shortcut-overlay" class:active role="status" aria-live="polite" aria-hidden={!active}>
   {#if active}
-    <span class="sr-only">Shortcut mode active.</span>
+    <span class="ch-visually-hidden">Shortcut mode active.</span>
   {/if}
   <span
     class="shortcut-hint"
@@ -67,14 +67,14 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 9999;
-    background: var(--vscode-editor-background, rgba(30, 30, 30, 0.9));
-    border: 1px solid var(--vscode-panel-border, #454545);
+    background: var(--ch-background);
+    border: 1px solid var(--ch-border);
     border-radius: 4px;
     padding: 0.5rem 1rem;
     display: flex;
     gap: 1rem;
     font-size: 0.875rem;
-    color: var(--vscode-foreground, #cccccc);
+    color: var(--ch-foreground);
     opacity: 0;
     pointer-events: none;
     transition: opacity 150ms ease-in-out;
@@ -91,18 +91,5 @@
   .shortcut-hint--hidden {
     visibility: hidden;
     opacity: 0;
-  }
-
-  /* Screen reader only - announces state changes */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
   }
 </style>

@@ -108,19 +108,19 @@
     opacity: 0.4;
   }
 
-  /* Idle state - green */
+  /* Idle state - green (uses semantic agent color) */
   .indicator--idle {
-    background-color: #4caf50;
+    background-color: var(--ch-agent-idle);
   }
 
-  /* Busy state - red */
+  /* Busy state - red (uses semantic agent color) */
   .indicator--busy {
-    background-color: #f44336;
+    background-color: var(--ch-agent-busy);
   }
 
   /* Mixed state - gradient (red top, green bottom) */
   .indicator--mixed {
-    background: linear-gradient(to bottom, #f44336 50%, #4caf50 50%);
+    background: linear-gradient(to bottom, var(--ch-agent-busy) 50%, var(--ch-agent-idle) 50%);
   }
 
   /* Pulse animation for busy and mixed states - uses global ch-pulse keyframes */
@@ -152,7 +152,7 @@
     text-overflow: ellipsis;
     z-index: 1000;
     pointer-events: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--ch-shadow);
   }
 
   /* Tooltip arrow */

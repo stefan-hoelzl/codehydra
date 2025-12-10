@@ -172,6 +172,74 @@ dropdownPosition = {
 
 Remember to recalculate position on window resize when the dropdown is open.
 
+## CSS Theming Patterns
+
+### Variable Naming Convention
+
+All theme variables use the `--ch-` prefix (CodeHydra) to avoid conflicts:
+
+```css
+/* Use --ch-* variables, never hardcoded colors */
+.my-component {
+  background: var(--ch-background);
+  color: var(--ch-foreground);
+  border: 1px solid var(--ch-border);
+}
+```
+
+### VS Code Variable Fallback Pattern
+
+Variables use `var(--vscode-*, fallback)` for dual-mode operation:
+
+```css
+--ch-foreground: var(--vscode-foreground, #cccccc);
+/*                    └── VS Code injects   └── Standalone fallback */
+```
+
+- **In code-server context**: VS Code injects `--vscode-*` variables, which take precedence
+- **In standalone mode**: Fallback values are used, controlled by `prefers-color-scheme`
+
+### Light Theme Approach
+
+Light/dark themes only change fallback values via `@media` query:
+
+```css
+:root {
+  --ch-foreground: var(--vscode-foreground, #cccccc); /* Dark fallback */
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ch-foreground: var(--vscode-foreground, #3c3c3c); /* Light fallback */
+    /* Same VS Code variable, different fallback */
+  }
+}
+```
+
+### Semantic Color Variables
+
+Use semantic variables for consistent theming:
+
+| Category | Variables                                                     |
+| -------- | ------------------------------------------------------------- |
+| Core     | `--ch-foreground`, `--ch-background`                          |
+| Border   | `--ch-border`, `--ch-input-border`, `--ch-input-hover-border` |
+| Buttons  | `--ch-button-bg`, `--ch-button-fg`, `--ch-button-hover-bg`    |
+| Semantic | `--ch-success`, `--ch-danger`, `--ch-warning`                 |
+| Agent    | `--ch-agent-idle`, `--ch-agent-busy` (reference semantic)     |
+| Overlay  | `--ch-overlay-bg`, `--ch-shadow-color`, `--ch-shadow`         |
+| Focus    | `--ch-focus-border`                                           |
+
+### Screen Reader Text
+
+Use the global `.ch-visually-hidden` class for screen reader only text (NOT component-local `.sr-only`):
+
+```svelte
+<span class="ch-visually-hidden">Shortcut mode active.</span>
+```
+
+The class is defined in `src/renderer/lib/styles/global.css`.
+
 ## OpenCode Integration
 
 ### Agent Status Store (Svelte 5 Runes)

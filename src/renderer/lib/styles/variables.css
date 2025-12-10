@@ -1,30 +1,104 @@
 /**
  * VS Code CSS custom properties with fallbacks.
  * Prefixed with --ch- (CodeHydra) to avoid conflicts.
+ *
+ * Variables use var(--vscode-*, fallback) pattern:
+ * - In code-server: VS Code injects --vscode-* variables
+ * - In standalone: Fallback values are used
+ *
+ * Light/dark themes only change fallback values via @media query.
  */
 
 :root {
-  /* Text colors */
+  /* Core colors */
   --ch-foreground: var(--vscode-foreground, #cccccc);
   --ch-background: var(--vscode-editor-background, #1e1e1e);
+
+  /* Border colors */
+  --ch-border: var(--vscode-panel-border, #454545);
+  --ch-input-border: var(--vscode-input-border, #3c3c3c);
+  --ch-input-hover-border: #5a5a5a;
 
   /* Button colors */
   --ch-button-bg: var(--vscode-button-background, #0e639c);
   --ch-button-fg: var(--vscode-button-foreground, #ffffff);
+  --ch-button-hover-bg: var(--vscode-button-hoverBackground, #1177bb);
+  --ch-button-disabled-bg: #3c3c3c;
+  --ch-button-disabled-fg: #8c8c8c;
 
   /* Input colors */
   --ch-input-bg: var(--vscode-input-background, #3c3c3c);
-  --ch-input-border: var(--vscode-input-border, #3c3c3c);
+  --ch-input-disabled-bg: #2d2d2d;
+  --ch-input-disabled-fg: #6c6c6c;
 
   /* Focus/selection colors */
   --ch-focus-border: var(--vscode-focusBorder, #007fd4);
   --ch-list-active-bg: var(--vscode-list-activeSelectionBackground, #094771);
+  --ch-list-hover-bg: var(--vscode-list-hoverBackground, #2a2d2e);
 
   /* Error colors */
   --ch-error-fg: var(--vscode-errorForeground, #f48771);
   --ch-error-bg: var(--vscode-inputValidation-errorBackground, #5a1d1d);
 
-  /* Component-specific */
+  /* Semantic colors */
+  --ch-success: var(--vscode-terminal-ansiGreen, #4ec9b0);
+  --ch-danger: var(--vscode-errorForeground, #f14c4c);
+  --ch-warning: var(--vscode-editorWarning-foreground, #cca700);
+
+  /* Agent status colors (reference semantic colors) */
+  --ch-agent-idle: var(--ch-success);
+  --ch-agent-busy: var(--ch-danger);
+
+  /* Overlay/shadow colors */
+  --ch-overlay-bg: rgba(0, 0, 0, 0.5);
+  --ch-shadow-color: rgba(0, 0, 0, 0.3);
+  --ch-shadow: 0 2px 8px var(--ch-shadow-color);
+
+  /* Layout variables (theme-independent) */
   --ch-sidebar-width: 250px;
   --ch-dialog-max-width: 450px;
+}
+
+/**
+ * Light theme overrides.
+ * Only fallback values change - VS Code variable references stay the same.
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Core colors */
+    --ch-foreground: var(--vscode-foreground, #3c3c3c);
+    --ch-background: var(--vscode-editor-background, #ffffff);
+
+    /* Border colors */
+    --ch-border: var(--vscode-panel-border, #e5e5e5);
+    --ch-input-border: var(--vscode-input-border, #cecece);
+    --ch-input-hover-border: #b0b0b0;
+
+    /* Button colors */
+    --ch-button-disabled-bg: #e5e5e5;
+    --ch-button-disabled-fg: #a0a0a0;
+
+    /* Input colors */
+    --ch-input-bg: var(--vscode-input-background, #ffffff);
+    --ch-input-disabled-bg: #f0f0f0;
+    --ch-input-disabled-fg: #a0a0a0;
+
+    /* Focus/selection colors */
+    --ch-focus-border: var(--vscode-focusBorder, #0066b8);
+    --ch-list-active-bg: var(--vscode-list-activeSelectionBackground, #0060c0);
+    --ch-list-hover-bg: var(--vscode-list-hoverBackground, #f0f0f0);
+
+    /* Error colors */
+    --ch-error-fg: var(--vscode-errorForeground, #e51400);
+    --ch-error-bg: var(--vscode-inputValidation-errorBackground, #f2dede);
+
+    /* Semantic colors */
+    --ch-success: var(--vscode-terminal-ansiGreen, #008000);
+    --ch-danger: var(--vscode-errorForeground, #e51400);
+    --ch-warning: var(--vscode-editorWarning-foreground, #bf8803);
+
+    /* Overlay/shadow colors */
+    --ch-overlay-bg: rgba(0, 0, 0, 0.4);
+    --ch-shadow-color: rgba(0, 0, 0, 0.15);
+  }
 }

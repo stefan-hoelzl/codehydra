@@ -103,12 +103,11 @@
 
   .button--primary {
     background-color: var(--ch-button-bg);
-    color: var(--ch-foreground);
+    color: var(--ch-button-fg);
   }
 
   .button--primary:hover {
-    background-color: var(--ch-button-hover-bg, var(--ch-button-bg));
-    filter: brightness(1.2);
+    background-color: var(--ch-button-hover-bg);
   }
 
   .button--primary:focus {

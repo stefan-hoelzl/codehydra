@@ -5,6 +5,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
 import SetupError from "./SetupError.svelte";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+// Get the current directory for reading component files
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 describe("SetupError component", () => {
   beforeEach(() => {
@@ -102,6 +109,23 @@ describe("SetupError component", () => {
       render(SetupError, { props: { errorMessage: "Test error" } });
 
       expect(screen.getByText(/check your internet connection/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("theme variables (Step 6)", () => {
+    // Read CSS from component file to verify variable usage
+    const componentCss = readFileSync(join(__dirname, "SetupError.svelte"), "utf-8");
+
+    it("heading uses var(--ch-danger) for red color", () => {
+      expect(componentCss).toMatch(/h1[^{]*\{[^}]*var\(--ch-danger/);
+    });
+
+    it("secondary button uses var(--ch-border) for border", () => {
+      expect(componentCss).toMatch(/button--secondary[^{]*\{[^}]*var\(--ch-border\)/);
+    });
+
+    it("primary button hover uses var(--ch-button-hover-bg)", () => {
+      expect(componentCss).toMatch(/button--primary:hover[^{]*\{[^}]*var\(--ch-button-hover-bg/);
     });
   });
 });
