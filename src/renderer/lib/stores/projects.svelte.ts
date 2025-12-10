@@ -127,9 +127,10 @@ export function reset(): void {
 /**
  * Get flat array of all workspaces across all projects.
  * Order: project order, then workspace order within each project.
+ * Note: Defensive null check handles edge cases during test cleanup.
  */
 export function getAllWorkspaces(): Workspace[] {
-  return _projects.flatMap((p) => [...p.workspaces]);
+  return (_projects ?? []).flatMap((p) => [...p.workspaces]);
 }
 
 /**

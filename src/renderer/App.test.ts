@@ -562,7 +562,7 @@ describe("App component", () => {
 
     it("should-pass-all-context-props-to-overlay: overlay hides hints when no context", async () => {
       // Empty projects = no workspaces, no active project/workspace
-      mockApi.listProjects.mockResolvedValue([]);
+      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
 
       let shortcutEnableCallback: (() => void) | null = null;
       (
@@ -890,7 +890,7 @@ describe("App component", () => {
 
     it("transitions to normal app after listProjects succeeds", async () => {
       // Normal mode - listProjects returns immediately
-      mockApi.listProjects.mockResolvedValue([]);
+      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
 
       render(App);
 
