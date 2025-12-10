@@ -9,4 +9,12 @@ export interface BuildInfo {
    * - false: Production (packaged .app/.exe/.AppImage)
    */
   readonly isDevelopment: boolean;
+
+  /**
+   * Git branch name (only populated in development mode).
+   * Used to display branch in window title for developer convenience.
+   * - In dev mode: current branch name, or "unknown branch" if git fails
+   * - In prod mode: undefined
+   */
+  readonly gitBranch?: string;
 }

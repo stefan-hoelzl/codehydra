@@ -13,10 +13,28 @@ describe("createMockBuildInfo", () => {
     expect(buildInfo.isDevelopment).toBe(true);
   });
 
+  it("returns gitBranch: 'test-branch' by default in dev mode", () => {
+    const buildInfo = createMockBuildInfo();
+
+    expect(buildInfo.gitBranch).toBe("test-branch");
+  });
+
   it("accepts override for isDevelopment", () => {
     const buildInfo = createMockBuildInfo({ isDevelopment: false });
 
     expect(buildInfo.isDevelopment).toBe(false);
+  });
+
+  it("returns undefined gitBranch when isDevelopment is false", () => {
+    const buildInfo = createMockBuildInfo({ isDevelopment: false });
+
+    expect(buildInfo.gitBranch).toBeUndefined();
+  });
+
+  it("accepts override for gitBranch", () => {
+    const buildInfo = createMockBuildInfo({ gitBranch: "feature/my-branch" });
+
+    expect(buildInfo.gitBranch).toBe("feature/my-branch");
   });
 
   it("returns object satisfying BuildInfo interface", () => {

@@ -55,16 +55,18 @@ export class WindowManager {
    *
    * Configuration:
    * - Size: 1200x800 (default), minimum 800x600
-   * - Title: "CodeHydra"
+   * - Title: Configurable, defaults to "CodeHydra"
    * - No application menu
+   *
+   * @param title - Window title (defaults to "CodeHydra")
    */
-  static create(): WindowManager {
+  static create(title: string = "CodeHydra"): WindowManager {
     const window = new BaseWindow({
       width: 1200,
       height: 800,
       minWidth: 800,
       minHeight: 600,
-      title: "CodeHydra",
+      title,
     });
 
     return new WindowManager(window);

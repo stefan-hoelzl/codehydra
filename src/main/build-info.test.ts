@@ -4,14 +4,17 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Track mock isPackaged value
-let mockIsPackaged = false;
+// Track mock isPackaged value using vi.hoisted
+const { mockState } = vi.hoisted(() => {
+  const state = { isPackaged: false };
+  return { mockState: state };
+});
 
 // Mock Electron app module with getter
 vi.mock("electron", () => ({
   app: {
     get isPackaged() {
-      return mockIsPackaged;
+      return mockState.isPackaged;
     },
   },
 }));
@@ -21,37 +24,83 @@ import { ElectronBuildInfo } from "./build-info";
 describe("ElectronBuildInfo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIsPackaged = false;
+    mockState.isPackaged = false;
   });
 
   afterEach(() => {
-    mockIsPackaged = false;
+    mockState.isPackaged = false;
   });
 
-  it("returns isDevelopment: true when app is not packaged", () => {
-    mockIsPackaged = false;
+  describe("isDevelopment", () => {
+    it("returns true when app is not packaged", () => {
+      mockState.isPackaged = false;
 
-    const buildInfo = new ElectronBuildInfo();
+      const buildInfo = new ElectronBuildInfo();
 
-    expect(buildInfo.isDevelopment).toBe(true);
+      expect(buildInfo.isDevelopment).toBe(true);
+    });
+
+    it("returns false when app is packaged", () => {
+      mockState.isPackaged = true;
+
+      const buildInfo = new ElectronBuildInfo();
+
+      expect(buildInfo.isDevelopment).toBe(false);
+    });
+
+    it("caches the value at construction time", () => {
+      mockState.isPackaged = false;
+      const buildInfo = new ElectronBuildInfo();
+
+      // Change the mock value after construction
+      mockState.isPackaged = true;
+
+      // Should still return the original cached value
+      expect(buildInfo.isDevelopment).toBe(true);
+    });
   });
 
-  it("returns isDevelopment: false when app is packaged", () => {
-    mockIsPackaged = true;
+  describe("gitBranch", () => {
+    it("returns the git branch name in development mode", () => {
+      mockState.isPackaged = false;
+      const mockGetBranch = vi.fn(() => "feature/my-branch");
 
-    const buildInfo = new ElectronBuildInfo();
+      const buildInfo = new ElectronBuildInfo(mockGetBranch);
 
-    expect(buildInfo.isDevelopment).toBe(false);
-  });
+      expect(buildInfo.gitBranch).toBe("feature/my-branch");
+      expect(mockGetBranch).toHaveBeenCalledOnce();
+    });
 
-  it("caches the isDevelopment value at construction time", () => {
-    mockIsPackaged = false;
-    const buildInfo = new ElectronBuildInfo();
+    it("returns undefined in production mode", () => {
+      mockState.isPackaged = true;
+      const mockGetBranch = vi.fn(() => "should-not-be-called");
 
-    // Change the mock value after construction
-    mockIsPackaged = true;
+      const buildInfo = new ElectronBuildInfo(mockGetBranch);
 
-    // Should still return the original cached value
-    expect(buildInfo.isDevelopment).toBe(true);
+      expect(buildInfo.gitBranch).toBeUndefined();
+      expect(mockGetBranch).not.toHaveBeenCalled();
+    });
+
+    it("returns 'unknown branch' when git function returns it", () => {
+      mockState.isPackaged = false;
+      const mockGetBranch = vi.fn(() => "unknown branch");
+
+      const buildInfo = new ElectronBuildInfo(mockGetBranch);
+
+      expect(buildInfo.gitBranch).toBe("unknown branch");
+    });
+
+    it("uses default getGitBranch function when not provided", () => {
+      mockState.isPackaged = false;
+
+      // This test runs the real getGitBranch function
+      // which will return the actual branch or "unknown branch"
+      const buildInfo = new ElectronBuildInfo();
+
+      // gitBranch should be a non-empty string
+      expect(buildInfo.gitBranch).toBeDefined();
+      expect(typeof buildInfo.gitBranch).toBe("string");
+      expect(buildInfo.gitBranch!.length).toBeGreaterThan(0);
+    });
   });
 });

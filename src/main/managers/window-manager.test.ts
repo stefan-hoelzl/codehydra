@@ -49,7 +49,7 @@ describe("WindowManager", () => {
   });
 
   describe("create", () => {
-    it("creates a BaseWindow with correct configuration", () => {
+    it("creates a BaseWindow with default title", () => {
       WindowManager.create();
 
       expect(MockBaseWindowClass).toHaveBeenCalledWith({
@@ -58,6 +58,18 @@ describe("WindowManager", () => {
         minWidth: 800,
         minHeight: 600,
         title: "CodeHydra",
+      });
+    });
+
+    it("creates a BaseWindow with custom title", () => {
+      WindowManager.create("CodeHydra (feature-branch)");
+
+      expect(MockBaseWindowClass).toHaveBeenCalledWith({
+        width: 1200,
+        height: 800,
+        minWidth: 800,
+        minHeight: 600,
+        title: "CodeHydra (feature-branch)",
       });
     });
 
