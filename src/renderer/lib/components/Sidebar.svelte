@@ -149,10 +149,6 @@
                   {/if}
                   {workspace.name}
                 </button>
-                <AgentStatusIndicator
-                  idleCount={agentStatus.counts.idle}
-                  busyCount={agentStatus.counts.busy}
-                />
                 <button
                   type="button"
                   class="action-btn remove-btn"
@@ -162,6 +158,10 @@
                 >
                   &times;
                 </button>
+                <AgentStatusIndicator
+                  idleCount={agentStatus.counts.idle}
+                  busyCount={agentStatus.counts.busy}
+                />
               </li>
             {/each}
           </ul>
