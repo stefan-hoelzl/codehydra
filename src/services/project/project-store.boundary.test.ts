@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
- * Unit tests for ProjectStore.
- * Uses real filesystem with temp directories.
+ * Boundary tests for ProjectStore.
+ * Tests filesystem operations against real filesystem with temp directories.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
