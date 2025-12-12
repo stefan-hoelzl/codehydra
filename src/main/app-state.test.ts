@@ -23,6 +23,7 @@ const { mockProjectStore, mockWorkspaceProvider, mockViewManager, mockCreateGitW
       isDirty: ReturnType<typeof vi.fn>;
       projectRoot: string;
       isMainWorkspace: ReturnType<typeof vi.fn>;
+      cleanupOrphanedWorkspaces: ReturnType<typeof vi.fn>;
     } = {
       projectRoot: "/project",
       discover: vi.fn(() =>
@@ -47,6 +48,7 @@ const { mockProjectStore, mockWorkspaceProvider, mockViewManager, mockCreateGitW
       ),
       updateBases: vi.fn(() => Promise.resolve({ fetchedRemotes: ["origin"], failedRemotes: [] })),
       isDirty: vi.fn(() => Promise.resolve(false)),
+      cleanupOrphanedWorkspaces: vi.fn(() => Promise.resolve({ removedCount: 0, failedPaths: [] })),
     };
 
     const mockStore = {
@@ -132,10 +134,11 @@ describe("AppState", () => {
 
       await appState.openProject("/project");
 
-      // createGitWorktreeProvider is called with projectPath and workspacesDir from pathProvider
+      // createGitWorktreeProvider is called with projectPath, workspacesDir, and fileSystemLayer
       expect(mockCreateGitWorktreeProvider).toHaveBeenCalledWith(
         "/project",
-        mockPathProvider.getProjectWorkspacesDir("/project")
+        mockPathProvider.getProjectWorkspacesDir("/project"),
+        expect.any(Object) // FileSystemLayer
       );
     });
 
@@ -394,10 +397,11 @@ describe("AppState", () => {
       await appState.loadPersistedProjects();
 
       expect(mockProjectStore.loadAllProjects).toHaveBeenCalled();
-      // createGitWorktreeProvider is called with projectPath and workspacesDir from pathProvider
+      // createGitWorktreeProvider is called with projectPath, workspacesDir, and fileSystemLayer
       expect(mockCreateGitWorktreeProvider).toHaveBeenCalledWith(
         "/project",
-        mockPathProvider.getProjectWorkspacesDir("/project")
+        mockPathProvider.getProjectWorkspacesDir("/project"),
+        expect.any(Object) // FileSystemLayer
       );
     });
 
@@ -516,6 +520,47 @@ describe("AppState", () => {
 
       // Should not throw even without agentStatusManager
       await expect(appState.openProject("/project")).resolves.toBeDefined();
+    });
+  });
+
+  describe("workspace cleanup", () => {
+    it("continues if cleanupOrphanedWorkspaces fails", async () => {
+      // Make cleanup throw an error
+      mockWorkspaceProvider.cleanupOrphanedWorkspaces.mockRejectedValueOnce(
+        new Error("Cleanup failed")
+      );
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        mockPathProvider,
+        8080
+      );
+
+      // openProject should still succeed despite cleanup failure
+      const project = await appState.openProject("/project");
+
+      expect(project.path).toBe("/project");
+      // Give the async cleanup a chance to complete
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(errorSpy).toHaveBeenCalledWith("Workspace cleanup failed:", expect.any(Error));
+      errorSpy.mockRestore();
+    });
+
+    it("calls cleanupOrphanedWorkspaces on openProject", async () => {
+      const appState = new AppState(
+        mockProjectStore as unknown as ProjectStore,
+        mockViewManager as unknown as IViewManager,
+        mockPathProvider,
+        8080
+      );
+
+      await appState.openProject("/project");
+
+      // Give the async cleanup a chance to be called
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(mockWorkspaceProvider.cleanupOrphanedWorkspaces).toHaveBeenCalled();
     });
   });
 });

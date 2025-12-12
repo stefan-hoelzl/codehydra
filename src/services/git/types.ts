@@ -82,3 +82,13 @@ export interface UpdateBasesResult {
   /** Remotes that failed to fetch with error messages */
   readonly failedRemotes: readonly { remote: string; error: string }[];
 }
+
+/**
+ * Result of cleanup operation for orphaned workspace directories.
+ */
+export interface CleanupResult {
+  /** Number of directories successfully removed */
+  readonly removedCount: number;
+  /** Directories that failed to remove with error messages */
+  readonly failedPaths: ReadonlyArray<{ path: string; error: string }>;
+}

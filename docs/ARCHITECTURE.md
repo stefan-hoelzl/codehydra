@@ -206,6 +206,21 @@ Services are pure Node.js for testability without Electron:
 | VS Code Setup Service    | First-run extension and config installation                     | Implemented |
 | NetworkLayer             | HTTP, SSE, port operations (HttpClient, SseClient, PortManager) | Implemented |
 
+### Workspace Cleanup
+
+The Git Worktree Provider includes resilient deletion and orphaned workspace cleanup:
+
+**Resilient Deletion**: When `git worktree remove --force` fails but the worktree was successfully unregistered (e.g., due to locked files in code-server), the deletion is considered successful. The orphaned directory will be cleaned up on next startup.
+
+**Startup Cleanup**: On project open, `cleanupOrphanedWorkspaces()` runs non-blocking to remove directories in the workspaces folder that are not registered with git. This handles cases where previous deletions partially failed.
+
+**Security Measures**:
+
+- Skips symlinks (prevents symlink attacks targeting system directories)
+- Validates paths stay within workspacesDir (prevents path traversal)
+- Re-checks worktree registration before each deletion (TOCTOU protection)
+- Concurrency guard prevents multiple cleanups running simultaneously
+
 ### NetworkLayer Pattern
 
 NetworkLayer provides unified interfaces for all localhost network operations, designed following the Interface Segregation Principle. Consumers depend only on the specific interface(s) they need.

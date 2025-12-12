@@ -23,6 +23,7 @@ export type {
   BaseInfo,
   RemovalResult,
   UpdateBasesResult,
+  CleanupResult,
 } from "./git/types";
 
 // Git client
@@ -112,16 +113,18 @@ export type {
  * @param projectRoot Absolute path to the git repository
  * @param workspacesDir Directory where worktrees will be created. Callers must obtain this
  *   from `PathProvider.getProjectWorkspacesDir(projectRoot)` to ensure consistent worktree placement.
+ * @param fileSystemLayer FileSystemLayer for cleanup operations
  * @returns Promise resolving to an IWorkspaceProvider
  * @throws WorkspaceError if path is invalid or not a git repository
  */
 export async function createGitWorktreeProvider(
   projectRoot: string,
-  workspacesDir: string
+  workspacesDir: string,
+  fileSystemLayer: import("./platform/filesystem").FileSystemLayer
 ): Promise<import("./git/workspace-provider").IWorkspaceProvider> {
   const { GitWorktreeProvider } = await import("./git/git-worktree-provider");
   const { SimpleGitClient } = await import("./git/simple-git-client");
 
   const gitClient = new SimpleGitClient();
-  return GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir);
+  return GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fileSystemLayer);
 }

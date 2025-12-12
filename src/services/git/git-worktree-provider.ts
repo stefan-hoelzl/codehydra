@@ -5,9 +5,10 @@
 import path from "path";
 import type { IGitClient } from "./git-client";
 import type { IWorkspaceProvider } from "./workspace-provider";
-import type { BaseInfo, RemovalResult, UpdateBasesResult, Workspace } from "./types";
+import type { BaseInfo, CleanupResult, RemovalResult, UpdateBasesResult, Workspace } from "./types";
 import { WorkspaceError } from "../errors";
 import { sanitizeWorkspaceName } from "../platform/paths";
+import type { FileSystemLayer } from "../platform/filesystem";
 
 /**
  * Implementation of IWorkspaceProvider using git worktrees.
@@ -17,11 +18,28 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
   readonly projectRoot: string;
   private readonly gitClient: IGitClient;
   private readonly workspacesDir: string;
+  private readonly fileSystemLayer: FileSystemLayer;
+  private cleanupInProgress = false;
 
-  private constructor(projectRoot: string, gitClient: IGitClient, workspacesDir: string) {
+  private constructor(
+    projectRoot: string,
+    gitClient: IGitClient,
+    workspacesDir: string,
+    fileSystemLayer: FileSystemLayer
+  ) {
     this.projectRoot = projectRoot;
     this.gitClient = gitClient;
     this.workspacesDir = workspacesDir;
+    this.fileSystemLayer = fileSystemLayer;
+  }
+
+  /**
+   * Normalize a worktree path for consistent comparison.
+   * - Resolves . and .. components
+   * - Removes trailing slashes
+   */
+  private normalizeWorktreePath(p: string): string {
+    return path.normalize(p).replace(/[/\\]$/, "");
   }
 
   /**
@@ -31,13 +49,15 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
    * @param projectRoot Absolute path to the git repository
    * @param gitClient Git client to use for operations
    * @param workspacesDir Directory where worktrees will be created (from PathProvider.getProjectWorkspacesDir)
+   * @param fileSystemLayer FileSystemLayer for cleanup operations
    * @returns Promise resolving to a new GitWorktreeProvider
    * @throws WorkspaceError if path is invalid or not a git repository
    */
   static async create(
     projectRoot: string,
     gitClient: IGitClient,
-    workspacesDir: string
+    workspacesDir: string,
+    fileSystemLayer: FileSystemLayer
   ): Promise<GitWorktreeProvider> {
     // Validate absolute path
     if (!path.isAbsolute(projectRoot)) {
@@ -63,7 +83,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       throw new WorkspaceError(`Failed to validate repository: ${message}`);
     }
 
-    return new GitWorktreeProvider(projectRoot, gitClient, workspacesDir);
+    return new GitWorktreeProvider(projectRoot, gitClient, workspacesDir, fileSystemLayer);
   }
 
   async discover(): Promise<readonly Workspace[]> {
@@ -146,8 +166,8 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
 
   async removeWorkspace(workspacePath: string, deleteBase: boolean): Promise<RemovalResult> {
     // Normalize paths for comparison
-    const normalizedWorkspacePath = path.normalize(workspacePath).replace(/\/$/, "");
-    const normalizedProjectRoot = path.normalize(this.projectRoot).replace(/\/$/, "");
+    const normalizedWorkspacePath = this.normalizeWorktreePath(workspacePath);
+    const normalizedProjectRoot = this.normalizeWorktreePath(this.projectRoot);
 
     // Cannot remove main worktree
     if (normalizedWorkspacePath === normalizedProjectRoot) {
@@ -157,12 +177,30 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     // Get the branch name before removal
     const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
     const worktree = worktrees.find(
-      (wt) => path.normalize(wt.path).replace(/\/$/, "") === normalizedWorkspacePath
+      (wt) => this.normalizeWorktreePath(wt.path) === normalizedWorkspacePath
     );
     const branchName = worktree?.branch;
 
-    // Remove the worktree
-    await this.gitClient.removeWorktree(this.projectRoot, workspacePath);
+    // Remove the worktree - handle partial failures
+    try {
+      await this.gitClient.removeWorktree(this.projectRoot, workspacePath);
+    } catch (error) {
+      // Check if worktree was unregistered despite error
+      const currentWorktrees = await this.gitClient.listWorktrees(this.projectRoot);
+      const stillRegistered = currentWorktrees.some(
+        (wt) => this.normalizeWorktreePath(wt.path) === normalizedWorkspacePath
+      );
+
+      if (stillRegistered) {
+        throw error; // Truly failed - still registered
+      }
+
+      // Unregistered but directory remains - log and continue
+      console.warn(
+        `Worktree unregistered but directory remains: ${workspacePath}. ` +
+          `Will be cleaned up on next startup.`
+      );
+    }
 
     // Prune stale worktree entries
     await this.gitClient.pruneWorktrees(this.projectRoot);
@@ -192,8 +230,119 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
   }
 
   isMainWorkspace(workspacePath: string): boolean {
-    const normalizedWorkspacePath = path.normalize(workspacePath).replace(/\/$/, "");
-    const normalizedProjectRoot = path.normalize(this.projectRoot).replace(/\/$/, "");
+    const normalizedWorkspacePath = this.normalizeWorktreePath(workspacePath);
+    const normalizedProjectRoot = this.normalizeWorktreePath(this.projectRoot);
     return normalizedWorkspacePath === normalizedProjectRoot;
+  }
+
+  /**
+   * Removes workspace directories that are not registered with git.
+   * Handles cases where `git worktree remove` unregistered a worktree
+   * but failed to delete its directory (e.g., due to locked files).
+   *
+   * Runs at project startup (non-blocking). Errors are logged but not thrown,
+   * allowing cleanup to retry on next startup.
+   *
+   * Security: Skips symlinks and validates paths stay within workspacesDir.
+   *
+   * @returns Result indicating how many directories were removed and any failures
+   */
+  async cleanupOrphanedWorkspaces(): Promise<CleanupResult> {
+    const emptyResult: CleanupResult = { removedCount: 0, failedPaths: [] };
+
+    // Concurrency guard - only one cleanup at a time
+    if (this.cleanupInProgress) {
+      return emptyResult;
+    }
+    this.cleanupInProgress = true;
+
+    try {
+      return await this.doCleanupOrphanedWorkspaces();
+    } finally {
+      this.cleanupInProgress = false;
+    }
+  }
+
+  private async doCleanupOrphanedWorkspaces(): Promise<CleanupResult> {
+    const emptyResult: CleanupResult = { removedCount: 0, failedPaths: [] };
+
+    // Get registered worktrees
+    let worktrees;
+    try {
+      worktrees = await this.gitClient.listWorktrees(this.projectRoot);
+    } catch (error) {
+      // Cannot determine registered worktrees - abort cleanup silently
+      console.warn("Failed to list worktrees for cleanup:", error);
+      return emptyResult;
+    }
+
+    // Build normalized path set for fast lookup
+    const registeredPaths = new Set(worktrees.map((wt) => this.normalizeWorktreePath(wt.path)));
+
+    // Read workspacesDir
+    let entries;
+    try {
+      entries = await this.fileSystemLayer.readdir(this.workspacesDir);
+    } catch {
+      // workspacesDir doesn't exist yet or can't be read - nothing to clean
+      return emptyResult;
+    }
+
+    const failedPaths: Array<{ path: string; error: string }> = [];
+    let removedCount = 0;
+    const normalizedWorkspacesDir = this.normalizeWorktreePath(this.workspacesDir);
+
+    for (const entry of entries) {
+      // Skip non-directories
+      if (!entry.isDirectory) {
+        continue;
+      }
+
+      // Skip symlinks (security)
+      if (entry.isSymbolicLink) {
+        continue;
+      }
+
+      // Build full path
+      const fullPath = path.join(this.workspacesDir, entry.name);
+      const normalizedFullPath = this.normalizeWorktreePath(fullPath);
+
+      // Validate path stays within workspacesDir (security - path traversal)
+      if (!normalizedFullPath.startsWith(normalizedWorkspacesDir)) {
+        continue;
+      }
+
+      // Skip if registered
+      if (registeredPaths.has(normalizedFullPath)) {
+        continue;
+      }
+
+      // Re-check registration before delete (TOCTOU protection)
+      try {
+        const currentWorktrees = await this.gitClient.listWorktrees(this.projectRoot);
+        const nowRegistered = currentWorktrees.some(
+          (wt) => this.normalizeWorktreePath(wt.path) === normalizedFullPath
+        );
+        if (nowRegistered) {
+          // Workspace was created concurrently - skip
+          continue;
+        }
+      } catch {
+        // Cannot verify - skip this entry to be safe
+        continue;
+      }
+
+      // Delete the orphaned directory
+      try {
+        await this.fileSystemLayer.rm(fullPath, { recursive: true, force: true });
+        removedCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`Failed to remove orphaned workspace ${fullPath}:`, errorMessage);
+        failedPaths.push({ path: fullPath, error: errorMessage });
+      }
+    }
+
+    return { removedCount, failedPaths };
   }
 }

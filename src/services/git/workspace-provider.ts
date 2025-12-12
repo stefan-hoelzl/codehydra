@@ -4,7 +4,7 @@
  * (e.g., git worktrees, plain directories, docker containers).
  */
 
-import type { BaseInfo, RemovalResult, UpdateBasesResult, Workspace } from "./types";
+import type { BaseInfo, CleanupResult, RemovalResult, UpdateBasesResult, Workspace } from "./types";
 
 /**
  * Interface for workspace operations.
@@ -68,4 +68,13 @@ export interface IWorkspaceProvider {
    * @returns true if the path is the main workspace
    */
   isMainWorkspace(workspacePath: string): boolean;
+
+  /**
+   * Cleanup orphaned workspace directories (optional).
+   * Not all providers need this - only those that can have orphaned directories
+   * (e.g., when git worktree remove unregisters but fails to delete the directory).
+   *
+   * @returns Promise resolving to cleanup result with count and any failures
+   */
+  cleanupOrphanedWorkspaces?(): Promise<CleanupResult>;
 }
