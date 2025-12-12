@@ -131,23 +131,24 @@ Each group below will have its own detailed implementation plan created separate
     | `PidtreeProvider` | `src/services/opencode/process-tree.ts` |
   - Test file: `src/services/platform/process.boundary.test.ts`, `src/services/opencode/process-tree.boundary.test.ts`
 
-- [ ] **Step 2.B: OS Networking**
+- [x] **Step 2.B: OS Networking**
   - External entity: `net` module, `systeminformation`
   - Modules:
     | Module | File |
     |--------|------|
-    | `findAvailablePort` | `src/services/platform/process.ts` |
-    | `SiPortScanner` | `src/services/opencode/port-scanner.ts` |
-  - Test file: `src/services/platform/process.boundary.test.ts`, `src/services/opencode/port-scanner.boundary.test.ts`
+    | `PortManager (DefaultNetworkLayer)` | `src/services/platform/network.ts` |
+  - Test file: `src/services/platform/network.boundary.test.ts`
+  - Note: PortManager is part of the unified DefaultNetworkLayer (see plan NETWORK_BOUNDARY_TESTS.md)
 
-- [ ] **Step 2.C: HTTP**
-  - External entity: `fetch`
+- [x] **Step 2.C: HTTP**
+  - External entity: `fetch`, `EventSource`
   - Modules:
     | Module | File |
     |--------|------|
-    | `fetchWithTimeout` | `src/services/platform/http.ts` |
-    | `HttpInstanceProbe` | `src/services/opencode/instance-probe.ts` |
-  - Test file: `src/services/platform/http.boundary.test.ts`, `src/services/opencode/instance-probe.boundary.test.ts`
+    | `HttpClient (DefaultNetworkLayer)` | `src/services/platform/network.ts` |
+    | `SseClient (DefaultNetworkLayer)` | `src/services/platform/network.ts` |
+  - Test file: `src/services/platform/network.boundary.test.ts`
+  - Note: HttpClient, SseClient, and PortManager are tested together since DefaultNetworkLayer is a unified module implementing all three interfaces
 
 - [ ] **Step 2.D: Filesystem**
   - External entity: `fs/promises`

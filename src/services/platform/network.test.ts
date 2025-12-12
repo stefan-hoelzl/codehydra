@@ -3,8 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createServer, type Server } from "net";
-import { DefaultNetworkLayer, type HttpClient, type PortManager } from "./network";
+import { DefaultNetworkLayer, type HttpClient } from "./network";
 
 describe("DefaultNetworkLayer", () => {
   describe("HttpClient.fetch()", () => {
@@ -180,112 +179,6 @@ describe("DefaultNetworkLayer", () => {
       ).rejects.toThrow();
 
       vi.restoreAllMocks();
-    });
-  });
-
-  describe("PortManager.findFreePort()", () => {
-    let networkLayer: PortManager;
-
-    beforeEach(() => {
-      networkLayer = new DefaultNetworkLayer();
-    });
-
-    it("findFreePort returns valid port number (1024-65535)", async () => {
-      const port = await networkLayer.findFreePort();
-
-      expect(port).toBeGreaterThanOrEqual(1024);
-      expect(port).toBeLessThanOrEqual(65535);
-    });
-
-    it("findFreePort returns port that can be bound immediately", async () => {
-      const port = await networkLayer.findFreePort();
-
-      // Try to bind to the returned port
-      const server = createServer();
-
-      await new Promise<void>((resolve, reject) => {
-        server.on("error", reject);
-        server.listen(port, () => {
-          server.close(() => resolve());
-        });
-      });
-    });
-
-    it("findFreePort handles concurrent calls", async () => {
-      const ports = await Promise.all([
-        networkLayer.findFreePort(),
-        networkLayer.findFreePort(),
-        networkLayer.findFreePort(),
-      ]);
-
-      // All ports should be valid
-      for (const port of ports) {
-        expect(port).toBeGreaterThanOrEqual(1024);
-        expect(port).toBeLessThanOrEqual(65535);
-      }
-
-      // All ports should be unique
-      const uniquePorts = new Set(ports);
-      expect(uniquePorts.size).toBe(3);
-    });
-  });
-
-  describe("PortManager.getListeningPorts()", () => {
-    let networkLayer: PortManager;
-    let testServer: Server | null = null;
-
-    beforeEach(() => {
-      networkLayer = new DefaultNetworkLayer();
-    });
-
-    afterEach(async () => {
-      if (testServer) {
-        await new Promise<void>((resolve, reject) => {
-          testServer!.close((err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        }).catch(() => {
-          // Server already closed
-        });
-        testServer = null;
-      }
-    });
-
-    it("getListeningPorts returns array of ListeningPort", async () => {
-      // Create a server to ensure at least one listening port
-      testServer = createServer();
-      await new Promise<void>((resolve) => testServer!.listen(0, () => resolve()));
-
-      const ports = await networkLayer.getListeningPorts();
-
-      expect(Array.isArray(ports)).toBe(true);
-
-      // There should be at least one port (our test server)
-      expect(ports.length).toBeGreaterThan(0);
-
-      // Verify structure
-      for (const portInfo of ports) {
-        expect(typeof portInfo.port).toBe("number");
-        expect(typeof portInfo.pid).toBe("number");
-        expect(portInfo.pid).toBeGreaterThan(0);
-      }
-    });
-
-    it("getListeningPorts includes our test server port", async () => {
-      // Create a server on a specific port
-      testServer = createServer();
-      await new Promise<void>((resolve) => testServer!.listen(0, () => resolve()));
-
-      const serverAddress = testServer.address();
-      const serverPort =
-        typeof serverAddress === "object" && serverAddress ? serverAddress.port : 0;
-
-      const ports = await networkLayer.getListeningPorts();
-      const foundPort = ports.find((p) => p.port === serverPort);
-
-      expect(foundPort).toBeDefined();
-      expect(foundPort?.pid).toBe(process.pid);
     });
   });
 
