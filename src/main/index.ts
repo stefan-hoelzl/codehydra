@@ -31,6 +31,12 @@ import { registerAllHandlers, createSetupRetryHandler, createSetupQuitHandler } 
 import { IpcChannels, type SetupProgress, type SetupErrorPayload } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
+import { applyElectronFlags } from "./throttling";
+
+// Apply Electron command-line flags IMMEDIATELY after imports.
+// CRITICAL: Must be before app.whenReady() and any code that might trigger GPU initialization.
+// This replaces the old CODEHYDRA_DISABLE_HARDWARE_ACCELERATION handling.
+applyElectronFlags(app);
 
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
@@ -56,24 +62,6 @@ function redirectElectronDataPaths(): void {
 
 // Redirect Electron data paths before app is ready
 redirectElectronDataPaths();
-
-/**
- * Workaround for Chromium/Electron GPU process crashes.
- *
- * On Linux 6.12+ with AMD GPUs (especially in Wayland + container environments),
- * the GPU process intermittently crashes. In container environments (e.g., toolbox),
- * GPU context resets can propagate to the host compositor causing full session crashes.
- *
- * Set CODEHYDRA_DISABLE_HARDWARE_ACCELERATION=true to completely disable
- * hardware acceleration. Performance will be reduced but GPU crashes will
- * be prevented.
- */
-if (process.env.CODEHYDRA_DISABLE_HARDWARE_ACCELERATION === "true") {
-  console.log(
-    "[CodeHydra] Hardware acceleration disabled via CODEHYDRA_DISABLE_HARDWARE_ACCELERATION=true"
-  );
-  app.disableHardwareAcceleration();
-}
 
 /**
  * Creates the code-server configuration using pathProvider.

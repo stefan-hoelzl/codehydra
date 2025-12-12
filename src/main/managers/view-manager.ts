@@ -8,6 +8,7 @@ import type { IViewManager, Unsubscribe } from "./view-manager.interface";
 import type { WindowManager } from "./window-manager";
 import { openExternal } from "../utils/external-url";
 import { ShortcutController } from "../shortcut-controller";
+import { getThrottleLevel, type ThrottleLevel } from "../throttling";
 
 /**
  * Sidebar width in pixels.
@@ -80,6 +81,16 @@ export class ViewManager implements IViewManager {
    */
   private isChangingWorkspace = false;
   private readonly unsubscribeResize: Unsubscribe;
+  /**
+   * Throttle level for inactive workspace views.
+   * Read once at construction time from environment variable.
+   */
+  private readonly throttleLevel: ThrottleLevel;
+  /**
+   * Tracks in-flight throttle operations per workspace.
+   * Used to cancel previous operations when a new one starts (race condition prevention).
+   */
+  private readonly throttleOperations = new Map<string, AbortController>();
 
   private constructor(
     windowManager: WindowManager,
@@ -91,6 +102,9 @@ export class ViewManager implements IViewManager {
     this.uiView = uiView;
     this.shortcutController = shortcutController;
     this.codeServerPort = codeServerPort;
+    this.throttleLevel = getThrottleLevel();
+
+    console.log(`[ViewManager] Workspace throttling: ${this.throttleLevel}`);
 
     // Subscribe to resize events
     this.unsubscribeResize = this.windowManager.onResize(() => {
@@ -340,7 +354,10 @@ export class ViewManager implements IViewManager {
 
   /**
    * Attaches a workspace view to the contentView.
-   * Handles errors gracefully.
+   * Handles errors gracefully. Fires unthrottle in background.
+   *
+   * The attach (addChildView) happens synchronously for visual continuity,
+   * then unthrottle runs in the background to restore WebGL contexts.
    *
    * @param workspacePath - Path to the workspace
    */
@@ -357,6 +374,9 @@ export class ViewManager implements IViewManager {
     } catch {
       // Ignore errors during attach - window may be closing
     }
+
+    // Fire-and-forget unthrottle after attach
+    void this.unthrottleView(workspacePath);
   }
 
   /**
@@ -381,6 +401,162 @@ export class ViewManager implements IViewManager {
     // Clear attachment state if this was the attached view
     if (this.attachedWorkspacePath === workspacePath) {
       this.attachedWorkspacePath = null;
+    }
+
+    // Fire-and-forget throttle after detachment
+    void this.throttleView(workspacePath);
+  }
+
+  /**
+   * Throttles an inactive workspace view to reduce GPU resource usage.
+   * Called automatically after detaching a view.
+   *
+   * Throttling levels:
+   * - 'off': No throttling (current behavior)
+   * - 'basic': setBackgroundThrottling only (safe, no JS injection)
+   * - 'full': basic + visibilitychange + WebGL context loss
+   *
+   * @param workspacePath - Path to the workspace
+   */
+  private async throttleView(workspacePath: string): Promise<void> {
+    // Early return if throttling is disabled
+    if (this.throttleLevel === "off") return;
+
+    const view = this.workspaceViews.get(workspacePath);
+    if (!view || view.webContents.isDestroyed()) return;
+
+    // Cancel any existing operation for this path
+    const existingController = this.throttleOperations.get(workspacePath);
+    if (existingController) {
+      existingController.abort();
+    }
+
+    // Create new AbortController and store it
+    const controller = new AbortController();
+    this.throttleOperations.set(workspacePath, controller);
+    const { signal } = controller;
+
+    try {
+      // Step 1: Enable background throttling (basic + full)
+      if (signal.aborted) return;
+      view.webContents.setBackgroundThrottling(true);
+
+      // Steps 2-3: Only for 'full' mode
+      if (this.throttleLevel === "full") {
+        // Step 2: Dispatch visibility change
+        if (signal.aborted || view.webContents.isDestroyed()) return;
+        await view.webContents.executeJavaScript(`
+          (function() {
+            document.dispatchEvent(new Event("visibilitychange"));
+            return true;
+          })();
+        `);
+
+        // Step 3: WebGL context loss
+        if (signal.aborted || view.webContents.isDestroyed()) return;
+        await view.webContents.executeJavaScript(`
+          (function() {
+            document.querySelectorAll("canvas").forEach(function(canvas) {
+              try {
+                var gl = canvas.getContext("webgl") || canvas.getContext("webgl2");
+                if (gl) {
+                  var ext = gl.getExtension("WEBGL_lose_context");
+                  if (ext) ext.loseContext();
+                }
+              } catch (e) {}
+            });
+            return true;
+          })();
+        `);
+      }
+    } catch (error) {
+      // Silently ignore "Render frame was disposed" - expected during view destruction
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("Render frame was disposed")) {
+        console.error(
+          `[CodeHydra] Error throttling view ${workspacePath} (level: ${this.throttleLevel}):`,
+          error
+        );
+      }
+    } finally {
+      // Remove from map on completion
+      if (this.throttleOperations.get(workspacePath) === controller) {
+        this.throttleOperations.delete(workspacePath);
+      }
+    }
+  }
+
+  /**
+   * Unthrottles a workspace view before it becomes active.
+   * Called automatically after attaching a view.
+   *
+   * @param workspacePath - Path to the workspace
+   */
+  private async unthrottleView(workspacePath: string): Promise<void> {
+    // Early return if throttling is disabled
+    if (this.throttleLevel === "off") return;
+
+    const view = this.workspaceViews.get(workspacePath);
+    if (!view || view.webContents.isDestroyed()) return;
+
+    // Cancel any existing operation for this path
+    const existingController = this.throttleOperations.get(workspacePath);
+    if (existingController) {
+      existingController.abort();
+    }
+
+    // Create new AbortController and store it
+    const controller = new AbortController();
+    this.throttleOperations.set(workspacePath, controller);
+    const { signal } = controller;
+
+    try {
+      // Step 1: Disable background throttling (basic + full)
+      if (signal.aborted) return;
+      view.webContents.setBackgroundThrottling(false);
+
+      // Steps 2-3: Only for 'full' mode
+      if (this.throttleLevel === "full") {
+        // Step 2: WebGL context restore
+        if (signal.aborted || view.webContents.isDestroyed()) return;
+        await view.webContents.executeJavaScript(`
+          (function() {
+            document.querySelectorAll("canvas").forEach(function(canvas) {
+              try {
+                var gl = canvas.getContext("webgl") || canvas.getContext("webgl2");
+                if (gl) {
+                  var ext = gl.getExtension("WEBGL_lose_context");
+                  if (ext) ext.restoreContext();
+                }
+              } catch (e) {}
+            });
+            return true;
+          })();
+        `);
+
+        // Step 3: Dispatch visibility change
+        if (signal.aborted || view.webContents.isDestroyed()) return;
+        await view.webContents.executeJavaScript(`
+          (function() {
+            document.dispatchEvent(new Event("visibilitychange"));
+            return true;
+          })();
+        `);
+      }
+    } catch (error) {
+      // Silently ignore "Render frame was disposed" - expected during view destruction
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("Render frame was disposed")) {
+        console.error(
+          `[CodeHydra] Error unthrottling view ${workspacePath} (level: ${this.throttleLevel}):`,
+          error
+        );
+      }
+    } finally {
+      // Remove from map on completion
+      if (this.throttleOperations.get(workspacePath) === controller) {
+        this.throttleOperations.delete(workspacePath);
+      }
     }
   }
 
