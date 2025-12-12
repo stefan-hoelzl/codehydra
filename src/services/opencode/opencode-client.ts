@@ -1,25 +1,39 @@
 /**
  * OpenCode client for communicating with OpenCode instances.
- * Handles HTTP requests and SSE connections via injected network interfaces.
+ * Uses the official @opencode-ai/sdk for HTTP and SSE operations.
  */
 
-import type { HttpClient, SseClient, SseConnection } from "../platform/network";
+import {
+  createOpencodeClient,
+  type OpencodeClient,
+  type Session as SdkSession,
+  type Event as SdkEvent,
+  type SessionStatus as SdkSessionStatus,
+} from "@opencode-ai/sdk";
 import { OpenCodeError } from "../errors";
 import {
   ok,
   err,
   type Result,
   type Session,
-  type SessionListResponse,
   type SessionStatus,
-  type SessionStatusResponse,
-  type SessionStatusValue,
   type ClientStatus,
   type IDisposable,
   type Unsubscribe,
   type PermissionUpdatedEvent,
   type PermissionRepliedEvent,
 } from "./types";
+
+/**
+ * Factory function type for creating SDK clients.
+ * Used for dependency injection and testing.
+ */
+export type SdkClientFactory = (baseUrl: string) => OpencodeClient;
+
+/**
+ * Default SDK factory that creates a real OpencodeClient.
+ */
+const defaultSdkFactory: SdkClientFactory = (baseUrl: string) => createOpencodeClient({ baseUrl });
 
 /**
  * Type guard for PermissionUpdatedEvent.
@@ -78,7 +92,7 @@ export type PermissionEventCallback = (event: PermissionEvent) => void;
  * Type guard for SessionStatusValue.
  * Validates individual session status from the response.
  */
-export function isValidSessionStatus(value: unknown): value is SessionStatusValue {
+export function isValidSessionStatus(value: unknown): value is SdkSessionStatus {
   if (typeof value !== "object" || value === null) return false;
 
   const obj = value as Record<string, unknown>;
@@ -86,50 +100,43 @@ export function isValidSessionStatus(value: unknown): value is SessionStatusValu
 }
 
 /**
- * Type guard for SessionStatusResponse.
- * OpenCode returns an array of SessionStatusValue objects.
+ * Type guard for SessionStatusResponse (SDK format: Record<string, SessionStatus>).
  */
-export function isSessionStatusResponse(value: unknown): value is SessionStatusResponse {
-  if (!Array.isArray(value)) return false;
+export function isSessionStatusResponse(value: unknown): value is Record<string, SdkSessionStatus> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 
-  return value.every(
+  const obj = value as Record<string, unknown>;
+  return Object.values(obj).every(
     (item) =>
       typeof item === "object" &&
       item !== null &&
       "type" in item &&
-      (item.type === "idle" || item.type === "busy" || item.type === "retry")
+      ((item as Record<string, unknown>).type === "idle" ||
+        (item as Record<string, unknown>).type === "busy" ||
+        (item as Record<string, unknown>).type === "retry")
   );
 }
 
 /**
- * Type guard for SessionListResponse.
- * Validates session list from /session endpoint.
+ * Result from SDK event.subscribe()
  */
-function isSessionListResponse(value: unknown): value is SessionListResponse {
-  if (!Array.isArray(value)) return false;
-
-  return value.every(
-    (s) =>
-      typeof s === "object" &&
-      s !== null &&
-      typeof s.id === "string" &&
-      typeof s.directory === "string" &&
-      (s.parentID === undefined || typeof s.parentID === "string")
-  );
+interface SdkEventSubscription {
+  stream: AsyncIterable<SdkEvent>;
 }
 
 /**
  * Client for communicating with a single OpenCode instance.
  *
- * Uses injected HttpClient and SseClient for network operations,
- * enabling dependency injection and easier testing.
+ * Uses the official @opencode-ai/sdk for HTTP and SSE operations.
+ * SDK client is injected via factory for testability.
  */
 export class OpenCodeClient implements IDisposable {
   private readonly baseUrl: string;
+  private readonly sdk: OpencodeClient;
   private readonly listeners = new Set<SessionEventCallback>();
   private readonly permissionListeners = new Set<PermissionEventCallback>();
   private readonly statusListeners = new Set<StatusChangedCallback>();
-  private sseConnection: SseConnection | null = null;
+  private eventSubscription: SdkEventSubscription | null = null;
   private disposed = false;
 
   /**
@@ -151,12 +158,9 @@ export class OpenCodeClient implements IDisposable {
     return this._currentStatus;
   }
 
-  constructor(
-    port: number,
-    private readonly httpClient: HttpClient,
-    private readonly sseClient: SseClient
-  ) {
+  constructor(port: number, sdkFactory: SdkClientFactory = defaultSdkFactory) {
     this.baseUrl = `http://localhost:${port}`;
+    this.sdk = sdkFactory(this.baseUrl);
   }
 
   /**
@@ -164,47 +168,23 @@ export class OpenCodeClient implements IDisposable {
    * Must be called before connect() to properly filter events.
    */
   async fetchRootSessions(): Promise<Result<Session[], OpenCodeError>> {
-    const url = `${this.baseUrl}/session`;
-
     try {
-      const response = await this.httpClient.fetch(url);
-
-      if (!response.ok) {
-        return err(new OpenCodeError(`HTTP ${response.status}`, "REQUEST_FAILED"));
-      }
-
-      let data: unknown;
-      try {
-        data = await response.json();
-      } catch {
-        return err(new OpenCodeError("Invalid JSON response", "INVALID_RESPONSE"));
-      }
-
-      if (!isSessionListResponse(data)) {
-        return err(new OpenCodeError("Invalid response structure", "INVALID_RESPONSE"));
-      }
+      const result = await this.sdk.session.list();
+      const sessions = result.data as SdkSession[];
 
       // Clear and rebuild root session set
       this.rootSessionIds.clear();
-      for (const session of data) {
+      for (const session of sessions) {
         if (!session.parentID) {
           this.rootSessionIds.add(session.id);
         }
       }
 
-      // Return only root sessions
-      const rootSessions = data.filter((s) => !s.parentID);
+      // Return only root sessions, mapped to our Session type
+      const rootSessions = sessions.filter((s) => !s.parentID).map((s) => this.mapSdkSession(s));
       return ok(rootSessions);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return err(new OpenCodeError("Request timeout", "TIMEOUT"));
-      }
-      return err(
-        new OpenCodeError(
-          error instanceof Error ? error.message : "Unknown error",
-          "REQUEST_FAILED"
-        )
-      );
+      return err(this.mapSdkError(error));
     }
   }
 
@@ -241,83 +221,69 @@ export class OpenCodeClient implements IDisposable {
 
   /**
    * Get current status from the API.
-   * Fetches /session/status and aggregates to a single ClientStatus.
-   * Empty array or all idle → "idle", any busy/retry → "busy"
+   * Fetches session status and aggregates to a single ClientStatus.
+   * Empty or all idle → "idle", any busy/retry → "busy"
    */
   async getStatus(): Promise<Result<ClientStatus, OpenCodeError>> {
-    const url = `${this.baseUrl}/session/status`;
-
     try {
-      const response = await this.httpClient.fetch(url);
+      const result = await this.sdk.session.status();
+      const statuses = result.data as Record<string, SdkSessionStatus>;
 
-      if (!response.ok) {
-        return err(new OpenCodeError(`HTTP ${response.status}`, "REQUEST_FAILED"));
-      }
-
-      let data: unknown;
-      try {
-        data = await response.json();
-      } catch {
-        return err(new OpenCodeError("Invalid JSON response", "INVALID_RESPONSE"));
-      }
-
-      if (!isSessionStatusResponse(data)) {
-        return err(new OpenCodeError("Invalid response structure", "INVALID_RESPONSE"));
-      }
-
-      // Aggregate: empty array OR all idle → "idle", any busy/retry → "busy"
-      const hasBusy = data.some((s) => s.type === "busy" || s.type === "retry");
+      // Aggregate: empty OR all idle → "idle", any busy/retry → "busy"
+      const hasBusy = Object.values(statuses).some((s) => s.type === "busy" || s.type === "retry");
       const status: ClientStatus = hasBusy ? "busy" : "idle";
 
       return ok(status);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return err(new OpenCodeError("Request timeout", "TIMEOUT"));
-      }
-      return err(
-        new OpenCodeError(
-          error instanceof Error ? error.message : "Unknown error",
-          "REQUEST_FAILED"
-        )
-      );
+      return err(this.mapSdkError(error));
     }
   }
 
   /**
    * Connect to SSE event stream.
-   * Reconnection is handled by the SseClient.
+   *
+   * @param timeoutMs - Connection timeout in milliseconds. Default: 5000
+   * @throws Error if connection fails or times out
    */
-  connect(): void {
-    if (this.disposed || this.sseConnection) return;
+  async connect(timeoutMs = 5000): Promise<void> {
+    if (this.disposed || this.eventSubscription) return;
 
-    this.sseConnection = this.sseClient.createSseConnection(`${this.baseUrl}/event`);
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Connect timeout")), timeoutMs)
+      );
 
-    // Set up message handler
-    this.sseConnection.onMessage((data: string) => {
-      this.handleRawMessage(data);
-    });
+      const events = await Promise.race([this.sdk.event.subscribe(), timeoutPromise]);
 
-    // Set up state change handler - re-sync status on reconnect
-    this.sseConnection.onStateChange((connected: boolean) => {
-      if (connected) {
-        // Re-fetch current status after reconnection to sync state
-        void this.getStatus().then((result) => {
-          if (result.ok) {
-            this.updateCurrentStatus(result.value);
-          }
-        });
+      this.eventSubscription = events;
+
+      // Process events in background with error handling
+      this.processEvents(events.stream).catch((processError) => {
+        if (!this.disposed) {
+          console.error("Event processing error:", processError);
+        }
+      });
+
+      // Sync initial status with error handling
+      try {
+        const result = await this.getStatus();
+        if (result.ok) {
+          this.updateCurrentStatus(result.value);
+        }
+      } catch (statusError) {
+        console.error("Failed to fetch initial status:", statusError);
       }
-    });
+    } catch (connectError) {
+      console.error("Failed to connect:", connectError);
+      throw connectError;
+    }
   }
 
   /**
    * Disconnect from SSE event stream.
    */
   disconnect(): void {
-    if (this.sseConnection) {
-      this.sseConnection.disconnect();
-      this.sseConnection = null;
-    }
+    this.eventSubscription = null;
   }
 
   /**
@@ -332,52 +298,44 @@ export class OpenCodeClient implements IDisposable {
   }
 
   /**
-   * Handle incoming raw SSE message data.
-   * Parses the OpenCode wire format and dispatches to appropriate handlers.
-   *
-   * OpenCode wire format: { type: "event.name", properties: { ... } }
+   * Process events from the SDK event stream.
    */
-  private handleRawMessage(data: string): void {
+  private async processEvents(stream: AsyncIterable<SdkEvent>): Promise<void> {
     try {
-      const parsed = JSON.parse(data) as {
-        type?: string;
-        properties?: {
-          sessionID?: string;
-          status?: { type?: string };
-          info?: { id?: string; parentID?: string };
-          id?: string;
-          type?: string;
-          title?: string;
-          permissionID?: string;
-          response?: string;
-        };
-      };
-
-      if (!parsed.type) return;
-
-      // Dispatch to appropriate handler based on event type
-      switch (parsed.type) {
-        case "session.status":
-          this.handleSessionStatus(parsed.properties);
-          break;
-        case "session.created":
-          this.handleSessionCreated(parsed.properties);
-          break;
-        case "session.idle":
-          this.handleSessionIdle(parsed.properties);
-          break;
-        case "session.deleted":
-          this.handleSessionDeleted(parsed.properties);
-          break;
-        case "permission.updated":
-          this.handlePermissionUpdated(parsed.properties);
-          break;
-        case "permission.replied":
-          this.handlePermissionReplied(parsed.properties);
-          break;
+      for await (const event of stream) {
+        if (this.disposed || !this.eventSubscription) break;
+        this.handleSdkEvent(event);
       }
-    } catch {
-      // Ignore parse errors
+    } catch (error) {
+      if (this.disposed) return; // Expected during shutdown
+      console.error("Event stream error:", error);
+      throw error; // Re-throw for .catch() handler
+    }
+  }
+
+  /**
+   * Handle an SDK event and dispatch to appropriate handlers.
+   */
+  private handleSdkEvent(event: SdkEvent): void {
+    switch (event.type) {
+      case "session.status":
+        this.handleSessionStatus(event.properties);
+        break;
+      case "session.created":
+        this.handleSessionCreated(event.properties);
+        break;
+      case "session.idle":
+        this.handleSessionIdle(event.properties);
+        break;
+      case "session.deleted":
+        this.handleSessionDeleted(event.properties);
+        break;
+      case "permission.updated":
+        this.handlePermissionUpdated(event.properties);
+        break;
+      case "permission.replied":
+        this.handlePermissionReplied(event.properties);
+        break;
     }
   }
 
@@ -391,12 +349,26 @@ export class OpenCodeClient implements IDisposable {
   }
 
   /**
+   * Handle incoming raw SSE message data.
+   * Parses the OpenCode wire format and dispatches to appropriate handlers.
+   *
+   * OpenCode wire format: { type: "event.name", properties: { ... } }
+   * @internal - Used for backward compatibility with existing tests
+   */
+  private handleRawMessage(data: string): void {
+    try {
+      const parsed = JSON.parse(data) as SdkEvent;
+      if (!parsed.type) return;
+      this.handleSdkEvent(parsed);
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  /**
    * Handle session.status events.
    */
-  private handleSessionStatus(properties?: {
-    sessionID?: string;
-    status?: { type?: string };
-  }): void {
+  private handleSessionStatus(properties: { sessionID: string; status: SdkSessionStatus }): void {
     if (!properties?.sessionID || !properties?.status?.type) return;
 
     const statusType = properties.status.type;
@@ -416,7 +388,7 @@ export class OpenCodeClient implements IDisposable {
   /**
    * Handle session.idle events.
    */
-  private handleSessionIdle(properties?: { sessionID?: string }): void {
+  private handleSessionIdle(properties: { sessionID: string }): void {
     if (!properties?.sessionID) return;
     this.emitSessionEvent({ type: "idle", sessionId: properties.sessionID });
 
@@ -441,10 +413,13 @@ export class OpenCodeClient implements IDisposable {
 
   /**
    * Handle session.deleted events.
+   * Accepts either SDK format ({ info: Session }) or legacy format ({ sessionID: string }).
    */
-  private handleSessionDeleted(properties?: { sessionID?: string }): void {
-    if (!properties?.sessionID) return;
-    this.emitSessionEvent({ type: "deleted", sessionId: properties.sessionID });
+  private handleSessionDeleted(properties?: { info?: { id?: string }; sessionID?: string }): void {
+    // Support SDK format (info.id) and legacy format (sessionID)
+    const sessionId = properties?.info?.id ?? properties?.sessionID;
+    if (!sessionId) return;
+    this.emitSessionEvent({ type: "deleted", sessionId });
   }
 
   /**
@@ -520,5 +495,38 @@ export class OpenCodeClient implements IDisposable {
     for (const listener of this.permissionListeners) {
       listener({ type: "permission.replied", event: properties });
     }
+  }
+
+  /**
+   * Map SDK session to our Session type.
+   */
+  private mapSdkSession(sdkSession: SdkSession): Session {
+    const session: Session = {
+      id: sdkSession.id,
+      directory: sdkSession.directory,
+      title: sdkSession.title,
+    };
+    // Only add parentID if it exists (to satisfy exactOptionalPropertyTypes)
+    if (sdkSession.parentID) {
+      return { ...session, parentID: sdkSession.parentID };
+    }
+    return session;
+  }
+
+  /**
+   * Map SDK errors to OpenCodeError.
+   */
+  private mapSdkError(error: unknown): OpenCodeError {
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("timeout")) {
+        return new OpenCodeError("Request timeout", "TIMEOUT");
+      }
+      if (message.includes("econnrefused") || message.includes("connection refused")) {
+        return new OpenCodeError("Connection refused", "CONNECTION_REFUSED");
+      }
+      return new OpenCodeError(error.message, "REQUEST_FAILED");
+    }
+    return new OpenCodeError("Unknown error", "REQUEST_FAILED");
   }
 }

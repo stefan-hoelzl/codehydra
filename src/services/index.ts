@@ -77,9 +77,6 @@ export { DefaultNetworkLayer } from "./platform/network";
 export type {
   HttpClient,
   HttpRequestOptions,
-  SseClient,
-  SseConnection,
-  SseConnectionOptions,
   PortManager,
   ListeningPort,
   NetworkLayerConfig,

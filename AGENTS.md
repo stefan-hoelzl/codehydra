@@ -383,16 +383,15 @@ codeServerManager = new CodeServerManager(config, processRunner, networkLayer, n
 
 ### NetworkLayer Pattern
 
-`NetworkLayer` provides unified interfaces for all localhost network operations, split by Interface Segregation Principle:
+`NetworkLayer` provides unified interfaces for localhost network operations, split by Interface Segregation Principle:
 
-| Interface     | Methods                                 | Used By                                              |
-| ------------- | --------------------------------------- | ---------------------------------------------------- |
-| `HttpClient`  | `fetch(url, options)`                   | OpenCodeClient, HttpInstanceProbe, CodeServerManager |
-| `SseClient`   | `createSseConnection(url, options)`     | OpenCodeClient                                       |
-| `PortManager` | `findFreePort()`, `getListeningPorts()` | CodeServerManager, DiscoveryService                  |
+| Interface     | Methods                                 | Used By                              |
+| ------------- | --------------------------------------- | ------------------------------------ |
+| `HttpClient`  | `fetch(url, options)`                   | HttpInstanceProbe, CodeServerManager |
+| `PortManager` | `findFreePort()`, `getListeningPorts()` | CodeServerManager, DiscoveryService  |
 
 ```typescript
-// DefaultNetworkLayer implements all three interfaces
+// DefaultNetworkLayer implements both interfaces
 const networkLayer = new DefaultNetworkLayer();
 
 // Inject only the interface(s) each consumer needs
@@ -400,35 +399,10 @@ const instanceProbe = new HttpInstanceProbe(networkLayer); // HttpClient
 const codeServerManager = new CodeServerManager(config, runner, networkLayer, networkLayer); // HttpClient + PortManager
 ```
 
-**SSE Connection with Auto-Reconnection:**
-
-```typescript
-const conn = sseClient.createSseConnection("http://localhost:8080/events");
-
-conn.onMessage((data) => {
-  // Raw string data - consumer handles parsing
-  const parsed = JSON.parse(data);
-});
-
-conn.onStateChange((connected) => {
-  if (connected) {
-    // Application-specific: re-sync state after reconnect
-    void this.syncStatus();
-  }
-});
-
-// Cleanup
-conn.disconnect();
-```
-
 **Testing with Mock Clients:**
 
 ```typescript
-import {
-  createMockHttpClient,
-  createMockSseClient,
-  createMockPortManager,
-} from "../platform/network.test-utils";
+import { createMockHttpClient, createMockPortManager } from "../platform/network.test-utils";
 
 // Create mock with controllable behavior
 const mockHttpClient = createMockHttpClient({
@@ -600,30 +574,43 @@ const mockFs = createMockFileSystemLayer({
 const service = new ProjectStore(projectsDir, mockFs);
 ```
 
-### SSE Connection Lifecycle
+### OpenCode SDK Integration
 
-`OpenCodeClient` manages SSE connections with auto-reconnection:
+`OpenCodeClient` uses the official `@opencode-ai/sdk` for HTTP and SSE operations:
 
 ```typescript
-// Connection lifecycle
-client.connect(); // Start SSE connection
-client.disconnect(); // Stop and cleanup
-client.dispose(); // Full cleanup, stops reconnection
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
 
-// Exponential backoff: 1s, 2s, 4s, 8s... max 30s
-// Resets to 1s on successful connection
-// Stops reconnecting after dispose()
+// SDK client is injected via factory for testability
+export type SdkClientFactory = (baseUrl: string) => OpencodeClient;
+
+export class OpenCodeClient implements IDisposable {
+  constructor(port: number, sdkFactory: SdkClientFactory = defaultFactory) {
+    this.baseUrl = `http://localhost:${port}`;
+    this.sdk = sdkFactory(this.baseUrl);
+  }
+
+  // connect() is now async with timeout support
+  async connect(timeoutMs = 5000): Promise<void> {
+    const events = await this.sdk.event.subscribe();
+    // Process events in background
+    this.processEvents(events.stream);
+  }
+}
 ```
 
-**SSE Wire Format:**
+**Testing with SDK Mocks:**
 
-OpenCode sends **unnamed SSE events** with the event type embedded in the JSON payload:
+```typescript
+import { createMockSdkClient, createMockSdkFactory } from "./sdk-test-utils";
 
+const mockSdk = createMockSdkClient({
+  sessions: [{ id: "ses-1", directory: "/test", ... }],
+  sessionStatuses: { "ses-1": { type: "idle" } },
+});
+const factory = createMockSdkFactory(mockSdk);
+const client = new OpenCodeClient(8080, factory);
 ```
-data: {"type":"session.status","properties":{"sessionID":"ses-123","status":{"type":"busy"}}}
-```
-
-This differs from named SSE events which would use `event: session.status` prefix in the stream. Therefore, `OpenCodeClient` uses the `onmessage` handler (not `addEventListener`) to receive all events and dispatches based on the `type` field.
 
 ### Callback Pattern (NOT Direct IPC)
 

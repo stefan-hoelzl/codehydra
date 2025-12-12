@@ -1,32 +1,23 @@
 /**
- * Boundary tests for network layer - tests against real HTTP/SSE servers and network operations.
+ * Boundary tests for network layer - tests against real HTTP servers and network operations.
+ *
+ * Note: SSE boundary tests were previously here but have been removed after
+ * migrating OpenCodeClient to use the @opencode-ai/sdk which handles SSE internally.
+ * SSE boundary testing is now the responsibility of the SDK.
  *
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer, type Server } from "net";
-import {
-  DefaultNetworkLayer,
-  type HttpClient,
-  type PortManager,
-  type SseClient,
-  type SseConnection,
-} from "./network";
-import {
-  createTestServer,
-  MessageCollector,
-  waitForConnectionState,
-  waitForReconnection,
-  type TestServer,
-} from "./network.test-utils";
+import { DefaultNetworkLayer, type HttpClient, type PortManager } from "./network";
+import { createTestServer, type TestServer } from "./network.test-utils";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 const TEST_TIMEOUT_MS = process.env.CI ? 30000 : 10000;
-const SSE_RECONNECT_TOLERANCE_MS = 200; // ±20% of 1000ms
 
 // ============================================================================
 // Test Server Helper Tests (validates our test infrastructure)
@@ -35,7 +26,7 @@ const SSE_RECONNECT_TOLERANCE_MS = 200; // ±20% of 1000ms
 describe("TestServer helper", () => {
   let server: TestServer;
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (server) {
       await server.stop();
     }
@@ -98,85 +89,6 @@ describe("TestServer helper", () => {
 
     // Second stop should not throw
     await expect(server.stop()).resolves.not.toThrow();
-  });
-
-  describe("SSE endpoint", () => {
-    it(
-      "returns Content-Type: text/event-stream header",
-      async () => {
-        server = createTestServer();
-        await server.start();
-
-        const response = await fetch(server.url("/events"));
-        expect(response.headers.get("Content-Type")).toBe("text/event-stream");
-
-        // Read the stream to allow cleanup
-        const reader = response.body?.getReader();
-        reader?.cancel();
-      },
-      TEST_TIMEOUT_MS
-    );
-
-    it(
-      "returns Cache-Control: no-cache header",
-      async () => {
-        server = createTestServer();
-        await server.start();
-
-        const response = await fetch(server.url("/events"));
-        expect(response.headers.get("Cache-Control")).toBe("no-cache");
-
-        // Read the stream to allow cleanup
-        const reader = response.body?.getReader();
-        reader?.cancel();
-      },
-      TEST_TIMEOUT_MS
-    );
-
-    it(
-      "sends messages with data: prefix",
-      async () => {
-        server = createTestServer();
-        await server.start();
-
-        // Start listening
-        const response = await fetch(server.url("/events"));
-        const reader = response.body?.getReader();
-        expect(reader).toBeDefined();
-
-        // First read gets the initial ": connected" comment
-        await reader!.read();
-
-        // Send a message from server
-        server.sendSseMessage("test-message");
-
-        // Read the actual message
-        const { value } = await reader!.read();
-        const text = new TextDecoder().decode(value);
-
-        expect(text).toContain("data: test-message");
-        expect(text).toContain("\n\n");
-
-        reader?.cancel();
-      },
-      TEST_TIMEOUT_MS
-    );
-
-    it("sendSseMessage handles closed connections gracefully", async () => {
-      server = createTestServer();
-      await server.start();
-
-      // Connect and immediately disconnect
-      const response = await fetch(server.url("/events"));
-      const reader = response.body?.getReader();
-      await reader?.cancel();
-
-      // Give time for connection to close
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Should not throw when sending to closed connection
-      expect(() => server.sendSseMessage("test")).not.toThrow();
-    });
   });
 });
 
@@ -277,7 +189,7 @@ describe("DefaultNetworkLayer boundary tests", () => {
       networkLayer = new DefaultNetworkLayer();
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
       if (testServer) {
         await new Promise<void>((resolve, reject) => {
           testServer!.close((err) => {
@@ -635,328 +547,6 @@ describe("DefaultNetworkLayer boundary tests", () => {
           } catch (error) {
             expect((error as Error).name).toBe("AbortError");
           }
-        },
-        TEST_TIMEOUT_MS
-      );
-    });
-  });
-
-  // ============================================================================
-  // SseClient Boundary Tests
-  // ============================================================================
-
-  describe("SseClient", () => {
-    let sseServer: TestServer;
-    let sseClient: SseClient;
-    const activeConnections: SseConnection[] = [];
-
-    beforeAll(async () => {
-      sseServer = createTestServer();
-      await sseServer.start();
-    });
-
-    afterAll(async () => {
-      await sseServer.stop();
-    });
-
-    beforeEach(() => {
-      sseClient = new DefaultNetworkLayer();
-    });
-
-    afterEach(() => {
-      // Clean up any SSE connections created during test
-      for (const conn of activeConnections) {
-        conn.disconnect();
-      }
-      activeConnections.length = 0;
-      // Clean up server-side SSE connections
-      sseServer.closeSseConnections();
-    });
-
-    describe("connection lifecycle", () => {
-      it(
-        "connects and fires onStateChange(true)",
-        async () => {
-          const conn = sseClient.createSseConnection(sseServer.url("/events"));
-          activeConnections.push(conn);
-
-          await waitForConnectionState(conn, true);
-          // If we reach here, onStateChange(true) was fired
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "disconnect() closes cleanly without errors",
-        async () => {
-          const conn = sseClient.createSseConnection(sseServer.url("/events"));
-          activeConnections.push(conn);
-
-          await waitForConnectionState(conn, true);
-
-          // disconnect() should not throw
-          expect(() => conn.disconnect()).not.toThrow();
-
-          // Give it a moment to ensure cleanup happens
-          await new Promise((resolve) => setTimeout(resolve, 50));
-
-          // Connection should be closed - attempting to reconnect would be prevented
-          // This is verified by the fact that no error was thrown
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "disconnect() is safe to call multiple times",
-        async () => {
-          const conn = sseClient.createSseConnection(sseServer.url("/events"));
-          activeConnections.push(conn);
-
-          await waitForConnectionState(conn, true);
-
-          // Multiple disconnects should not throw
-          conn.disconnect();
-          conn.disconnect();
-          conn.disconnect();
-        },
-        TEST_TIMEOUT_MS
-      );
-    });
-
-    describe("message delivery", () => {
-      it(
-        "receives messages via onMessage",
-        async () => {
-          const collector = new MessageCollector();
-          const conn = sseClient.createSseConnection(sseServer.url("/events"));
-          activeConnections.push(conn);
-
-          conn.onMessage(collector.handler);
-          await waitForConnectionState(conn, true);
-
-          // Send a message from server
-          sseServer.sendSseMessage('{"type":"test","data":"hello"}');
-
-          // Wait for message to be received
-          const messages = await collector.waitForCount(1);
-          expect(messages[0]).toBe('{"type":"test","data":"hello"}');
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "receives multiple messages in order",
-        async () => {
-          const collector = new MessageCollector();
-          const conn = sseClient.createSseConnection(sseServer.url("/events"));
-          activeConnections.push(conn);
-
-          conn.onMessage(collector.handler);
-          await waitForConnectionState(conn, true);
-
-          // Send multiple messages
-          sseServer.sendSseMessage("message-1");
-          sseServer.sendSseMessage("message-2");
-          sseServer.sendSseMessage("message-3");
-
-          // Wait for all messages
-          const messages = await collector.waitForCount(3);
-          expect(messages).toEqual(["message-1", "message-2", "message-3"]);
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "message data is raw string (not parsed)",
-        async () => {
-          const collector = new MessageCollector();
-          const conn = sseClient.createSseConnection(sseServer.url("/events"));
-          activeConnections.push(conn);
-
-          conn.onMessage(collector.handler);
-          await waitForConnectionState(conn, true);
-
-          // Send JSON message
-          const jsonData = '{"type":"test","value":42}';
-          sseServer.sendSseMessage(jsonData);
-
-          const messages = await collector.waitForCount(1);
-          // Should be raw string, not parsed
-          expect(typeof messages[0]).toBe("string");
-          expect(messages[0]).toBe(jsonData);
-        },
-        TEST_TIMEOUT_MS
-      );
-    });
-
-    // Run reconnection tests sequentially to avoid server state conflicts
-    describe.sequential("reconnection", () => {
-      it(
-        "reconnects after server closes connection",
-        async () => {
-          const conn = sseClient.createSseConnection(sseServer.url("/events"), {
-            initialReconnectDelay: 100, // Fast reconnection for testing
-          });
-          activeConnections.push(conn);
-
-          await waitForConnectionState(conn, true);
-
-          // Server closes all connections
-          sseServer.closeSseConnections();
-
-          // Wait for reconnection
-          await waitForReconnection(conn, 5000);
-          // If we reach here, reconnection succeeded
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "onStateChange fires false then true on reconnect",
-        async () => {
-          const stateChanges: boolean[] = [];
-          const conn = sseClient.createSseConnection(sseServer.url("/events"), {
-            initialReconnectDelay: 100,
-          });
-          activeConnections.push(conn);
-
-          conn.onStateChange((connected) => {
-            stateChanges.push(connected);
-          });
-
-          // Wait for initial connection
-          await new Promise<void>((resolve) => {
-            const check = (): void => {
-              if (stateChanges.includes(true)) resolve();
-              else setTimeout(check, 10);
-            };
-            check();
-          });
-
-          // Clear state changes to track only the reconnect
-          stateChanges.length = 0;
-
-          // Close server connections
-          sseServer.closeSseConnections();
-
-          // Wait for reconnection
-          await new Promise<void>((resolve) => {
-            const check = (): void => {
-              // Looking for false then true
-              const falseIdx = stateChanges.indexOf(false);
-              const trueIdx = stateChanges.lastIndexOf(true);
-              if (falseIdx >= 0 && trueIdx > falseIdx) resolve();
-              else setTimeout(check, 10);
-            };
-            setTimeout(check, 50);
-          });
-
-          // Verify we saw: disconnected (false), then reconnected (true)
-          expect(stateChanges).toContain(false);
-          expect(stateChanges).toContain(true);
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "disconnect() stops reconnection attempts",
-        async () => {
-          let connectionCount = 0;
-          const conn = sseClient.createSseConnection(sseServer.url("/events"), {
-            initialReconnectDelay: 100,
-          });
-          activeConnections.push(conn);
-
-          // Wait for initial connection using a custom wait that doesn't replace handler
-          await new Promise<void>((resolve) => {
-            conn.onStateChange((connected) => {
-              if (connected) {
-                connectionCount++;
-                resolve();
-              }
-            });
-          });
-
-          expect(connectionCount).toBe(1);
-
-          // Close server connections (triggers reconnection) and immediately disconnect
-          sseServer.closeSseConnections();
-
-          // Small delay to ensure disconnect event is processed
-          await new Promise((resolve) => setTimeout(resolve, 20));
-
-          // Call disconnect to prevent reconnection
-          conn.disconnect();
-
-          // Wait longer than multiple reconnect cycles would take
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          // Should have only connected once - no reconnection should have happened
-          expect(connectionCount).toBe(1);
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "handles multiple reconnection cycles",
-        async () => {
-          const conn = sseClient.createSseConnection(sseServer.url("/events"), {
-            initialReconnectDelay: 100,
-          });
-          activeConnections.push(conn);
-
-          await waitForConnectionState(conn, true);
-
-          // First reconnection cycle
-          sseServer.closeSseConnections();
-          await waitForReconnection(conn, 5000);
-
-          // Second reconnection cycle
-          sseServer.closeSseConnections();
-          await waitForReconnection(conn, 5000);
-
-          // Third reconnection cycle
-          sseServer.closeSseConnections();
-          await waitForReconnection(conn, 5000);
-
-          // If we reach here, all reconnections succeeded
-        },
-        TEST_TIMEOUT_MS
-      );
-
-      it(
-        "resets backoff to 1s after successful connection",
-        async () => {
-          // Use 1000ms initial delay (default)
-          const conn = sseClient.createSseConnection(sseServer.url("/events"), {
-            initialReconnectDelay: 1000,
-          });
-          activeConnections.push(conn);
-
-          // Wait for initial connection
-          await waitForConnectionState(conn, true);
-
-          // First disconnect → reconnect cycle
-          const firstReconnectStart = Date.now();
-          sseServer.closeSseConnections();
-          await waitForReconnection(conn, 5000);
-          const firstReconnectTime = Date.now() - firstReconnectStart;
-
-          // First reconnection should be ~1s (initial delay)
-          expect(firstReconnectTime).toBeGreaterThanOrEqual(1000 - SSE_RECONNECT_TOLERANCE_MS);
-          expect(firstReconnectTime).toBeLessThanOrEqual(1000 + SSE_RECONNECT_TOLERANCE_MS);
-
-          // Second disconnect → reconnect cycle
-          // If backoff wasn't reset, this would be ~2s (doubled)
-          // If backoff WAS reset (correct behavior), this should be ~1s again
-          const secondReconnectStart = Date.now();
-          sseServer.closeSseConnections();
-          await waitForReconnection(conn, 5000);
-          const secondReconnectTime = Date.now() - secondReconnectStart;
-
-          // Second reconnection should ALSO be ~1s (backoff reset after success)
-          expect(secondReconnectTime).toBeGreaterThanOrEqual(1000 - SSE_RECONNECT_TOLERANCE_MS);
-          expect(secondReconnectTime).toBeLessThanOrEqual(1000 + SSE_RECONNECT_TOLERANCE_MS);
         },
         TEST_TIMEOUT_MS
       );

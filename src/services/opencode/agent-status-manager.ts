@@ -5,9 +5,8 @@
 
 import type { WorkspacePath, AgentStatusCounts, AggregatedAgentStatus } from "../../shared/ipc";
 import type { IDisposable, Unsubscribe, ClientStatus } from "./types";
-import { OpenCodeClient, type PermissionEvent } from "./opencode-client";
+import { OpenCodeClient, type PermissionEvent, type SdkClientFactory } from "./opencode-client";
 import type { DiscoveryService } from "./discovery-service";
-import type { HttpClient, SseClient } from "../platform/network";
 
 /**
  * Callback for status changes.
@@ -23,12 +22,10 @@ export type StatusChangedCallback = (
  */
 class OpenCodeProvider implements IDisposable {
   private readonly clients = new Map<number, OpenCodeClient>();
-  private readonly httpClient: HttpClient;
-  private readonly sseClient: SseClient;
+  private readonly sdkFactory: SdkClientFactory | undefined;
 
-  constructor(httpClient: HttpClient, sseClient: SseClient) {
-    this.httpClient = httpClient;
-    this.sseClient = sseClient;
+  constructor(sdkFactory: SdkClientFactory | undefined) {
+    this.sdkFactory = sdkFactory;
   }
   /**
    * Port-based status tracking.
@@ -77,7 +74,7 @@ class OpenCodeProvider implements IDisposable {
     // Add clients for new ports (don't connect yet - need to fetch root sessions first)
     for (const port of ports) {
       if (!this.clients.has(port)) {
-        const client = new OpenCodeClient(port, this.httpClient, this.sseClient);
+        const client = new OpenCodeClient(port, this.sdkFactory);
         // Subscribe to status changes from client
         client.onStatusChanged((status) => this.handleStatusChanged(port, status));
         // Subscribe to session events for permission correlation
@@ -141,7 +138,8 @@ class OpenCodeProvider implements IDisposable {
         // Fetch root sessions first to identify which sessions to track
         await client.fetchRootSessions();
         // Then connect to SSE for real-time updates
-        client.connect();
+        // Note: connect() is now async and we await it
+        await client.connect();
       }
     }
   }
@@ -253,16 +251,13 @@ export class AgentStatusManager implements IDisposable {
   private readonly statuses = new Map<WorkspacePath, AggregatedAgentStatus>();
   private readonly listeners = new Set<StatusChangedCallback>();
   private discoveryUnsubscribe: Unsubscribe | null = null;
-  private readonly httpClient: HttpClient;
-  private readonly sseClient: SseClient;
+  private readonly sdkFactory: SdkClientFactory | undefined;
 
   constructor(
     private readonly discoveryService: DiscoveryService,
-    httpClient: HttpClient,
-    sseClient: SseClient
+    sdkFactory: SdkClientFactory | undefined = undefined
   ) {
-    this.httpClient = httpClient;
-    this.sseClient = sseClient;
+    this.sdkFactory = sdkFactory;
     // Subscribe to discovery service for port changes
     this.discoveryUnsubscribe = discoveryService.onInstancesChanged((workspace, ports) => {
       this.handleInstancesChanged(workspace as WorkspacePath, ports);
@@ -277,7 +272,7 @@ export class AgentStatusManager implements IDisposable {
       return;
     }
 
-    const provider = new OpenCodeProvider(this.httpClient, this.sseClient);
+    const provider = new OpenCodeProvider(this.sdkFactory);
     // Subscribe to status changes (includes permission changes)
     provider.onStatusChange(() => this.updateStatus(path));
 

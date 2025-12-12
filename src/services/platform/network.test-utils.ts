@@ -1,10 +1,10 @@
 /**
  * Test utilities for network layer mocking and boundary testing.
  *
- * Provides mock factories for HttpClient, SseClient, PortManager, and SseConnection
+ * Provides mock factories for HttpClient and PortManager
  * to enable easy unit testing of consumers.
  *
- * Also provides test server helpers for boundary tests against real HTTP/SSE servers.
+ * Also provides test server helpers for boundary tests against real HTTP servers.
  */
 
 import {
@@ -16,129 +16,9 @@ import {
 import {
   type HttpClient,
   type HttpRequestOptions,
-  type SseClient,
-  type SseConnection,
-  type SseConnectionOptions,
   type PortManager,
   type ListeningPort,
 } from "./network";
-
-// ============================================================================
-// SSE Synchronization Helpers for Boundary Tests
-// ============================================================================
-
-/**
- * Collects SSE messages for testing.
- *
- * @example
- * const collector = new MessageCollector();
- * conn.onMessage(collector.handler);
- * server.sendSseMessage('{"type":"test"}');
- * const messages = await collector.waitForCount(1);
- * expect(messages[0]).toBe('{"type":"test"}');
- */
-export class MessageCollector {
-  readonly messages: string[] = [];
-  private resolvers: Array<() => void> = [];
-
-  readonly handler = (data: string): void => {
-    this.messages.push(data);
-    // Resolve any waiting promises
-    const resolver = this.resolvers.shift();
-    if (resolver) resolver();
-  };
-
-  /**
-   * Wait for at least `count` messages to be collected.
-   * @param count - Number of messages to wait for
-   * @param timeout - Timeout in ms (default 5000)
-   * @returns Array of collected messages (may contain more than count)
-   * @throws If timeout expires before count messages received
-   */
-  async waitForCount(count: number, timeout = 5000): Promise<string[]> {
-    const start = Date.now();
-    while (this.messages.length < count) {
-      if (Date.now() - start > timeout) {
-        throw new Error(`Timeout waiting for ${count} messages, got ${this.messages.length}`);
-      }
-      await new Promise<void>((resolve) => {
-        this.resolvers.push(resolve);
-        setTimeout(resolve, 100); // Poll fallback
-      });
-    }
-    return this.messages.slice(0, count);
-  }
-
-  /**
-   * Clear collected messages.
-   */
-  clear(): void {
-    this.messages.length = 0;
-  }
-}
-
-/**
- * Wait for SSE connection to reach expected state.
- *
- * @param conn - SSE connection to monitor
- * @param expectedConnected - Expected connected state
- * @param timeout - Timeout in ms (default 5000)
- *
- * @example
- * const conn = sseClient.createSseConnection(url);
- * await waitForConnectionState(conn, true); // Wait for connected
- * server.closeSseConnections();
- * await waitForConnectionState(conn, false); // Wait for disconnected
- */
-export function waitForConnectionState(
-  conn: SseConnection,
-  expectedConnected: boolean,
-  timeout = 5000
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`Timeout waiting for connected=${expectedConnected}`));
-    }, timeout);
-
-    conn.onStateChange((connected) => {
-      if (connected === expectedConnected) {
-        clearTimeout(timer);
-        resolve();
-      }
-    });
-  });
-}
-
-/**
- * Wait for SSE disconnect then reconnect cycle.
- *
- * @param conn - SSE connection to monitor
- * @param timeout - Timeout in ms (default 10000)
- *
- * @example
- * const conn = sseClient.createSseConnection(url);
- * await waitForConnectionState(conn, true);
- * server.closeSseConnections(); // Trigger disconnect
- * await waitForReconnection(conn); // Wait for reconnect
- */
-export async function waitForReconnection(conn: SseConnection, timeout = 10000): Promise<void> {
-  let sawDisconnect = false;
-
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("Timeout waiting for reconnection"));
-    }, timeout);
-
-    conn.onStateChange((connected) => {
-      if (!connected) {
-        sawDisconnect = true;
-      } else if (sawDisconnect && connected) {
-        clearTimeout(timer);
-        resolve();
-      }
-    });
-  });
-}
 
 // ============================================================================
 // Mock Option Types
@@ -164,26 +44,6 @@ export interface MockPortManagerOptions {
   readonly findFreePort?: { port?: number; error?: Error };
   /** Options for getListeningPorts */
   readonly getListeningPorts?: { ports?: ListeningPort[]; error?: Error };
-}
-
-/**
- * Options for creating a mock SseClient.
- */
-export interface MockSseClientOptions {
-  /** Connection to return from createSseConnection */
-  readonly connection?: SseConnection;
-  /** Custom implementation for createSseConnection */
-  readonly implementation?: (url: string, options?: SseConnectionOptions) => SseConnection;
-}
-
-/**
- * Options for creating a mock SseConnection.
- */
-export interface MockSseConnectionOptions {
-  /** Messages to emit (will be emitted asynchronously) */
-  readonly messages?: string[];
-  /** Initial connected state. Default: true */
-  readonly connected?: boolean;
 }
 
 // ============================================================================
@@ -273,103 +133,6 @@ export function createMockPortManager(options?: MockPortManagerOptions): PortMan
 }
 
 // ============================================================================
-// Mock SSE Connection
-// ============================================================================
-
-/**
- * Create a mock SseConnection for testing.
- *
- * @example Basic usage - connected, no messages
- * const connection = createMockSseConnection();
- *
- * @example With messages (emitted asynchronously)
- * const connection = createMockSseConnection({
- *   messages: ['{"type":"status","data":"idle"}', '{"type":"status","data":"busy"}']
- * });
- *
- * @example Disconnected state
- * const connection = createMockSseConnection({
- *   connected: false
- * });
- */
-export function createMockSseConnection(options?: MockSseConnectionOptions): SseConnection {
-  let messageHandler: ((data: string) => void) | null = null;
-  let stateHandler: ((connected: boolean) => void) | null = null;
-  let disposed = false;
-
-  // Schedule initial state and messages
-  if (options?.connected !== false) {
-    queueMicrotask(() => {
-      if (!disposed && stateHandler) {
-        stateHandler(true);
-      }
-      // Emit messages after connected
-      if (!disposed && messageHandler && options?.messages) {
-        for (const message of options.messages) {
-          if (!disposed) {
-            messageHandler(message);
-          }
-        }
-      }
-    });
-  } else {
-    queueMicrotask(() => {
-      if (!disposed && stateHandler) {
-        stateHandler(false);
-      }
-    });
-  }
-
-  return {
-    onMessage(handler: (data: string) => void): void {
-      messageHandler = handler;
-    },
-    onStateChange(handler: (connected: boolean) => void): void {
-      stateHandler = handler;
-    },
-    disconnect(): void {
-      disposed = true;
-      if (stateHandler) {
-        stateHandler(false);
-      }
-    },
-  };
-}
-
-// ============================================================================
-// Mock SSE Client
-// ============================================================================
-
-/**
- * Create a mock SseClient for testing.
- *
- * @example Basic usage - returns mock connection
- * const sseClient = createMockSseClient();
- *
- * @example With custom connection
- * const connection = createMockSseConnection({ messages: ['test'] });
- * const sseClient = createMockSseClient({ connection });
- *
- * @example Custom implementation
- * const sseClient = createMockSseClient({
- *   implementation: (url) => {
- *     if (url.includes('error')) throw new Error('Invalid URL');
- *     return createMockSseConnection();
- *   }
- * });
- */
-export function createMockSseClient(options?: MockSseClientOptions): SseClient {
-  return {
-    createSseConnection(url: string, connOptions?: SseConnectionOptions): SseConnection {
-      if (options?.implementation) {
-        return options.implementation(url, connOptions);
-      }
-      return options?.connection ?? createMockSseConnection();
-    },
-  };
-}
-
-// ============================================================================
 // Test Server for Boundary Tests
 // ============================================================================
 
@@ -395,10 +158,6 @@ export interface TestServer {
   stop(): Promise<void>;
   /** Build URL for a given path. */
   url(path: string): string;
-  /** Send SSE message to all connected clients. */
-  sendSseMessage(data: string): void;
-  /** Close all SSE connections (triggers reconnection in clients). */
-  closeSseConnections(): void;
 }
 
 /**
@@ -411,7 +170,6 @@ export interface TestServer {
  * - GET /timeout → Never responds (for timeout testing)
  * - GET /error/404 → 404 Not Found
  * - GET /error/500 → 500 Internal Server Error
- * - GET /events → SSE stream
  *
  * @param routes - Custom routes to add or override defaults
  *
@@ -432,7 +190,6 @@ export interface TestServer {
 export function createTestServer(routes?: Record<string, RouteHandler>): TestServer {
   let serverPort: number | null = null;
   let server: Server | null = null;
-  const sseConnections = new Set<ServerResponse>();
 
   const defaultRoutes: Record<string, RouteHandler> = {
     "/json": (_req, res) => {
@@ -459,18 +216,6 @@ export function createTestServer(routes?: Record<string, RouteHandler>): TestSer
     "/error/500": (_req, res) => {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Internal Server Error" }));
-    },
-    "/events": (req, res) => {
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      });
-      // Send initial comment to flush headers and establish connection
-      // This is valid SSE - lines starting with : are comments
-      res.write(": connected\n\n");
-      sseConnections.add(res);
-      req.on("close", () => sseConnections.delete(res));
     },
   };
 
@@ -513,12 +258,6 @@ export function createTestServer(routes?: Record<string, RouteHandler>): TestSer
     },
 
     async stop(): Promise<void> {
-      // Close all SSE connections first
-      for (const res of sseConnections) {
-        res.end();
-      }
-      sseConnections.clear();
-
       if (!server || serverPort === null) {
         return; // Already stopped or never started
       }
@@ -538,26 +277,6 @@ export function createTestServer(routes?: Record<string, RouteHandler>): TestSer
         throw new Error("Server not started - call start() first");
       }
       return `http://localhost:${serverPort}${path}`;
-    },
-
-    sendSseMessage(data: string): void {
-      for (const res of sseConnections) {
-        if (!res.writableEnded) {
-          try {
-            res.write(`data: ${data}\n\n`);
-          } catch {
-            // Connection closed, remove from set
-            sseConnections.delete(res);
-          }
-        }
-      }
-    },
-
-    closeSseConnections(): void {
-      for (const res of sseConnections) {
-        res.end();
-      }
-      sseConnections.clear();
     },
   };
 }

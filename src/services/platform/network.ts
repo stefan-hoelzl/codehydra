@@ -3,11 +3,11 @@
  *
  * Provides focused, injectable network interfaces following Interface Segregation Principle:
  * - HttpClient: HTTP requests with timeout support
- * - SseClient: Server-Sent Events with auto-reconnection
  * - PortManager: Port discovery and allocation
+ *
+ * Note: SSE (Server-Sent Events) functionality was previously provided here but has been
+ * removed in favor of the @opencode-ai/sdk which handles SSE internally.
  */
-
-import { EventSource } from "eventsource";
 
 // ============================================================================
 // HTTP Client Interface
@@ -50,93 +50,6 @@ export interface HttpClient {
    * });
    */
   fetch(url: string, options?: HttpRequestOptions): Promise<Response>;
-}
-
-// ============================================================================
-// SSE Client Interface
-// ============================================================================
-
-/**
- * Options for SSE connections.
- */
-export interface SseConnectionOptions {
-  /** Enable auto-reconnection on disconnect. Default: true */
-  readonly reconnect?: boolean;
-  /** Initial reconnection delay in ms. Default: 1000 */
-  readonly initialReconnectDelay?: number;
-  /** Maximum reconnection delay in ms (backoff cap). Default: 30000 */
-  readonly maxReconnectDelay?: number;
-}
-
-/**
- * SSE connection handle.
- *
- * IMPORTANT: Reconnection timing is handled by the connection.
- * Application-specific logic (what to do on reconnect) is handled
- * by the consumer via onStateChange callback.
- */
-export interface SseConnection {
-  /**
-   * Set message handler. Called for each SSE message.
-   * Replaces any previous handler.
-   * @param handler - Receives raw message data string (not parsed)
-   */
-  onMessage(handler: (data: string) => void): void;
-
-  /**
-   * Set state change handler. Called on connect/disconnect.
-   * Replaces any previous handler.
-   *
-   * Use this to perform application-specific actions on reconnect,
-   * such as re-syncing state from the server.
-   *
-   * @param handler - Receives true on connect, false on disconnect
-   *
-   * @example Re-sync state on reconnect (in OpenCodeClient)
-   * connection.onStateChange((connected) => {
-   *   if (connected) {
-   *     // Application-specific: fetch current status after reconnect
-   *     void this.getStatus().then((result) => {
-   *       if (result.ok) this.updateCurrentStatus(result.value);
-   *     });
-   *   }
-   * });
-   */
-  onStateChange(handler: (connected: boolean) => void): void;
-
-  /**
-   * Disconnect and cleanup.
-   * - Closes the EventSource connection
-   * - Clears any pending reconnection timers
-   * - Prevents future reconnection attempts
-   *
-   * Safe to call multiple times.
-   */
-  disconnect(): void;
-}
-
-/**
- * Factory for creating SSE connections.
- */
-export interface SseClient {
-  /**
-   * Create SSE connection with auto-reconnection.
-   *
-   * Connection is established immediately upon creation.
-   * Reconnection uses exponential backoff: 1s, 2s, 4s, 8s... up to maxReconnectDelay.
-   * Backoff resets to initialReconnectDelay after successful connection.
-   *
-   * @param url - SSE endpoint URL
-   * @param options - Connection options
-   * @returns SSE connection handle
-   *
-   * @example
-   * const conn = sseClient.createSseConnection('http://localhost:8080/events');
-   * conn.onMessage((data) => console.log('Received:', data));
-   * conn.onStateChange((connected) => console.log('Connected:', connected));
-   * // Later: conn.disconnect();
-   */
-  createSseConnection(url: string, options?: SseConnectionOptions): SseConnection;
 }
 
 // ============================================================================
@@ -187,10 +100,6 @@ export interface PortManager {
 export interface NetworkLayerConfig {
   /** Default timeout for HTTP requests in ms. Default: 5000 */
   readonly defaultTimeout?: number;
-  /** Initial SSE reconnection delay in ms. Default: 1000 */
-  readonly initialReconnectDelay?: number;
-  /** Maximum SSE reconnection delay in ms. Default: 30000 */
-  readonly maxReconnectDelay?: number;
 }
 
 // ============================================================================
@@ -199,16 +108,14 @@ export interface NetworkLayerConfig {
 
 /**
  * Default implementation of network interfaces.
- * Implements HttpClient, SseClient, and PortManager.
+ * Implements HttpClient and PortManager.
  */
-export class DefaultNetworkLayer implements HttpClient, SseClient, PortManager {
+export class DefaultNetworkLayer implements HttpClient, PortManager {
   private readonly config: Required<NetworkLayerConfig>;
 
   constructor(config: NetworkLayerConfig = {}) {
     this.config = {
       defaultTimeout: config.defaultTimeout ?? 5000,
-      initialReconnectDelay: config.initialReconnectDelay ?? 1000,
-      maxReconnectDelay: config.maxReconnectDelay ?? 30000,
     };
   }
 
@@ -288,141 +195,5 @@ export class DefaultNetworkLayer implements HttpClient, SseClient, PortManager {
         port: parseInt(conn.localPort, 10),
         pid: conn.pid,
       }));
-  }
-
-  // SseClient implementation
-  createSseConnection(url: string, options?: SseConnectionOptions): SseConnection {
-    return new DefaultSseConnection(
-      url,
-      {
-        reconnect: options?.reconnect ?? true,
-        initialReconnectDelay: options?.initialReconnectDelay ?? this.config.initialReconnectDelay,
-        maxReconnectDelay: options?.maxReconnectDelay ?? this.config.maxReconnectDelay,
-      },
-      this.createEventSource.bind(this)
-    );
-  }
-
-  /**
-   * Create an EventSource instance. Extracted for testability.
-   */
-  protected createEventSource(url: string): EventSource {
-    return new EventSource(url);
-  }
-}
-
-/**
- * Default SSE connection implementation with auto-reconnection.
- */
-class DefaultSseConnection implements SseConnection {
-  private eventSource: EventSource | null = null;
-  private messageHandler: ((data: string) => void) | null = null;
-  private stateHandler: ((connected: boolean) => void) | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private currentDelay: number;
-  private disposed = false;
-
-  private readonly shouldReconnect: boolean;
-  private readonly initialDelay: number;
-  private readonly maxDelay: number;
-  private readonly createEventSource: (url: string) => EventSource;
-
-  constructor(
-    private readonly url: string,
-    options: Required<
-      Pick<SseConnectionOptions, "reconnect" | "initialReconnectDelay" | "maxReconnectDelay">
-    >,
-    createEventSourceFn: (url: string) => EventSource
-  ) {
-    this.shouldReconnect = options.reconnect;
-    this.initialDelay = options.initialReconnectDelay;
-    this.maxDelay = options.maxReconnectDelay;
-    this.currentDelay = this.initialDelay;
-    this.createEventSource = createEventSourceFn;
-
-    // Connect asynchronously so handlers can be set first
-    queueMicrotask(() => {
-      if (!this.disposed) {
-        this.connect();
-      }
-    });
-  }
-
-  onMessage(handler: (data: string) => void): void {
-    this.messageHandler = handler;
-  }
-
-  onStateChange(handler: (connected: boolean) => void): void {
-    this.stateHandler = handler;
-  }
-
-  disconnect(): void {
-    this.disposed = true;
-
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-  }
-
-  private connect(): void {
-    if (this.disposed) return;
-
-    try {
-      this.eventSource = this.createEventSource(this.url);
-
-      this.eventSource.onopen = () => {
-        if (this.disposed) return;
-
-        // Reset backoff on successful connection
-        this.currentDelay = this.initialDelay;
-
-        // Notify connected
-        this.stateHandler?.(true);
-      };
-
-      this.eventSource.onerror = () => {
-        if (this.disposed) return;
-
-        this.handleDisconnect();
-      };
-
-      this.eventSource.onmessage = (event: MessageEvent) => {
-        if (this.disposed) return;
-
-        this.messageHandler?.(event.data as string);
-      };
-    } catch {
-      // EventSource constructor can throw on invalid URL
-      this.handleDisconnect();
-    }
-  }
-
-  private handleDisconnect(): void {
-    // Close current connection
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-
-    // Notify disconnected
-    this.stateHandler?.(false);
-
-    if (this.disposed || !this.shouldReconnect) return;
-
-    // Schedule reconnection with backoff
-    this.reconnectTimer = setTimeout(() => {
-      if (!this.disposed) {
-        this.connect();
-      }
-    }, this.currentDelay);
-
-    // Increase delay for next attempt (capped at max)
-    this.currentDelay = Math.min(this.currentDelay * 2, this.maxDelay);
   }
 }

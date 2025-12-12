@@ -204,7 +204,7 @@ async function startServices(): Promise<void> {
     instanceProbe,
   });
 
-  agentStatusManager = new AgentStatusManager(discoveryService, networkLayer, networkLayer);
+  agentStatusManager = new AgentStatusManager(discoveryService);
 
   // Inject services into AppState
   appState.setDiscoveryService(discoveryService);

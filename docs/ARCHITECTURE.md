@@ -223,71 +223,39 @@ NetworkLayer provides unified interfaces for all localhost network operations, d
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                       DefaultNetworkLayer                                │
-│            implements HttpClient, SseClient, PortManager                 │
+│                  implements HttpClient, PortManager                      │
 │                                                                          │
-│  Single class that implements all interfaces for convenience.            │
+│  Single class that implements both interfaces for convenience.           │
 │  Consumers inject only the interface(s) they need.                       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Interface Responsibilities:**
 
-| Interface     | Methods                                 | Purpose                         | Used By                                          |
-| ------------- | --------------------------------------- | ------------------------------- | ------------------------------------------------ |
-| `HttpClient`  | `fetch(url, options)`                   | HTTP GET with timeout support   | OpenCodeClient, InstanceProbe, CodeServerManager |
-| `SseClient`   | `createSseConnection(url, options)`     | SSE with auto-reconnection      | OpenCodeClient                                   |
-| `PortManager` | `findFreePort()`, `getListeningPorts()` | Port discovery and availability | CodeServerManager, DiscoveryService              |
+| Interface     | Methods                                 | Purpose                         | Used By                             |
+| ------------- | --------------------------------------- | ------------------------------- | ----------------------------------- |
+| `HttpClient`  | `fetch(url, options)`                   | HTTP GET with timeout support   | InstanceProbe, CodeServerManager    |
+| `PortManager` | `findFreePort()`, `getListeningPorts()` | Port discovery and availability | CodeServerManager, DiscoveryService |
 
 **Dependency Injection:**
 
 ```typescript
-// DefaultNetworkLayer implements all three interfaces
+// DefaultNetworkLayer implements both interfaces
 const networkLayer = new DefaultNetworkLayer();
 
 // Inject only the interface(s) each consumer needs
 const instanceProbe = new HttpInstanceProbe(networkLayer); // HttpClient only
 const codeServerManager = new CodeServerManager(config, runner, networkLayer, networkLayer); // HttpClient + PortManager
-const openCodeClient = new OpenCodeClient(port, networkLayer, networkLayer); // HttpClient + SseClient
-```
-
-**SSE Auto-Reconnection:**
-
-The SseClient provides automatic reconnection with exponential backoff:
-
-- Initial delay: 1 second
-- Backoff: doubles each retry (1s → 2s → 4s → 8s → ...)
-- Maximum delay: 30 seconds
-- Resets to 1s after successful connection
-
-```typescript
-const conn = sseClient.createSseConnection("http://localhost:8080/events");
-
-conn.onMessage((data) => {
-  // Raw string data - consumer handles JSON parsing
-  const parsed = JSON.parse(data);
-});
-
-conn.onStateChange((connected) => {
-  if (connected) {
-    // Application-specific: re-sync state after reconnect
-    void this.syncStatus();
-  }
-});
-
-// Cleanup
-conn.disconnect();
 ```
 
 **Testing with Mock Utilities:**
 
 The module provides factory functions for creating mock implementations:
 
-| Factory                     | Returns         | Purpose                             |
-| --------------------------- | --------------- | ----------------------------------- |
-| `createMockHttpClient()`    | `HttpClient`    | Mock HTTP responses or errors       |
-| `createMockSseClient()`     | `SseClient`     | Mock SSE connection behavior        |
-| `createMockPortManager()`   | `PortManager`   | Mock port availability and scanning |
-| `createMockSseConnection()` | `SseConnection` | Controllable SSE connection handle  |
+| Factory                   | Returns       | Purpose                             |
+| ------------------------- | ------------- | ----------------------------------- |
+| `createMockHttpClient()`  | `HttpClient`  | Mock HTTP responses or errors       |
+| `createMockPortManager()` | `PortManager` | Mock port availability and scanning |
 
 ```typescript
 import { createMockHttpClient, createMockPortManager } from "../platform/network.test-utils";
@@ -302,6 +270,43 @@ const mockPortManager = createMockPortManager({
 });
 
 const service = new SomeService(mockHttpClient, mockPortManager);
+```
+
+### OpenCode SDK Integration
+
+`OpenCodeClient` uses the official `@opencode-ai/sdk` for HTTP and SSE operations:
+
+```typescript
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
+
+// SDK client is injected via factory for testability
+export type SdkClientFactory = (baseUrl: string) => OpencodeClient;
+
+export class OpenCodeClient implements IDisposable {
+  constructor(port: number, sdkFactory: SdkClientFactory = defaultFactory) {
+    this.baseUrl = `http://localhost:${port}`;
+    this.sdk = sdkFactory(this.baseUrl);
+  }
+
+  // connect() is async with timeout support
+  async connect(timeoutMs = 5000): Promise<void> {
+    const events = await this.sdk.event.subscribe();
+    this.processEvents(events.stream);
+  }
+}
+```
+
+**Testing OpenCodeClient:**
+
+```typescript
+import { createMockSdkClient, createMockSdkFactory, createTestSession } from "./sdk-test-utils";
+
+const mockSdk = createMockSdkClient({
+  sessions: [createTestSession({ id: "ses-1", directory: "/test" })],
+  sessionStatuses: { "ses-1": { type: "idle" } },
+});
+const factory = createMockSdkFactory(mockSdk);
+const client = new OpenCodeClient(8080, factory);
 ```
 
 ```

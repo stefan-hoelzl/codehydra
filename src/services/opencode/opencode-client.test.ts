@@ -1,6 +1,8 @@
 // @vitest-environment node
 /**
  * Tests for OpenCodeClient.
+ *
+ * Tests the SDK-based OpenCodeClient implementation.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -11,28 +13,27 @@ import {
   isValidSessionStatus,
   isSessionStatusResponse,
 } from "./opencode-client";
-import type { SessionStatus } from "./types";
+import type { SessionStatus as OurSessionStatus } from "./types";
 import {
-  createMockHttpClient,
-  createMockSseClient,
-  createMockSseConnection,
-} from "../platform/network.test-utils";
-import type { HttpClient, SseClient, SseConnection } from "../platform/network";
+  createMockSdkClient,
+  createMockSdkFactory,
+  createTestSession,
+  type SdkClientFactory,
+} from "./sdk-test-utils";
+import type { OpencodeClient, SessionStatus as SdkSessionStatus, Session } from "@opencode-ai/sdk";
 
 describe("OpenCodeClient", () => {
   let client: OpenCodeClient;
-  let mockHttpClient: HttpClient;
-  let mockSseClient: SseClient;
-  let mockSseConnection: SseConnection;
+  let mockSdk: OpencodeClient;
+  let mockFactory: SdkClientFactory;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
 
-    // Create default mocks
-    mockSseConnection = createMockSseConnection();
-    mockSseClient = createMockSseClient({ connection: mockSseConnection });
-    mockHttpClient = createMockHttpClient();
+    // Create default SDK mock with empty responses
+    mockSdk = createMockSdkClient();
+    mockFactory = createMockSdkFactory(mockSdk);
   });
 
   afterEach(() => {
@@ -42,35 +43,32 @@ describe("OpenCodeClient", () => {
   });
 
   /**
-   * Helper to create a client with mock dependencies.
-   * Pass a custom httpClient to configure specific responses for tests.
+   * Helper to create a client with mock SDK.
    */
-  function createClient(
-    port = 8080,
-    customHttpClient?: HttpClient,
-    customSseClient?: SseClient
-  ): OpenCodeClient {
-    return new OpenCodeClient(
-      port,
-      customHttpClient ?? mockHttpClient,
-      customSseClient ?? mockSseClient
-    );
+  function createClient(port = 8080, customFactory?: SdkClientFactory): OpenCodeClient {
+    return new OpenCodeClient(port, customFactory ?? mockFactory);
   }
 
   /**
-   * Helper to create a mock HttpClient that returns a specific response.
+   * Helper to create mock SDK that returns specific sessions.
    */
-  function createHttpClientWithResponse(response: Response): HttpClient {
-    return createMockHttpClient({ response });
+  function createSdkWithSessions(sessions: Session[]): OpencodeClient {
+    return createMockSdkClient({ sessions });
+  }
+
+  /**
+   * Helper to create mock SDK that returns specific session statuses.
+   */
+  function createSdkWithStatuses(statuses: Record<string, SdkSessionStatus>): OpencodeClient {
+    return createMockSdkClient({ sessionStatuses: statuses });
   }
 
   describe("getStatus", () => {
-    it("returns idle for empty array response", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([]), { status: 200 })
-      );
+    it("returns idle for empty status response", async () => {
+      mockSdk = createSdkWithStatuses({});
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(true);
@@ -79,12 +77,13 @@ describe("OpenCodeClient", () => {
       }
     });
 
-    it("returns busy for array with busy status", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ type: "busy" }]), { status: 200 })
-      );
+    it("returns busy when any session is busy", async () => {
+      mockSdk = createSdkWithStatuses({
+        "ses-1": { type: "busy" },
+      });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(true);
@@ -93,12 +92,14 @@ describe("OpenCodeClient", () => {
       }
     });
 
-    it("returns idle for array with only idle status", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ type: "idle" }]), { status: 200 })
-      );
+    it("returns idle when all sessions are idle", async () => {
+      mockSdk = createSdkWithStatuses({
+        "ses-1": { type: "idle" },
+        "ses-2": { type: "idle" },
+      });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(true);
@@ -107,12 +108,14 @@ describe("OpenCodeClient", () => {
       }
     });
 
-    it("returns busy for mixed array (any busy = busy)", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ type: "idle" }, { type: "busy" }]), { status: 200 })
-      );
+    it("returns busy for mixed statuses (any busy = busy)", async () => {
+      mockSdk = createSdkWithStatuses({
+        "ses-1": { type: "idle" },
+        "ses-2": { type: "busy" },
+      });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(true);
@@ -122,11 +125,12 @@ describe("OpenCodeClient", () => {
     });
 
     it("maps retry to busy", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ type: "retry" }]), { status: 200 })
-      );
+      mockSdk = createSdkWithStatuses({
+        "ses-1": { type: "retry", attempt: 1, message: "Rate limited", next: Date.now() + 1000 },
+      });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(true);
@@ -135,72 +139,33 @@ describe("OpenCodeClient", () => {
       }
     });
 
-    it("uses correct URL", async () => {
-      let calledUrl = "";
-      const httpClient = createMockHttpClient({
-        implementation: async (url) => {
-          calledUrl = url;
-          return new Response(JSON.stringify([]), { status: 200 });
-        },
+    it("returns error on SDK failure", async () => {
+      mockSdk = createMockSdkClient({
+        throwOnSessionStatus: new Error("Request failed"),
       });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(3000, httpClient);
-      await client.getStatus();
-
-      expect(calledUrl).toBe("http://localhost:3000/session/status");
-    });
-
-    it("returns error on HTTP 500", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response("Internal Server Error", { status: 500 })
-      );
-
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain("500");
+        expect(result.error.message).toContain("Request failed");
       }
     });
 
     it("returns error on timeout", async () => {
-      const httpClient = createMockHttpClient({
-        error: new DOMException("Aborted", "AbortError"),
+      mockSdk = createMockSdkClient({
+        throwOnSessionStatus: new Error("Request timeout"),
       });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.getStatus();
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain("timeout");
-      }
-    });
-
-    it("returns error on malformed JSON", async () => {
-      const httpClient = createHttpClientWithResponse(new Response("not json", { status: 200 }));
-
-      client = createClient(8080, httpClient);
-      const result = await client.getStatus();
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain("Invalid");
-      }
-    });
-
-    it("returns error on invalid structure", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify({ wrong: "structure" }), { status: 200 })
-      );
-
-      client = createClient(8080, httpClient);
-      const result = await client.getStatus();
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain("Invalid");
+        expect(result.error.code).toBe("TIMEOUT");
       }
     });
   });
@@ -208,14 +173,11 @@ describe("OpenCodeClient", () => {
   describe("onStatusChanged", () => {
     it("fires callback when root session status changes", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onStatusChanged(listener);
 
@@ -234,18 +196,14 @@ describe("OpenCodeClient", () => {
 
     it("does not fire callback for child session status changes", async () => {
       // Register parent as root, child has parentID
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "parent-1", directory: "/test", title: "Parent" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "parent-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onStatusChanged(listener);
 
@@ -265,18 +223,15 @@ describe("OpenCodeClient", () => {
 
     it("does not fire callback when status unchanged", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onStatusChanged(listener);
 
-      // First status change to idle
+      // First status change to idle (same as default)
       const idleEvent = {
         data: JSON.stringify({
           type: "session.idle",
@@ -294,14 +249,11 @@ describe("OpenCodeClient", () => {
 
     it("returns unsubscribe function", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       const unsubscribe = client.onStatusChanged(listener);
 
@@ -328,13 +280,10 @@ describe("OpenCodeClient", () => {
 
     it("updates on SSE session.status event for root session", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
 
       const event = {
@@ -350,17 +299,13 @@ describe("OpenCodeClient", () => {
 
     it("does not update on SSE session.status event for child session", async () => {
       // Register parent as root, child has parentID
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "parent-1", directory: "/test", title: "Parent" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "parent-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
 
       // Child session goes busy - should NOT update currentStatus
@@ -378,13 +323,10 @@ describe("OpenCodeClient", () => {
 
     it("updates on SSE session.idle event for root session", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
 
       // First set to busy
@@ -411,17 +353,13 @@ describe("OpenCodeClient", () => {
 
     it("does not update on SSE session.idle event for child session", async () => {
       // Register parent as root, child has parentID
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "parent-1", directory: "/test", title: "Parent" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "parent-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
 
       // Set parent to busy first
@@ -449,13 +387,10 @@ describe("OpenCodeClient", () => {
 
     it("maps retry to busy for root session", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
 
       const event = {
@@ -470,71 +405,21 @@ describe("OpenCodeClient", () => {
     });
   });
 
-  describe("SSE reconnection", () => {
-    it("onopen handler calls getStatus() to re-fetch status", async () => {
-      // This test verifies the onopen handler behavior by directly testing
-      // the integration: when SSE connects, getStatus should be called.
-      // We mock the HttpClient to track getStatus calls.
-
-      let fetchCallCount = 0;
-      const httpClient = createMockHttpClient({
-        implementation: async () => {
-          fetchCallCount++;
-          return new Response(JSON.stringify([{ type: "busy" }]), { status: 200 });
-        },
-      });
-
-      const statusListener = vi.fn();
-      client = createClient(8080, httpClient);
-      client.onStatusChanged(statusListener);
-
-      // Initial status is idle
-      expect(client.currentStatus).toBe("idle");
-
-      // Simulate what onopen does: call getStatus and update status
-      // This is the behavior we want to verify works correctly
-      const result = await client.getStatus();
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        // The updateCurrentStatus is private, but we can verify via currentStatus
-        // that the client correctly parses the response
-        expect(result.value).toBe("busy");
-      }
-
-      // Verify HttpClient.fetch was called
-      expect(fetchCallCount).toBeGreaterThan(0);
-
-      // connect() creates SSE connection via mock SseClient
-      client.connect();
-    });
-
-    it("connect() creates SSE connection with correct URL", () => {
-      const createSseConnectionSpy = vi.fn().mockReturnValue(mockSseConnection);
-      const sseClientWithSpy = { createSseConnection: createSseConnectionSpy };
-
-      client = createClient(8080, mockHttpClient, sseClientWithSpy);
-      client.connect();
-
-      expect(createSseConnectionSpy).toHaveBeenCalledWith("http://localhost:8080/event");
-    });
-  });
-
   describe("event handling", () => {
     it("emits session.status events for root sessions", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "test-session", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "test-session", directory: "/test" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
       // Simulate receiving an SSE event via the internal handler
-      const event: SessionStatus = { type: "busy", sessionId: "test-session" };
+      const event: OurSessionStatus = { type: "busy", sessionId: "test-session" };
       client["emitSessionEvent"](event);
 
       expect(listener).toHaveBeenCalledWith(event);
@@ -542,47 +427,42 @@ describe("OpenCodeClient", () => {
 
     it("does not emit events for child sessions", async () => {
       // Register parent as root, child has parentID
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "parent-session", directory: "/test", title: "Parent" },
-            { id: "child-session", directory: "/test", title: "Child", parentID: "parent-session" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "parent-session", directory: "/test" }),
+        createTestSession({ id: "child-session", directory: "/test", parentID: "parent-session" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
       // Try to emit event for child session
-      const childEvent: SessionStatus = { type: "busy", sessionId: "child-session" };
+      const childEvent: OurSessionStatus = { type: "busy", sessionId: "child-session" };
       client["emitSessionEvent"](childEvent);
 
       // Should not be called for child session
       expect(listener).not.toHaveBeenCalled();
 
       // But should be called for parent session
-      const parentEvent: SessionStatus = { type: "idle", sessionId: "parent-session" };
+      const parentEvent: OurSessionStatus = { type: "idle", sessionId: "parent-session" };
       client["emitSessionEvent"](parentEvent);
       expect(listener).toHaveBeenCalledWith(parentEvent);
     });
 
     it("emits session.deleted events and removes from root set", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "test-session", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "test-session", directory: "/test" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
-      const event: SessionStatus = { type: "deleted", sessionId: "test-session" };
+      const event: OurSessionStatus = { type: "deleted", sessionId: "test-session" };
       client["emitSessionEvent"](event);
 
       expect(listener).toHaveBeenCalledWith(event);
@@ -591,41 +471,154 @@ describe("OpenCodeClient", () => {
     });
 
     it("emits session.idle events for root sessions", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "test-session", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "test-session", directory: "/test" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
-      const event: SessionStatus = { type: "idle", sessionId: "test-session" };
+      const event: OurSessionStatus = { type: "idle", sessionId: "test-session" };
       client["emitSessionEvent"](event);
 
       expect(listener).toHaveBeenCalledWith(event);
     });
 
     it("returns unsubscribe function", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "test-session", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "test-session", directory: "/test" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       const unsubscribe = client.onSessionEvent(listener);
 
       unsubscribe();
 
-      const event: SessionStatus = { type: "idle", sessionId: "test-session" };
+      const event: OurSessionStatus = { type: "idle", sessionId: "test-session" };
       client["emitSessionEvent"](event);
 
       expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("connect", () => {
+    it("rejects when SDK subscribe fails", async () => {
+      mockSdk = createMockSdkClient({
+        throwOnSubscribe: new Error("Connection failed"),
+      });
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+
+      await expect(client.connect()).rejects.toThrow("Connection failed");
+    });
+
+    it("rejects when connection times out", async () => {
+      // Create a mock that never resolves subscribe()
+      const neverResolvingSubscribe = vi.fn().mockReturnValue(new Promise(() => {}));
+      mockSdk = createMockSdkClient();
+      mockSdk.event.subscribe = neverResolvingSubscribe;
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+
+      const connectPromise = client.connect(100); // 100ms timeout
+
+      // Advance timers past the timeout and wait for promise to reject
+      vi.advanceTimersByTime(150);
+
+      // Verify the rejection is thrown
+      await expect(connectPromise).rejects.toThrow("Connect timeout");
+    });
+
+    it("respects custom timeout parameter", async () => {
+      // Create a mock that never resolves subscribe()
+      const neverResolvingSubscribe = vi.fn().mockReturnValue(new Promise(() => {}));
+      mockSdk = createMockSdkClient();
+      mockSdk.event.subscribe = neverResolvingSubscribe;
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+
+      // Use longer timeout of 500ms
+      const connectPromise = client.connect(500);
+
+      // Advance timers by 200ms - should NOT timeout yet
+      vi.advanceTimersByTime(200);
+
+      // Allow any pending microtasks to run
+      await Promise.resolve();
+
+      // Promise should still be pending (connect not resolved/rejected yet)
+      // Advance past the 500ms timeout
+      vi.advanceTimersByTime(350);
+
+      await expect(connectPromise).rejects.toThrow("Connect timeout");
+    });
+
+    it("uses default timeout of 5000ms when not specified", async () => {
+      // Create a mock that never resolves subscribe()
+      const neverResolvingSubscribe = vi.fn().mockReturnValue(new Promise(() => {}));
+      mockSdk = createMockSdkClient();
+      mockSdk.event.subscribe = neverResolvingSubscribe;
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+
+      const connectPromise = client.connect(); // Default timeout
+
+      // Advance timers by 4900ms - should NOT timeout yet
+      vi.advanceTimersByTime(4900);
+
+      // Allow any pending microtasks to run
+      await Promise.resolve();
+
+      // Now advance past 5000ms
+      vi.advanceTimersByTime(200);
+
+      await expect(connectPromise).rejects.toThrow("Connect timeout");
+    });
+
+    it("succeeds when SDK resolves before timeout", async () => {
+      mockSdk = createMockSdkClient();
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+
+      // connect() should resolve without throwing
+      await expect(client.connect(5000)).resolves.toBeUndefined();
+    });
+
+    it("does not connect if already connected", async () => {
+      mockSdk = createMockSdkClient();
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+
+      await client.connect();
+      await client.connect(); // Second call should be no-op
+
+      // subscribe should only be called once
+      expect(mockSdk.event.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not connect if disposed", async () => {
+      mockSdk = createMockSdkClient();
+      mockFactory = createMockSdkFactory(mockSdk);
+
+      client = createClient(8080);
+      client.dispose();
+
+      await client.connect();
+
+      // subscribe should not be called
+      expect(mockSdk.event.subscribe).not.toHaveBeenCalled();
     });
   });
 
@@ -642,7 +635,7 @@ describe("OpenCodeClient", () => {
 
       client.dispose();
 
-      const event: SessionStatus = { type: "idle", sessionId: "test-session" };
+      const event: OurSessionStatus = { type: "idle", sessionId: "test-session" };
       client["emitSessionEvent"](event);
 
       expect(listener).not.toHaveBeenCalled();
@@ -651,18 +644,14 @@ describe("OpenCodeClient", () => {
 
   describe("fetchRootSessions", () => {
     it("returns only root sessions", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "root-1", directory: "/test", title: "Root 1" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "root-1" },
-            { id: "root-2", directory: "/test", title: "Root 2" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "root-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "root-1" }),
+        createTestSession({ id: "root-2", directory: "/test" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.fetchRootSessions();
 
       expect(result.ok).toBe(true);
@@ -673,29 +662,26 @@ describe("OpenCodeClient", () => {
     });
 
     it("registers root sessions for filtering", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "root-1", directory: "/test", title: "Root" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "root-1" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "root-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "root-1" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
 
       expect(client.isRootSession("root-1")).toBe(true);
       expect(client.isRootSession("child-1")).toBe(false);
     });
 
-    it("returns error on invalid response", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify({ wrong: "structure" }), { status: 200 })
-      );
+    it("returns error on SDK failure", async () => {
+      mockSdk = createMockSdkClient({
+        throwOnSessionList: new Error("Network error"),
+      });
+      mockFactory = createMockSdkFactory(mockSdk);
 
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       const result = await client.fetchRootSessions();
 
       expect(result.ok).toBe(false);
@@ -705,16 +691,15 @@ describe("OpenCodeClient", () => {
   describe("handleSessionCreated", () => {
     it("adds new root session to tracking set", async () => {
       // Initialize with empty session list
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([]), { status: 200 })
-      );
+      mockSdk = createSdkWithSessions([]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
-      // Simulate session.created event for root session (now takes object, not JSON string)
+      // Simulate session.created event for root session
       client["handleSessionCreated"]({ info: { id: "new-root" } });
 
       expect(client.isRootSession("new-root")).toBe(true);
@@ -723,16 +708,15 @@ describe("OpenCodeClient", () => {
     });
 
     it("does not add child session to tracking set", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([]), { status: 200 })
-      );
+      mockSdk = createSdkWithSessions([]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
-      // Simulate session.created event for child session (now takes object, not JSON string)
+      // Simulate session.created event for child session
       client["handleSessionCreated"]({ info: { id: "new-child", parentID: "some-parent" } });
 
       expect(client.isRootSession("new-child")).toBe(false);
@@ -740,12 +724,11 @@ describe("OpenCodeClient", () => {
     });
 
     it("ignores malformed properties", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([]), { status: 200 })
-      );
+      mockSdk = createSdkWithSessions([]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = createClient(8080);
       await client.fetchRootSessions();
       client.onSessionEvent(listener);
 
@@ -761,14 +744,11 @@ describe("OpenCodeClient", () => {
   describe("handleMessage", () => {
     describe("session.status events", () => {
       it("emits idle status for root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -786,14 +766,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("emits busy status for root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -810,14 +787,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("maps retry status to busy", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -834,18 +808,14 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores events for non-root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(
-            JSON.stringify([
-              { id: "parent-1", directory: "/test", title: "Parent" },
-              { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-            ]),
-            { status: 200 }
-          )
-        );
+        mockSdk = createSdkWithSessions([
+          createTestSession({ id: "parent-1", directory: "/test" }),
+          createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+        ]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -862,14 +832,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores events with missing sessionID", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -886,14 +853,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores events with missing status", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -912,12 +876,11 @@ describe("OpenCodeClient", () => {
 
     describe("session.created events", () => {
       it("adds root session and emits idle", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([]), { status: 200 })
-        );
+        mockSdk = createSdkWithSessions([]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -935,12 +898,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores child sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([]), { status: 200 })
-        );
+        mockSdk = createSdkWithSessions([]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -960,14 +922,11 @@ describe("OpenCodeClient", () => {
 
     describe("session.idle events", () => {
       it("emits idle status for root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -984,18 +943,14 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores non-root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(
-            JSON.stringify([
-              { id: "parent-1", directory: "/test", title: "Parent" },
-              { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-            ]),
-            { status: 200 }
-          )
-        );
+        mockSdk = createSdkWithSessions([
+          createTestSession({ id: "parent-1", directory: "/test" }),
+          createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+        ]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -1014,14 +969,11 @@ describe("OpenCodeClient", () => {
 
     describe("session.deleted events", () => {
       it("emits deleted and removes from root set", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -1043,14 +995,11 @@ describe("OpenCodeClient", () => {
 
     describe("permission.updated events", () => {
       it("emits for root sessions with valid structure", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1080,18 +1029,14 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores non-root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(
-            JSON.stringify([
-              { id: "parent-1", directory: "/test", title: "Parent" },
-              { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-            ]),
-            { status: 200 }
-          )
-        );
+        mockSdk = createSdkWithSessions([
+          createTestSession({ id: "parent-1", directory: "/test" }),
+          createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+        ]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1113,14 +1058,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores malformed events", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1140,14 +1082,11 @@ describe("OpenCodeClient", () => {
 
     describe("permission.replied events", () => {
       it("handles once response", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1175,14 +1114,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("handles always response", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1210,14 +1146,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("handles reject response", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1245,18 +1178,14 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores non-root sessions", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(
-            JSON.stringify([
-              { id: "parent-1", directory: "/test", title: "Parent" },
-              { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-            ]),
-            { status: 200 }
-          )
-        );
+        mockSdk = createSdkWithSessions([
+          createTestSession({ id: "parent-1", directory: "/test" }),
+          createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+        ]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1277,14 +1206,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores invalid response types", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onPermissionEvent(listener);
 
@@ -1307,14 +1233,11 @@ describe("OpenCodeClient", () => {
 
     describe("error handling", () => {
       it("ignores invalid JSON", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -1326,14 +1249,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores unknown event types", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -1350,14 +1270,11 @@ describe("OpenCodeClient", () => {
       });
 
       it("ignores events without type field", async () => {
-        const httpClient = createHttpClientWithResponse(
-          new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-            status: 200,
-          })
-        );
+        mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+        mockFactory = createMockSdkFactory(mockSdk);
 
         const listener = vi.fn();
-        client = createClient(8080, httpClient);
+        client = createClient(8080);
         await client.fetchRootSessions();
         client.onSessionEvent(listener);
 
@@ -1539,66 +1456,62 @@ describe("isValidSessionStatus", () => {
 });
 
 describe("isSessionStatusResponse", () => {
-  // Tests for new array format (OpenCode returns SessionStatusValue[])
-  it("accepts empty array", () => {
-    expect(isSessionStatusResponse([])).toBe(true);
+  // Tests for SDK format (Record<string, SessionStatus>)
+  it("accepts empty object", () => {
+    expect(isSessionStatusResponse({})).toBe(true);
   });
 
-  it("accepts array with single busy status", () => {
-    const response = [{ type: "busy" }];
+  it("accepts object with single busy status", () => {
+    const response = { "ses-1": { type: "busy" } };
     expect(isSessionStatusResponse(response)).toBe(true);
   });
 
-  it("accepts array with single idle status", () => {
-    const response = [{ type: "idle" }];
+  it("accepts object with single idle status", () => {
+    const response = { "ses-1": { type: "idle" } };
     expect(isSessionStatusResponse(response)).toBe(true);
   });
 
-  it("accepts mixed array with idle and busy", () => {
-    const response = [{ type: "idle" }, { type: "busy" }];
-    expect(isSessionStatusResponse(response)).toBe(true);
-  });
-
-  it("accepts array with retry status", () => {
-    const response = [{ type: "retry" }];
-    expect(isSessionStatusResponse(response)).toBe(true);
-  });
-
-  it("accepts array with all three status types", () => {
-    const response = [{ type: "idle" }, { type: "busy" }, { type: "retry" }];
-    expect(isSessionStatusResponse(response)).toBe(true);
-  });
-
-  // Tests for rejecting old object format
-  it("rejects old object format with sessionId keys", () => {
+  it("accepts object with multiple statuses", () => {
     const response = {
-      "session-1": { type: "busy" },
+      "ses-1": { type: "idle" },
+      "ses-2": { type: "busy" },
     };
-    expect(isSessionStatusResponse(response)).toBe(false);
+    expect(isSessionStatusResponse(response)).toBe(true);
   });
 
-  it("rejects empty object (old format)", () => {
-    expect(isSessionStatusResponse({})).toBe(false);
+  it("accepts object with retry status", () => {
+    const response = { "ses-1": { type: "retry" } };
+    expect(isSessionStatusResponse(response)).toBe(true);
+  });
+
+  it("accepts object with all three status types", () => {
+    const response = {
+      "ses-1": { type: "idle" },
+      "ses-2": { type: "busy" },
+      "ses-3": { type: "retry" },
+    };
+    expect(isSessionStatusResponse(response)).toBe(true);
+  });
+
+  // Tests for rejecting arrays (old format)
+  it("rejects array format", () => {
+    expect(isSessionStatusResponse([])).toBe(false);
+    expect(isSessionStatusResponse([{ type: "busy" }])).toBe(false);
   });
 
   // Tests for rejecting malformed entries
-  it("rejects array with null entry", () => {
-    const response = [null];
+  it("rejects object with null value", () => {
+    const response = { "ses-1": null };
     expect(isSessionStatusResponse(response)).toBe(false);
   });
 
-  it("rejects array with unknown type", () => {
-    const response = [{ type: "unknown" }];
+  it("rejects object with unknown type", () => {
+    const response = { "ses-1": { type: "unknown" } };
     expect(isSessionStatusResponse(response)).toBe(false);
   });
 
-  it("rejects array with missing type property", () => {
-    const response = [{ status: "idle" }];
-    expect(isSessionStatusResponse(response)).toBe(false);
-  });
-
-  it("rejects array with non-object entry", () => {
-    const response = ["idle"];
+  it("rejects object with missing type property", () => {
+    const response = { "ses-1": { status: "idle" } };
     expect(isSessionStatusResponse(response)).toBe(false);
   });
 
@@ -1606,7 +1519,7 @@ describe("isSessionStatusResponse", () => {
     expect(isSessionStatusResponse(null)).toBe(false);
   });
 
-  it("rejects non-array values", () => {
+  it("rejects non-object values", () => {
     expect(isSessionStatusResponse("string")).toBe(false);
     expect(isSessionStatusResponse(123)).toBe(false);
     expect(isSessionStatusResponse(undefined)).toBe(false);
@@ -1615,28 +1528,17 @@ describe("isSessionStatusResponse", () => {
 
 describe("Permission Event Emission", () => {
   let client: OpenCodeClient;
-  let mockHttpClient: HttpClient;
-  let mockSseClient: SseClient;
+  let mockSdk: OpencodeClient;
+  let mockFactory: SdkClientFactory;
 
-  /**
-   * Helper to create a client with mock dependencies.
-   */
-  function createClient(port = 8080, customHttpClient?: HttpClient): OpenCodeClient {
-    return new OpenCodeClient(port, customHttpClient ?? mockHttpClient, mockSseClient);
-  }
-
-  /**
-   * Helper to create a mock HttpClient that returns a specific response.
-   */
-  function createHttpClientWithResponse(response: Response): HttpClient {
-    return createMockHttpClient({ response });
+  function createSdkWithSessions(sessions: Session[]): OpencodeClient {
+    return createMockSdkClient({ sessions });
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const mockSseConnection = createMockSseConnection();
-    mockSseClient = createMockSseClient({ connection: mockSseConnection });
-    mockHttpClient = createMockHttpClient();
+    mockSdk = createMockSdkClient();
+    mockFactory = createMockSdkFactory(mockSdk);
   });
 
   afterEach(() => {
@@ -1646,18 +1548,15 @@ describe("Permission Event Emission", () => {
   describe("permission.updated", () => {
     it("emits event for root session", async () => {
       // Register root session first
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
-      // Simulate permission.updated event via internal handler (now takes object, not JSON string)
+      // Simulate permission.updated event via internal handler
       client["handlePermissionUpdated"]({
         id: "perm-456",
         sessionID: "ses-123",
@@ -1677,22 +1576,18 @@ describe("Permission Event Emission", () => {
     });
 
     it("ignores child sessions", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "parent-1", directory: "/test", title: "Parent" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "parent-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
-      // Try to emit permission event for child session (now takes object, not JSON string)
+      // Try to emit permission event for child session
       client["handlePermissionUpdated"]({
         id: "perm-456",
         sessionID: "child-1",
@@ -1704,32 +1599,26 @@ describe("Permission Event Emission", () => {
     });
 
     it("ignores malformed events", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
-      // Send malformed event (missing required fields) (now takes object, not JSON string)
+      // Send malformed event (missing required fields)
       client["handlePermissionUpdated"]({ id: "perm-456" });
 
       expect(listener).not.toHaveBeenCalled();
     });
 
     it("ignores undefined properties", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1741,18 +1630,14 @@ describe("Permission Event Emission", () => {
 
   describe("permission.replied", () => {
     it("emits event for root session", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
-      // Now takes object, not JSON string
       client["handlePermissionReplied"]({
         sessionID: "ses-123",
         permissionID: "perm-456",
@@ -1770,22 +1655,17 @@ describe("Permission Event Emission", () => {
     });
 
     it("ignores child sessions", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(
-          JSON.stringify([
-            { id: "parent-1", directory: "/test", title: "Parent" },
-            { id: "child-1", directory: "/test", title: "Child", parentID: "parent-1" },
-          ]),
-          { status: 200 }
-        )
-      );
+      mockSdk = createSdkWithSessions([
+        createTestSession({ id: "parent-1", directory: "/test" }),
+        createTestSession({ id: "child-1", directory: "/test", parentID: "parent-1" }),
+      ]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
-      // Now takes object, not JSON string
       client["handlePermissionReplied"]({
         sessionID: "child-1",
         permissionID: "perm-456",
@@ -1796,18 +1676,14 @@ describe("Permission Event Emission", () => {
     });
 
     it("ignores malformed events", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
-      // Now takes object, not JSON string
       client["handlePermissionReplied"]({ sessionID: "ses-123" });
 
       expect(listener).not.toHaveBeenCalled();
@@ -1816,20 +1692,16 @@ describe("Permission Event Emission", () => {
 
   describe("subscription", () => {
     it("returns unsubscribe function", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       const unsubscribe = client.onPermissionEvent(listener);
 
       unsubscribe();
 
-      // Now takes object, not JSON string
       client["handlePermissionUpdated"]({
         id: "perm-456",
         sessionID: "ses-123",
@@ -1841,20 +1713,16 @@ describe("Permission Event Emission", () => {
     });
 
     it("clears listeners on dispose", async () => {
-      const httpClient = createHttpClientWithResponse(
-        new Response(JSON.stringify([{ id: "ses-123", directory: "/test", title: "Test" }]), {
-          status: 200,
-        })
-      );
+      mockSdk = createSdkWithSessions([createTestSession({ id: "ses-123", directory: "/test" })]);
+      mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = createClient(8080, httpClient);
+      client = new OpenCodeClient(8080, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
       client.dispose();
 
-      // Now takes object, not JSON string
       client["handlePermissionUpdated"]({
         id: "perm-456",
         sessionID: "ses-123",

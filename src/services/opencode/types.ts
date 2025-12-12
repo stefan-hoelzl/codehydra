@@ -84,7 +84,7 @@ export interface Session {
   readonly id: string;
   readonly parentID?: string;
   readonly directory: string;
-  readonly title: string;
+  readonly title?: string;
 }
 
 /**
