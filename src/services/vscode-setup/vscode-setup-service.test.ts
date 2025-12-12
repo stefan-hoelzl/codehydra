@@ -453,6 +453,9 @@ describe("VscodeSetupService", () => {
         "telemetry.telemetryLevel": "off",
         "window.menuBarVisibility": "hidden",
         "terminal.integrated.gpuAcceleration": "off",
+        "security.workspace.trust.enabled": false,
+        "security.workspace.trust.untrustedFiles": "open",
+        "security.workspace.trust.startupPrompt": "never",
       });
     });
   });

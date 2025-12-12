@@ -85,6 +85,9 @@ export interface VscodeSettings {
   readonly "telemetry.telemetryLevel": string;
   readonly "window.menuBarVisibility": string;
   readonly "terminal.integrated.gpuAcceleration": string;
+  readonly "security.workspace.trust.enabled": boolean;
+  readonly "security.workspace.trust.untrustedFiles": string;
+  readonly "security.workspace.trust.startupPrompt": string;
 }
 
 /**

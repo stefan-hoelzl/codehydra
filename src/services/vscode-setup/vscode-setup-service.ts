@@ -207,6 +207,9 @@ module.exports = { activate, deactivate };
       "telemetry.telemetryLevel": "off",
       "window.menuBarVisibility": "hidden",
       "terminal.integrated.gpuAcceleration": "off",
+      "security.workspace.trust.enabled": false,
+      "security.workspace.trust.untrustedFiles": "open",
+      "security.workspace.trust.startupPrompt": "never",
     };
 
     // Keybindings: Remap Ctrl+J (Toggle Panel) to Alt+T
