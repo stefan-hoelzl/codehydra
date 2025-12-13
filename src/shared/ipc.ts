@@ -237,7 +237,7 @@ export interface WorkspaceRemovedEvent {
 }
 
 export interface WorkspaceSwitchedEvent {
-  readonly workspacePath: WorkspacePath;
+  readonly workspacePath: WorkspacePath | null;
 }
 
 // ============ Type-Safe IPC Contract ============

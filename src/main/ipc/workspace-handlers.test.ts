@@ -24,6 +24,12 @@ vi.mock("electron", () => ({
   },
 }));
 
+// Mock emitEvent to spy on event emissions
+const mockEmitEvent = vi.fn();
+vi.mock("./handlers", () => ({
+  emitEvent: (...args: unknown[]) => mockEmitEvent(...args),
+}));
+
 import {
   createWorkspaceCreateHandler,
   createWorkspaceRemoveHandler,
@@ -212,6 +218,42 @@ describe("workspace:remove handler", () => {
 
     // Should select ws2 as the next workspace
     expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith("/test/repo/.worktrees/ws2");
+  });
+
+  it("emits workspace:switched with null when removing last workspace", async () => {
+    const mockAppState = createMockAppState();
+    const mockViewManager = createMockViewManager();
+    const mockProvider = createMockProvider();
+
+    // Project with only one workspace
+    const project: Project = {
+      path: "/test/repo" as ProjectPath,
+      name: "repo",
+      workspaces: [{ name: "ws1", path: "/test/repo/.worktrees/ws1", branch: "ws1" }],
+    };
+
+    mockAppState.findProjectForWorkspace.mockReturnValue(project);
+    mockAppState.getWorkspaceProvider.mockReturnValue(mockProvider);
+    // After removal, no workspaces remain
+    mockAppState.getAllProjects.mockReturnValue([{ ...project, workspaces: [] }]);
+    mockProvider.removeWorkspace.mockResolvedValue({ workspaceRemoved: true, baseDeleted: false });
+    mockViewManager.getActiveWorkspacePath.mockReturnValue("/test/repo/.worktrees/ws1"); // Removing the active (and only) workspace
+
+    mockEmitEvent.mockClear();
+
+    const handler = createWorkspaceRemoveHandler(mockAppState, mockViewManager);
+    const payload: WorkspaceRemovePayload = {
+      workspacePath: "/test/repo/.worktrees/ws1",
+      deleteBranch: false,
+    };
+
+    await handler(mockEvent, payload);
+
+    // Should set active workspace to null
+    expect(mockViewManager.setActiveWorkspace).toHaveBeenCalledWith(null);
+
+    // Should emit workspace:switched with null so renderer shows empty state
+    expect(mockEmitEvent).toHaveBeenCalledWith("workspace:switched", { workspacePath: null });
   });
 
   it("throws WORKSPACE_NOT_FOUND for unknown workspace", async () => {

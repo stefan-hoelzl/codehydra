@@ -106,12 +106,10 @@ export function createWorkspaceRemoveHandler(
       const nextWorkspacePath = findNextWorkspace(appState.getAllProjects(), project.path);
       viewManager.setActiveWorkspace(nextWorkspacePath);
 
-      // Emit switched event so renderer updates
-      if (nextWorkspacePath) {
-        emitEvent("workspace:switched", {
-          workspacePath: nextWorkspacePath as WorkspacePath,
-        });
-      }
+      // Emit switched event so renderer updates (even when null, so UI shows empty state)
+      emitEvent("workspace:switched", {
+        workspacePath: nextWorkspacePath as WorkspacePath | null,
+      });
     }
 
     return result;
