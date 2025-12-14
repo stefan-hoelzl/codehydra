@@ -147,19 +147,23 @@ REVIEW_PENDING ──► (plan reviews) ──► user accepts ──► @implem
     │                 │            │
     ▼                 ▼            ▼
 @implement      CODE_REVIEW_DONE ◄─┘
-(no status        (user approves)
- change)               │
-    │                  ▼
-    │           user testing
+    │             (user approves)
     │                  │
     ▼                  ▼
-(completes)      user: "accept"
+(completes)      user testing
     │                  │
-    ▼                  ▼
-CODE_REVIEW_DONE ──► @general (commit)
-                           │
-                           ▼
-                      COMPLETED
+    ▼            ┌─────┴─────┐
+CODE_REVIEW_DONE ▼           ▼
+    │        (issues)    user: "accept"
+    │            │           │
+    │            ▼           ▼
+    │       @implement   @general (commit)
+    │            │           │
+    │            ▼           ▼
+    └───────► (completes)  COMPLETED
+                 │
+                 ▼
+            user testing (loop until accepted)
 ```
 
 ---
@@ -253,12 +257,28 @@ After @implement reports IMPLEMENTATION COMPLETE:
 3. **Handle user decision**:
 
    **If user wants fixes** (specific issues or "all"):
-   - Update plan status to `CODE_REVIEW_DONE` (user approves edit)
-   - Invoke `@implement planning/<FEATURE_NAME>.md` with fix instructions
-   - When @implement completes again (status is still `CLEANUP`): skip code review, proceed to user testing
+   - Invoke @implement with specific fix instructions:
+
+     ```
+     @implement planning/<FEATURE_NAME>.md
+
+     Fix the following code review issues:
+
+     1. [Issue description from review]
+        - File: [affected file]
+        - Fix: [what to change]
+
+     2. [Issue description from review]
+        - File: [affected file]
+        - Fix: [what to change]
+
+     After fixing, run `npm run validate:fix` to ensure all checks pass.
+     ```
+
+   - When @implement completes: update plan status to `CODE_REVIEW_DONE`, proceed to user testing
 
    **If user says "proceed"** (or no critical/important issues):
-   - Update plan status to `CODE_REVIEW_DONE` (user approves edit)
+   - Update plan status to `CODE_REVIEW_DONE`
    - Proceed to user testing
 
 ### State: USER_TESTING
@@ -269,10 +289,23 @@ After @implement reports IMPLEMENTATION COMPLETE:
 
 #### If user reports issues:
 
-- Determine if it's a bug fix or plan change needed
-- For bugs: invoke `@implement planning/<FEATURE_NAME>.md` with the fix instructions
-- For plan changes: update plan, re-invoke @implement
-- When @implement completes: skip code review (status is `CODE_REVIEW_DONE`), return to user testing
+- Invoke @implement with fix instructions:
+
+  ```
+  @implement planning/<FEATURE_NAME>.md
+
+  Fix the following issue reported during user testing:
+
+  **Issue**: [user's description]
+  **Expected**: [what should happen]
+  **Actual**: [what's happening]
+
+  [If plan needs updating, describe the change here]
+
+  After fixing, run `npm run validate:fix` to ensure all checks pass.
+  ```
+
+- When @implement completes: return to user testing (skip code review since status is `CODE_REVIEW_DONE`)
 
 #### If user says "accept":
 
@@ -610,3 +643,4 @@ Feature <FEATURE_NAME> is complete!
 - **CONFIRM BEFORE COMMITTING**: Always wait for user "accept" before invoking build agent to commit
 - **CODE REVIEW AFTER IMPLEMENTATION**: Always invoke @implementation-review after first implementation completes
 - **SKIP CODE REVIEW ON RE-IMPLEMENTATION**: After code review issues are fixed, skip code review on subsequent @implement completions
+- **DELEGATE ALL CLEANUP FIXES**: During cleanup phase (CODE_REVIEWING and USER_TESTING), ALWAYS invoke @implement for any code changes the user requests - never attempt code fixes yourself
