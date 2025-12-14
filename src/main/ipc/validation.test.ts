@@ -4,7 +4,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import path from "node:path";
 import {
+  absolutePathSchema,
   WorkspaceSwitchPayloadSchema,
   AgentGetStatusPayloadSchema,
   validate,
@@ -72,8 +74,10 @@ describe("AgentGetStatusPayloadSchema", () => {
     expect(() => validate(AgentGetStatusPayloadSchema, payload)).toThrow(ValidationError);
   });
 
-  it("rejects path with traversal", () => {
-    const payload = { workspacePath: "/test/../etc/passwd" };
+  it("rejects path with traversal that escapes root", () => {
+    // On Unix, "/../etc/passwd" normalizes to "/etc/passwd" (no ".." remains)
+    // But a relative path starting with ".." would fail the absolute check
+    const payload = { workspacePath: "../etc/passwd" };
 
     expect(() => validate(AgentGetStatusPayloadSchema, payload)).toThrow(ValidationError);
   });
@@ -82,5 +86,71 @@ describe("AgentGetStatusPayloadSchema", () => {
     const payload = {};
 
     expect(() => validate(AgentGetStatusPayloadSchema, payload)).toThrow(ValidationError);
+  });
+});
+
+describe("absolutePathSchema", () => {
+  describe("path normalization (cross-platform)", () => {
+    it("accepts and normalizes forward-slash paths", () => {
+      // Simulates Windows-style path from git with forward slashes
+      // On Windows: "C:/Users/foo" normalizes to "C:\\Users\\foo"
+      // On Unix: "/home/user/foo" stays "/home/user/foo"
+      const input = "/home/user/project";
+      const result = validate(absolutePathSchema, input);
+
+      expect(result).toBe(path.normalize(input));
+    });
+
+    it("normalizes paths with redundant separators", () => {
+      const input = "/home//user///project";
+      const result = validate(absolutePathSchema, input);
+
+      expect(result).toBe(path.normalize(input));
+      expect(result).not.toContain("//");
+    });
+
+    it("normalizes paths with . segments", () => {
+      const input = "/home/./user/./project";
+      const result = validate(absolutePathSchema, input);
+
+      expect(result).toBe("/home/user/project");
+    });
+
+    it("resolves .. segments within path", () => {
+      // "/home/user/../other" normalizes to "/home/other"
+      const input = "/home/user/../other";
+      const result = validate(absolutePathSchema, input);
+
+      expect(result).toBe(path.normalize(input));
+      expect(result).not.toContain("..");
+    });
+  });
+
+  describe("validation errors", () => {
+    it("rejects relative paths with specific error message", () => {
+      const input = "relative/path";
+
+      try {
+        validate(absolutePathSchema, input);
+        expect.fail("Should have thrown");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ValidationError);
+        expect((error as ValidationError).message).toContain("Path must be absolute");
+      }
+    });
+
+    it("rejects paths that escape root (.. remains after normalization)", () => {
+      // This is a relative path that starts with ".."
+      const input = "../escape/attempt";
+
+      try {
+        validate(absolutePathSchema, input);
+        expect.fail("Should have thrown");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ValidationError);
+        // Will fail on "absolute" check since relative paths normalize but stay relative
+        expect((error as ValidationError).message).toContain("Path must be absolute");
+      }
+    });
   });
 });

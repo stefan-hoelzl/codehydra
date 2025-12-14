@@ -71,7 +71,10 @@ export class SimpleGitClient implements IGitClient {
 
         for (const line of lines) {
           if (line.startsWith("worktree ")) {
-            worktreePath = line.substring("worktree ".length);
+            // Normalize path for cross-platform consistency.
+            // Git on Windows outputs forward slashes (C:/Users/...),
+            // but Node.js path.normalize() converts to backslashes.
+            worktreePath = path.normalize(line.substring("worktree ".length));
           } else if (line.startsWith("branch ")) {
             // Branch format is "refs/heads/branch-name"
             const ref = line.substring("branch ".length);

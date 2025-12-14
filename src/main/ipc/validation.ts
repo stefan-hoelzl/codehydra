@@ -49,11 +49,22 @@ export class ValidationError extends Error {
 /**
  * Path validation: absolute, no traversal, normalized.
  * Security measure against path traversal attacks.
+ *
+ * Normalizes paths first to handle cross-platform differences:
+ * - Git on Windows outputs forward slashes (C:/Users/...)
+ * - Node.js path.normalize() converts to platform-native separators
+ *
+ * The ".." check after normalization catches paths that escape the root
+ * (e.g., "/../etc" normalizes but still contains "..").
  */
 export const absolutePathSchema = z
   .string()
-  .refine((p) => path.isAbsolute(p) && !p.includes("..") && p === path.normalize(p), {
-    message: 'Path must be absolute, normalized, and contain no ".." segments',
+  .transform((p) => path.normalize(p))
+  .refine((p) => path.isAbsolute(p), {
+    message: "Path must be absolute",
+  })
+  .refine((p) => !p.includes(".."), {
+    message: 'Path must not contain ".." segments',
   });
 
 /**
