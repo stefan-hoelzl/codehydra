@@ -6,6 +6,17 @@
 
   let { idleCount, busyCount }: AgentStatusIndicatorProps = $props();
 
+  // Pulse animation timing - single source of truth
+  const PULSE_DURATION_MS = 1500;
+  // Recalculate sync offset when pulsing starts to synchronize all pulsing indicators
+  let pulseDelay = $state(0);
+
+  $effect(() => {
+    if (isPulsing) {
+      pulseDelay = -(performance.now() % PULSE_DURATION_MS);
+    }
+  });
+
   // Derive status type from counts
   const status = $derived.by(() => {
     if (idleCount === 0 && busyCount === 0) return "none";
@@ -71,6 +82,8 @@
 <div
   class="indicator indicator--{status}"
   class:indicator--pulsing={isPulsing}
+  style:--pulse-delay="{pulseDelay}ms"
+  style:--pulse-duration="{PULSE_DURATION_MS}ms"
   role="status"
   aria-live="polite"
   aria-label={statusText}
@@ -123,9 +136,20 @@
     background: linear-gradient(to bottom, var(--ch-agent-busy) 50%, var(--ch-agent-idle) 50%);
   }
 
-  /* Pulse animation for busy and mixed states - uses global ch-pulse keyframes */
+  /* Synchronized pulse animation for busy and mixed states */
+  @keyframes ch-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
   .indicator--pulsing {
-    animation: ch-pulse 1.5s ease-in-out infinite;
+    animation: ch-pulse var(--pulse-duration) ease-in-out infinite;
+    animation-delay: var(--pulse-delay);
   }
 
   /* Respect reduced motion preference */
