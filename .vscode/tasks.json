@@ -18,7 +18,7 @@
       "label": "build",
       "type": "npm",
       "script": "build",
-      "problemMatcher": ["$tsc"],
+      "problemMatcher": [],
       "dependsOn": ["install"],
       "runOptions": {
         "runOn": "folderOpen"
