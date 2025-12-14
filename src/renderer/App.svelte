@@ -140,7 +140,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeyDown} onkeyup={handleKeyUp} onblur={handleWindowBlur} />
+<svelte:window onkeydowncapture={handleKeyDown} onkeyup={handleKeyUp} onblur={handleWindowBlur} />
 
 <!-- Screen reader announcements for mode transitions -->
 <div class="ch-visually-hidden" aria-live="polite" aria-atomic="true">
