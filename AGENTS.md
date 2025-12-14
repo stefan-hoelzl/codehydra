@@ -53,39 +53,18 @@ For GPU optimization, workspace views use **detachment** instead of zero-bounds 
 - Views start **detached** (not in contentView) with **URL not loaded** (lazy loading)
 - On first activation: URL is loaded, view is attached to contentView
 - On subsequent activations: view is attached (URL already loaded)
-- On deactivation: view is detached (removed from contentView), then throttled (if enabled)
+- On deactivation: view is detached (removed from contentView)
 - **Attach-before-detach**: New view is attached BEFORE old view is detached for visual continuity
 
 **Rationale**: With >5 workspaces, zero-bounds hiding still consumed GPU resources. Detaching views entirely eliminates GPU usage for inactive workspaces.
-
-## GPU Throttling
-
-For additional GPU memory reduction, inactive views can be **throttled** via `CODEHYDRA_WORKSPACE_THROTTLING`:
-
-| Level   | setBackgroundThrottling | visibilitychange | WebGL Context Loss | Use Case                        |
-| ------- | ----------------------- | ---------------- | ------------------ | ------------------------------- |
-| `off`   | No                      | No               | No                 | Default - stable systems        |
-| `basic` | Yes                     | No               | No                 | Reduce timer/animation activity |
-| `full`  | Yes                     | Yes              | Yes                | Maximum GPU memory reduction    |
-
-**Environment variable**: `CODEHYDRA_WORKSPACE_THROTTLING=off|basic|full`
-
-**Best-effort note**: `setBackgroundThrottling` primarily affects timers and `requestAnimationFrame` - it's best-effort for GPU memory reduction, not a guarantee. The WebGL context loss in `full` mode is what actually releases GPU memory.
-
-**Timing**:
-
-- **Throttle**: Fire-and-forget after detach (view already hidden)
-- **Unthrottle**: Fire-and-forget after attach (restore in background)
-- **Cancellation**: New throttle/unthrottle cancels in-flight operation via AbortController
 
 ## GPU Troubleshooting
 
 ### Environment Variables
 
-| Variable                         | Values                 | Description                       |
-| -------------------------------- | ---------------------- | --------------------------------- |
-| `CODEHYDRA_WORKSPACE_THROTTLING` | `off`, `basic`, `full` | Throttle level for inactive views |
-| `CODEHYDRA_ELECTRON_FLAGS`       | Space-separated flags  | Electron command-line switches    |
+| Variable                   | Values                | Description                    |
+| -------------------------- | --------------------- | ------------------------------ |
+| `CODEHYDRA_ELECTRON_FLAGS` | Space-separated flags | Electron command-line switches |
 
 ### Common Electron Flags for GPU Issues
 
@@ -107,19 +86,13 @@ CODEHYDRA_ELECTRON_FLAGS="--disable-gpu --disable-software-rasterizer"
 
 ### Troubleshooting Steps
 
-1. **Try throttling first** (least impact):
-
-   ```bash
-   CODEHYDRA_WORKSPACE_THROTTLING=full npm run dev
-   ```
-
-2. **If still crashing, disable GPU**:
+1. **Disable GPU** (most common fix):
 
    ```bash
    CODEHYDRA_ELECTRON_FLAGS="--disable-gpu" npm run dev
    ```
 
-3. **For WebGL-specific crashes**:
+2. **For WebGL-specific crashes**:
    ```bash
    CODEHYDRA_ELECTRON_FLAGS="--use-gl=swiftshader" npm run dev
    ```

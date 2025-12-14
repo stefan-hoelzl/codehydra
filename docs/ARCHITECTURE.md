@@ -119,36 +119,6 @@ Discovery finds worktrees in ANY location; creation only in managed location.
 - **Detached views** retain their VS Code state (no reload when shown again)
 - **Detachment** (vs zero-bounds) reduces GPU usage when many workspaces are open
 - **Lazy URL loading** defers resource usage until workspace is first activated
-- **Throttling** (optional) further reduces GPU memory via `CODEHYDRA_WORKSPACE_THROTTLING`
-
-### Throttling State Machine
-
-When `CODEHYDRA_WORKSPACE_THROTTLING` is set to `basic` or `full`:
-
-```
-           ┌──────────────────────────────────────────────────────────┐
-           │                                                           │
-   ACTIVE ──(detach)──► DETACHED ──(throttle async)──► THROTTLED      │
-     ▲                                                      │          │
-     │                                                      │          │
-     └────────(unthrottle async)──────(attach)──────────────┘          │
-                                                                       │
-           Note: Throttling happens AFTER detachment (fire-and-forget) │
-           Note: Unthrottling happens AFTER attachment (fire-and-forget)
-           └───────────────────────────────────────────────────────────┘
-```
-
-**Throttle Levels:**
-
-| Level   | Actions                                                         |
-| ------- | --------------------------------------------------------------- |
-| `off`   | No throttling (default)                                         |
-| `basic` | `setBackgroundThrottling(true)` + `visibilitychange` dispatch   |
-| `full`  | Basic + WebGL context loss (`WEBGL_lose_context.loseContext()`) |
-
-**Race Condition Prevention:**
-
-Each view tracks in-flight throttle operations via `AbortController`. When a new operation starts, any previous operation for the same view is cancelled. This prevents race conditions during rapid workspace switching.
 
 ### UI Layer State Machine
 

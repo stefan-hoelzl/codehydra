@@ -32,12 +32,71 @@ import { registerAllHandlers, createSetupRetryHandler, createSetupQuitHandler } 
 import { IpcChannels, type SetupProgress, type SetupErrorPayload } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
-import { applyElectronFlags } from "./throttling";
+
+/**
+ * Parses Electron command-line flags from a string.
+ * @param flags - Space-separated flags string (e.g., "--disable-gpu --use-gl=swiftshader")
+ * @returns Array of parsed flags
+ * @throws Error if quotes are detected (not supported)
+ */
+function parseElectronFlags(flags: string | undefined): { name: string; value?: string }[] {
+  if (!flags || !flags.trim()) {
+    return [];
+  }
+
+  if (flags.includes('"') || flags.includes("'")) {
+    throw new Error(
+      "Quoted values are not supported in CODEHYDRA_ELECTRON_FLAGS. " +
+        'Use --flag=value instead of --flag="value".'
+    );
+  }
+
+  const result: { name: string; value?: string }[] = [];
+  const parts = flags.trim().split(/\s+/);
+
+  for (const part of parts) {
+    const withoutDashes = part.replace(/^--?/, "");
+    const eqIndex = withoutDashes.indexOf("=");
+    if (eqIndex !== -1) {
+      result.push({
+        name: withoutDashes.substring(0, eqIndex),
+        value: withoutDashes.substring(eqIndex + 1),
+      });
+    } else {
+      result.push({ name: withoutDashes });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Applies Electron command-line flags from environment variable.
+ * Must be called BEFORE app.whenReady().
+ *
+ * Environment variable: CODEHYDRA_ELECTRON_FLAGS
+ * Example: "--disable-gpu --use-gl=swiftshader"
+ */
+function applyElectronFlags(): void {
+  const flags = process.env.CODEHYDRA_ELECTRON_FLAGS;
+  if (!flags) {
+    return;
+  }
+
+  const parsed = parseElectronFlags(flags);
+
+  for (const flag of parsed) {
+    if (flag.value !== undefined) {
+      app.commandLine.appendSwitch(flag.name, flag.value);
+    } else {
+      app.commandLine.appendSwitch(flag.name);
+    }
+  }
+}
 
 // Apply Electron command-line flags IMMEDIATELY after imports.
 // CRITICAL: Must be before app.whenReady() and any code that might trigger GPU initialization.
-// This replaces the old CODEHYDRA_DISABLE_HARDWARE_ACCELERATION handling.
-applyElectronFlags(app);
+applyElectronFlags();
 
 const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
