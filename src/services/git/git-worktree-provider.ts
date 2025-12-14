@@ -43,6 +43,22 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
   }
 
   /**
+   * Check if a branch is currently checked out in any worktree.
+   * @param branchName Name of the branch to check
+   * @returns Object with checkedOut status and worktree path if found
+   */
+  private async isBranchCheckedOut(
+    branchName: string
+  ): Promise<{ checkedOut: boolean; worktreePath: string | null }> {
+    const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
+    const worktree = worktrees.find((wt) => wt.branch === branchName);
+    return {
+      checkedOut: !!worktree,
+      worktreePath: worktree?.path ?? null,
+    };
+  }
+
+  /**
    * Factory method to create a GitWorktreeProvider.
    * Validates that the path is an absolute path to a git repository.
    *
@@ -134,23 +150,50 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     // Compute the worktree path using the configured workspaces directory
     const worktreePath = path.join(this.workspacesDir, sanitizedName);
 
-    // Create the branch
-    try {
-      await this.gitClient.createBranch(this.projectRoot, name, baseBranch);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unknown error creating branch";
-      throw new WorkspaceError(`Failed to create branch: ${message}`);
+    // Check if branch already exists (local branches only)
+    const branches = await this.gitClient.listBranches(this.projectRoot);
+    const branchExists = branches.some((b) => b.name === name && !b.isRemote);
+
+    let createdBranch = false;
+
+    if (branchExists) {
+      // Branch exists - baseBranch must match the branch name
+      if (baseBranch !== name) {
+        throw new WorkspaceError(
+          `Branch '${name}' already exists. To create a workspace for it, select '${name}' as the base branch.`
+        );
+      }
+
+      // Check if branch is already checked out in a worktree
+      const { checkedOut, worktreePath: existingPath } = await this.isBranchCheckedOut(name);
+      if (checkedOut) {
+        throw new WorkspaceError(
+          `Branch '${name}' is already checked out in worktree at '${existingPath}'`
+        );
+      }
+      // Branch exists and not checked out - will use existing branch
+    } else {
+      // Branch doesn't exist - create it
+      try {
+        await this.gitClient.createBranch(this.projectRoot, name, baseBranch);
+        createdBranch = true;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error creating branch";
+        throw new WorkspaceError(`Failed to create branch: ${message}`);
+      }
     }
 
     // Create the worktree
     try {
       await this.gitClient.addWorktree(this.projectRoot, worktreePath, name);
     } catch (error: unknown) {
-      // Rollback: delete the branch we just created
-      try {
-        await this.gitClient.deleteBranch(this.projectRoot, name);
-      } catch {
-        // Ignore rollback errors
+      // Rollback: only delete branch if we created it
+      if (createdBranch) {
+        try {
+          await this.gitClient.deleteBranch(this.projectRoot, name);
+        } catch {
+          // Ignore rollback errors
+        }
       }
 
       const message = error instanceof Error ? error.message : "Unknown error creating worktree";

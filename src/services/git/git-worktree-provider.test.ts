@@ -407,6 +407,171 @@ describe("GitWorktreeProvider", () => {
 
       await expect(provider.createWorkspace("feature-x", "main")).rejects.toThrow(WorkspaceError);
     });
+
+    it("creates workspace using existing branch when baseBranch matches branch name", async () => {
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "existing-branch", isRemote: false },
+      ];
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      ];
+      const mockClient = createMockGitClient({
+        listBranches: vi.fn().mockResolvedValue(branches),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const workspace = await provider.createWorkspace("existing-branch", "existing-branch");
+
+      expect(workspace.name).toBe("existing-branch");
+      expect(workspace.branch).toBe("existing-branch");
+      // Should NOT create branch - it already exists
+      expect(mockClient.createBranch).not.toHaveBeenCalled();
+      // Should still create worktree
+      expect(mockClient.addWorktree).toHaveBeenCalled();
+    });
+
+    it("throws WorkspaceError when branch exists but baseBranch differs", async () => {
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "existing-branch", isRemote: false },
+      ];
+      const mockClient = createMockGitClient({
+        listBranches: vi.fn().mockResolvedValue(branches),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await expect(provider.createWorkspace("existing-branch", "main")).rejects.toThrow(
+        WorkspaceError
+      );
+      await expect(provider.createWorkspace("existing-branch", "main")).rejects.toThrow(
+        /already exists.*select 'existing-branch' as the base branch/
+      );
+    });
+
+    it("throws WorkspaceError when branch is already checked out in worktree", async () => {
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "checked-out-branch", isRemote: false },
+      ];
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "existing-workspace",
+          path: "/data/workspaces/existing-workspace",
+          branch: "checked-out-branch",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listBranches: vi.fn().mockResolvedValue(branches),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await expect(
+        provider.createWorkspace("checked-out-branch", "checked-out-branch")
+      ).rejects.toThrow(WorkspaceError);
+      await expect(
+        provider.createWorkspace("checked-out-branch", "checked-out-branch")
+      ).rejects.toThrow(/already checked out.*\/data\/workspaces\/existing-workspace/);
+    });
+
+    it("throws WorkspaceError when branch is checked out in main worktree", async () => {
+      const branches: BranchInfo[] = [{ name: "main", isRemote: false }];
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      ];
+      const mockClient = createMockGitClient({
+        listBranches: vi.fn().mockResolvedValue(branches),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await expect(provider.createWorkspace("main", "main")).rejects.toThrow(WorkspaceError);
+      await expect(provider.createWorkspace("main", "main")).rejects.toThrow(
+        /already checked out.*\/home\/user\/projects\/my-repo/
+      );
+    });
+
+    it("does not rollback branch when worktree creation fails for existing branch", async () => {
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "existing-branch", isRemote: false },
+      ];
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      ];
+      const mockClient = createMockGitClient({
+        listBranches: vi.fn().mockResolvedValue(branches),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        addWorktree: vi.fn().mockRejectedValue(new Error("Worktree creation failed")),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await expect(
+        provider.createWorkspace("existing-branch", "existing-branch")
+      ).rejects.toThrow();
+
+      // Should NOT delete existing branch
+      expect(mockClient.deleteBranch).not.toHaveBeenCalled();
+    });
+
+    it("ignores remote branches when checking for existing branch", async () => {
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "origin/feature-x", isRemote: true }, // Remote branch with same name
+      ];
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      ];
+      const mockClient = createMockGitClient({
+        listBranches: vi.fn().mockResolvedValue(branches),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      // Should create new local branch even though remote exists
+      const workspace = await provider.createWorkspace("origin/feature-x", "main");
+
+      expect(workspace.name).toBe("origin/feature-x");
+      expect(mockClient.createBranch).toHaveBeenCalledWith(
+        PROJECT_ROOT,
+        "origin/feature-x",
+        "main"
+      );
+    });
   });
 
   describe("removeWorkspace", () => {
