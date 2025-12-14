@@ -275,10 +275,11 @@ describe("Integration tests", () => {
         expect(screen.getByText("Create Workspace")).toBeInTheDocument();
       });
 
-      // Verify the dialog has a name input and branch dropdown
+      // Verify the dialog has project dropdown, name input, and branch dropdown
       // Note: vscode-textfield is a web component, so we query by id
       expect(document.getElementById("workspace-name")).toBeInTheDocument();
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      // Should have 2 comboboxes: project dropdown and branch dropdown
+      expect(screen.getAllByRole("combobox")).toHaveLength(2);
 
       // Simulate workspace:created event (as if creation succeeded via IPC)
       const newWorkspace = createWorkspace("feature-x", "/test/my-project");
@@ -446,10 +447,11 @@ describe("Integration tests", () => {
         expect(screen.getByRole("dialog")).toBeInTheDocument();
       });
 
-      // Verify dialog opened with correct context (has name input and branch dropdown)
+      // Verify dialog opened with correct context (has project dropdown, name input, and branch dropdown)
       // Note: vscode-textfield is a web component, so we query by id
       expect(document.getElementById("workspace-name")).toBeInTheDocument();
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      // Should have 2 comboboxes: project dropdown and branch dropdown
+      expect(screen.getAllByRole("combobox")).toHaveLength(2);
     });
 
     it("removeWorkspace rejects → error shown in dialog, form re-enabled", async () => {

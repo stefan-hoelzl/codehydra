@@ -3,6 +3,8 @@
  * Manages the state of dialogs (create workspace, remove workspace).
  */
 
+import { activeProject, projects } from "./projects.svelte.js";
+
 // ============ Types ============
 
 export type DialogState =
@@ -26,9 +28,12 @@ export const dialogState = {
 
 /**
  * Open the create workspace dialog.
- * @param projectPath - Path of the project to create workspace in
+ * @param defaultProjectPath - Optional path of the project to create workspace in.
+ *   Falls back to activeProject, then first project, then empty string.
  */
-export function openCreateDialog(projectPath: string): void {
+export function openCreateDialog(defaultProjectPath?: string): void {
+  const projectPath =
+    defaultProjectPath ?? activeProject.value?.path ?? projects.value[0]?.path ?? "";
   _dialogState = { type: "create", projectPath };
 }
 

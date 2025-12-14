@@ -1,6 +1,7 @@
 <script lang="ts">
   import Dialog from "./Dialog.svelte";
   import BranchDropdown from "./BranchDropdown.svelte";
+  import ProjectDropdown from "./ProjectDropdown.svelte";
   import { createWorkspace, type Workspace } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { projects } from "$lib/stores/projects.svelte.js";
@@ -13,6 +14,11 @@
   let { open, projectPath }: CreateWorkspaceDialogProps = $props();
 
   // Form state
+  // Track user's project selection, null means use the prop value
+  let userSelectedProject = $state<string | null>(null);
+  // Effective selected project: user selection or fall back to prop
+  const selectedProject = $derived(userSelectedProject ?? projectPath);
+
   let name = $state("");
   let selectedBranch = $state("");
   let nameError = $state<string | null>(null);
@@ -20,10 +26,19 @@
   let isSubmitting = $state(false);
   let touched = $state(false);
   let createButtonRef: HTMLElement | undefined = $state();
+  let nameInputRef: HTMLElement | undefined = $state();
 
-  // Get existing workspace names for duplicate validation
+  // Focus name input when dialog opens (with delay to ensure DOM is ready)
+  $effect(() => {
+    if (open && nameInputRef) {
+      // Use setTimeout to ensure focus happens after all initializations
+      setTimeout(() => nameInputRef?.focus(), 0);
+    }
+  });
+
+  // Get existing workspace names for duplicate validation (uses selectedProject)
   const existingNames = $derived.by(() => {
-    const project = projects.value.find((p) => p.path === projectPath);
+    const project = projects.value.find((p) => p.path === selectedProject);
     return project?.workspaces.map((w: Workspace) => w.name.toLowerCase()) ?? [];
   });
 
@@ -45,6 +60,17 @@
   const isFormValid = $derived(
     name.trim() !== "" && selectedBranch !== "" && validateName(name) === null
   );
+
+  // Handle project selection - clears branch and re-validates name
+  function handleProjectSelect(path: string): void {
+    userSelectedProject = path;
+    // Clear branch selection since we're switching projects
+    selectedBranch = "";
+    // Re-validate name when project changes if user has already interacted
+    if (touched) {
+      nameError = validateName(name);
+    }
+  }
 
   // Handle name input
   function handleNameInput(event: Event): void {
@@ -76,7 +102,7 @@
     isSubmitting = true;
 
     try {
-      await createWorkspace(projectPath, name, selectedBranch);
+      await createWorkspace(selectedProject, name, selectedBranch);
       closeDialog();
     } catch (error) {
       submitError = error instanceof Error ? error.message : "Failed to create workspace";
@@ -102,8 +128,18 @@
 
   {#snippet content()}
     <div class="form-field">
+      <label for="project-select">Project</label>
+      <ProjectDropdown
+        value={selectedProject}
+        onSelect={handleProjectSelect}
+        disabled={isSubmitting}
+      />
+    </div>
+
+    <div class="form-field">
       <label for="workspace-name">Name</label>
       <vscode-textfield
+        bind:this={nameInputRef}
         id="workspace-name"
         value={name}
         oninput={handleNameInput}
@@ -122,7 +158,7 @@
     <div class="form-field">
       <label for="branch-select">Base Branch</label>
       <BranchDropdown
-        {projectPath}
+        projectPath={selectedProject}
         value={selectedBranch}
         onSelect={handleBranchSelect}
         disabled={isSubmitting}

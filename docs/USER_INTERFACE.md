@@ -246,11 +246,12 @@ They can click "Open Project" to try again.
 
 1. Click [+] on project row
 2. Create dialog opens
-3. Enter workspace name (validated in real-time)
-4. Select base branch from dropdown (the branch to create new worktree from)
-5. Click OK
-6. Git worktree created in managed location (NOT in main directory)
-7. New workspace becomes active
+3. Select target project from dropdown (defaults to current workspace's project)
+4. Enter workspace name (validated in real-time against selected project's workspaces)
+5. Select base branch from dropdown (the branch to create new worktree from)
+6. Click OK
+7. Git worktree created in managed location (NOT in main directory)
+8. New workspace becomes active
 
 **Workspace name validation rules:**
 
@@ -267,6 +268,9 @@ Initial (loading branches):
 ```
 ┌──────────────────────────────────────────┐
 │  Create Workspace                        │
+│                                          │
+│  Project                                 │
+│  [my-project_______________________▼]    │  ← Defaults to active project
 │                                          │
 │  Name                                    │
 │  [________________________________]      │
@@ -287,9 +291,14 @@ Validation error:
 │  ⚠ Must start with letter or number     │
 ```
 
+Note: Name uniqueness is validated against the selected project's existing workspaces.
+
 Valid state:
 
 ```
+│  Project                                 │
+│  [my-project_______________________▼]    │
+│                                          │
 │  Name                                    │
 │  [my-feature__________________________]  │
 │                                          │

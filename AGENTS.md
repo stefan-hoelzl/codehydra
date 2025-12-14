@@ -332,6 +332,79 @@ dropdownPosition = {
 
 Remember to recalculate position on window resize when the dropdown is open.
 
+### FilterableDropdown Shared Component
+
+`FilterableDropdown` is a reusable combobox component with filtering, keyboard navigation, and custom rendering support.
+
+**Features:**
+
+- Native `<input type="text">` for filtering (documented exception - `<vscode-textfield>` doesn't support combobox pattern)
+- Debounced filtering (200ms default)
+- Keyboard navigation (↑↓ navigate, Enter select, Escape close, Tab select + move focus)
+- Fixed positioning to escape container overflow
+- ARIA combobox accessibility pattern
+- Snippet slot for custom option rendering
+
+**Props:**
+
+```typescript
+interface FilterableDropdownProps {
+  options: DropdownOption[];
+  value: string;
+  onSelect: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  filterOption: (option: DropdownOption, filterLowercase: string) => boolean;
+  id?: string;
+  debounceMs?: number;
+  optionSnippet?: Snippet<[option: DropdownOption, highlighted: boolean]>;
+}
+
+type DropdownOption = {
+  type: "option" | "header";
+  label: string;
+  value: string;
+};
+```
+
+**Wrapper Component Pattern:**
+
+Domain-specific dropdowns (BranchDropdown, ProjectDropdown) wrap FilterableDropdown to handle data fetching and transformation:
+
+```svelte
+<!-- BranchDropdown.svelte - wraps FilterableDropdown -->
+<script>
+  // 1. Fetch data (async loading, error handling)
+  // 2. Transform to DropdownOption[] (add headers, normalize values)
+  // 3. Provide custom filterOption function
+  // 4. Optionally provide custom optionSnippet for rendering
+</script>
+
+<FilterableDropdown
+  options={transformedOptions}
+  {value}
+  {onSelect}
+  filterOption={filterBranch}
+  optionSnippet={branchOptionSnippet}
+/>
+```
+
+**Header Options (for grouping):**
+
+Headers are non-selectable options used for visual grouping:
+
+```typescript
+const options: DropdownOption[] = [
+  { type: "header", label: "Local Branches", value: "__header_local__" },
+  { type: "option", label: "main", value: "main" },
+  { type: "header", label: "Remote Branches", value: "__header_remote__" },
+  { type: "option", label: "origin/main", value: "origin/main" },
+];
+```
+
+- Headers are skipped during keyboard navigation
+- Headers should be rendered differently (non-interactive styling) via `optionSnippet`
+
 ## CSS Theming Patterns
 
 ### Variable Naming Convention
