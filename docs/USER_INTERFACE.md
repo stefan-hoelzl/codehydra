@@ -2,6 +2,24 @@
 
 > **Implementation Note (Phase 4)**: The UI layer has been implemented with Svelte 5 runes and @vscode-elements. The Remove Workspace dialog uses a Cancel/OK pattern with a "Delete branch" checkbox, which differs slightly from some original specifications that showed three buttons.
 
+## VSCode Elements Usage
+
+The UI uses `@vscode-elements/elements` for consistent VS Code styling:
+
+| Component              | vscode-element Used      | Location                                                 |
+| ---------------------- | ------------------------ | -------------------------------------------------------- |
+| Dialog buttons         | `<vscode-button>`        | CreateWorkspaceDialog, RemoveWorkspaceDialog, SetupError |
+| Text input             | `<vscode-textfield>`     | CreateWorkspaceDialog (Name field)                       |
+| Checkbox               | `<vscode-checkbox>`      | RemoveWorkspaceDialog (Delete branch)                    |
+| Progress bar           | `<vscode-progress-bar>`  | SetupScreen                                              |
+| Loading spinner        | `<vscode-progress-ring>` | Sidebar (while loading)                                  |
+| Shortcut badges        | `<vscode-badge>`         | Sidebar, ShortcutOverlay                                 |
+| Project dividers       | `<vscode-divider>`       | Sidebar (between projects)                               |
+| Form validation helper | `<vscode-form-helper>`   | CreateWorkspaceDialog                                    |
+| Open Project button    | `<vscode-button>`        | Sidebar                                                  |
+
+**Exception**: BranchDropdown uses a custom implementation with native `<input>` for filtering and grouped options (Local/Remote branches), as `<vscode-single-select>` doesn't support these features.
+
 ## Application Layout
 
 ```

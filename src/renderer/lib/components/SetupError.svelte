@@ -13,7 +13,7 @@
 
   let { errorMessage, onretry, onquit }: Props = $props();
 
-  let retryButtonRef: HTMLButtonElement | undefined = $state();
+  let retryButtonRef: HTMLElement | undefined = $state();
 
   onMount(() => {
     // Auto-focus Retry button when error screen appears
@@ -42,11 +42,10 @@
     <p class="error-details">Error: {errorMessage}</p>
   </div>
 
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="button-group">
-    <button bind:this={retryButtonRef} class="button button--primary" onclick={() => onretry?.()}>
-      Retry
-    </button>
-    <button class="button button--secondary" onclick={() => onquit?.()}> Quit </button>
+    <vscode-button bind:this={retryButtonRef} onclick={() => onretry?.()}>Retry</vscode-button>
+    <vscode-button secondary={true} onclick={() => onquit?.()}>Quit</vscode-button>
   </div>
 </div>
 
@@ -90,43 +89,5 @@
   .button-group {
     display: flex;
     gap: 1rem;
-  }
-
-  .button {
-    padding: 0.5rem 1.5rem;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: background-color 0.15s ease;
-  }
-
-  .button--primary {
-    background-color: var(--ch-button-bg);
-    color: var(--ch-button-fg);
-  }
-
-  .button--primary:hover {
-    background-color: var(--ch-button-hover-bg);
-  }
-
-  .button--primary:focus {
-    outline: 2px solid var(--ch-focus-border);
-    outline-offset: 2px;
-  }
-
-  .button--secondary {
-    background-color: transparent;
-    color: var(--ch-foreground);
-    border: 1px solid var(--ch-border);
-  }
-
-  .button--secondary:hover {
-    background-color: var(--ch-input-bg);
-  }
-
-  .button--secondary:focus {
-    outline: 2px solid var(--ch-focus-border);
-    outline-offset: 2px;
   }
 </style>

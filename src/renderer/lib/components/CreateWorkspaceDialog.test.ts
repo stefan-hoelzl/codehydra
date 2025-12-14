@@ -51,6 +51,17 @@ vi.mock("$lib/stores/dialogs.svelte.js", () => ({
 import CreateWorkspaceDialog from "./CreateWorkspaceDialog.svelte";
 import { createWorkspace } from "$lib/api";
 
+/**
+ * Helper to get the name input (vscode-textfield).
+ * Since vscode-textfield is a web component, getByLabelText doesn't work.
+ * We query by ID instead.
+ */
+function getNameInput(): HTMLElement {
+  const input = document.getElementById("workspace-name");
+  if (!input) throw new Error("Name input not found");
+  return input;
+}
+
 describe("CreateWorkspaceDialog component", () => {
   const mockProject: Project = {
     path: "/test/project" as ProjectPath,
@@ -93,7 +104,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+      expect(getNameInput()).toBeInTheDocument();
       expect(screen.getByRole("combobox")).toBeInTheDocument();
     });
 
@@ -101,7 +112,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       expect(nameInput).toHaveAttribute("aria-describedby");
     });
 
@@ -109,7 +120,8 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      // Use helper since vscode-textfield is a web component and getByLabelText doesn't work
+      const nameInput = getNameInput();
       expect(nameInput).toHaveFocus();
     });
   });
@@ -119,7 +131,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "" } });
       await fireEvent.blur(nameInput);
 
@@ -130,7 +142,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "feature/branch" } });
       await fireEvent.blur(nameInput);
 
@@ -141,7 +153,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "feature\\branch" } });
       await fireEvent.blur(nameInput);
 
@@ -152,7 +164,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "feature..branch" } });
       await fireEvent.blur(nameInput);
 
@@ -163,7 +175,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       const longName = "a".repeat(101);
       await fireEvent.input(nameInput, { target: { value: longName } });
       await fireEvent.blur(nameInput);
@@ -175,7 +187,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "existing" } });
       await fireEvent.blur(nameInput);
 
@@ -186,7 +198,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "EXISTING" } });
       await fireEvent.blur(nameInput);
 
@@ -197,7 +209,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
 
       // First enter invalid name
       await fireEvent.input(nameInput, { target: { value: "" } });
@@ -214,13 +226,13 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "my-feature_branch" } });
       await fireEvent.blur(nameInput);
 
-      // Should not show any validation error (the alert container exists but should be empty)
-      const errorMessage = screen.getByRole("alert");
-      expect(errorMessage.textContent).toBe("");
+      // Should not show any validation error (error helper only rendered when there's an error)
+      expect(screen.queryByText(/name is required/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/name cannot contain/i)).not.toBeInTheDocument();
     });
   });
 
@@ -248,7 +260,7 @@ describe("CreateWorkspaceDialog component", () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "valid-name" } });
 
       // Select a branch
@@ -271,7 +283,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "valid-name" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -298,7 +310,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "valid-name" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -326,7 +338,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "valid-name" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -349,7 +361,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "my-feature" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -371,7 +383,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "my-feature" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -439,7 +451,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "my-feature" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -466,7 +478,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "my-feature" } });
 
       const branchCombobox = screen.getByRole("combobox");
@@ -499,7 +511,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Fill valid form
-      const nameInput = screen.getByLabelText(/name/i);
+      const nameInput = getNameInput();
       await fireEvent.input(nameInput, { target: { value: "my-feature" } });
 
       const branchCombobox = screen.getByRole("combobox");

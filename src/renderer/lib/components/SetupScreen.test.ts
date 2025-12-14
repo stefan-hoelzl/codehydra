@@ -30,24 +30,29 @@ describe("SetupScreen component", () => {
   });
 
   describe("accessibility", () => {
-    it("has progressbar role", () => {
-      render(SetupScreen, { props: { currentStep: "Loading..." } });
+    it("renders vscode-progress-bar component", () => {
+      const { container } = render(SetupScreen, { props: { currentStep: "Loading..." } });
 
-      expect(screen.getByRole("progressbar")).toBeInTheDocument();
+      // Web components are queried by tag name since shadow DOM isn't accessible in JSDOM
+      const progressBar = container.querySelector("vscode-progress-bar");
+      expect(progressBar).toBeInTheDocument();
     });
 
-    it("has aria-busy attribute on progressbar", () => {
-      render(SetupScreen, { props: { currentStep: "Loading..." } });
+    it("has indeterminate property set on progress bar", () => {
+      const { container } = render(SetupScreen, { props: { currentStep: "Loading..." } });
 
-      const progressbar = screen.getByRole("progressbar");
-      expect(progressbar).toHaveAttribute("aria-busy", "true");
+      const progressBar = container.querySelector("vscode-progress-bar") as HTMLElement & {
+        indeterminate?: boolean;
+      };
+      // Svelte sets boolean props as JavaScript properties on web components
+      expect(progressBar?.indeterminate).toBe(true);
     });
 
     it("has aria-label for screen readers", () => {
-      render(SetupScreen, { props: { currentStep: "Loading..." } });
+      const { container } = render(SetupScreen, { props: { currentStep: "Loading..." } });
 
-      const progressbar = screen.getByRole("progressbar");
-      expect(progressbar).toHaveAttribute("aria-label", "Setting up VSCode");
+      const progressBar = container.querySelector("vscode-progress-bar");
+      expect(progressBar).toHaveAttribute("aria-label", "Setting up VSCode");
     });
 
     it("has aria-live on step message for progress announcements", () => {

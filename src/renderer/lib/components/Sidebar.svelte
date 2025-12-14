@@ -97,7 +97,8 @@
   <div class="sidebar-content">
     {#if loadingState === "loading"}
       <div class="loading-state" role="status">
-        <span class="loading-spinner">&#9673;</span> Loading projects...
+        <vscode-progress-ring class="loading-spinner"></vscode-progress-ring>
+        Loading projects...
       </div>
     {:else if loadingState === "error"}
       <div class="error-state" role="alert">
@@ -108,6 +109,9 @@
     {:else}
       <ul class="project-list">
         {#each sortedProjects as project, projectIndex (project.path)}
+          {#if projectIndex > 0}
+            <vscode-divider></vscode-divider>
+          {/if}
           <li class="project-item">
             <div class="project-header">
               <span class="project-name" title={project.path}>{project.name}</span>
@@ -154,13 +158,13 @@
                     onclick={() => onSwitchWorkspace(workspace.path)}
                   >
                     {#if shortcutModeActive}
-                      <span
-                        class="shortcut-index"
-                        class:shortcut-index--dimmed={displayIndex === null}
+                      <vscode-badge
+                        class="shortcut-badge"
+                        class:badge-dimmed={displayIndex === null}
                         aria-hidden="true"
                       >
                         {displayIndex ?? "·"}
-                      </span>
+                      </vscode-badge>
                     {/if}
                     {workspace.name}
                   </button>
@@ -186,18 +190,18 @@
     {/if}
   </div>
 
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="sidebar-footer">
-    <button
-      type="button"
+    <vscode-button
       class="open-project-btn"
       aria-label={"Open Project" + (shortcutModeActive ? " - Press O" : "")}
       onclick={onOpenProject}
     >
       {#if shortcutModeActive}
-        <span class="shortcut-index" aria-hidden="true">O</span>
+        <vscode-badge class="shortcut-badge" aria-hidden="true">O</vscode-badge>
       {/if}
       Open Project
-    </button>
+    </vscode-button>
   </div>
 </nav>
 
@@ -233,17 +237,8 @@
   }
 
   .loading-spinner {
-    animation: spin 1s linear infinite;
-    display: inline-block;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+    margin-right: 8px;
+    vertical-align: middle;
   }
 
   .error-state {
@@ -259,10 +254,6 @@
     list-style: none;
     padding: 0;
     margin: 0;
-  }
-
-  .project-item {
-    border-bottom: 1px solid var(--ch-input-border);
   }
 
   .project-header {
@@ -366,33 +357,13 @@
 
   .open-project-btn {
     width: 100%;
-    background: var(--ch-button-bg);
-    color: var(--ch-button-fg);
-    border: none;
-    padding: 8px 16px;
-    cursor: pointer;
-    border-radius: 2px;
   }
 
-  .open-project-btn:hover {
-    opacity: 0.9;
-  }
-
-  .shortcut-index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.25rem;
-    height: 1.25rem;
+  .shortcut-badge {
     margin-right: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--ch-button-fg);
-    background: var(--ch-button-bg);
-    border-radius: 2px;
   }
 
-  .shortcut-index--dimmed {
+  .badge-dimmed {
     opacity: 0.4;
   }
 </style>

@@ -190,6 +190,106 @@ This pattern is used when:
 2. Immediate UI response is more important than confirmation
 3. The renderer should not block on the main process
 
+## VSCode Elements Patterns
+
+### Component Usage
+
+All UI components MUST use `@vscode-elements/elements` instead of native HTML where a vscode-element equivalent exists:
+
+| Native HTML               | Use Instead              | When to Keep Native                                     |
+| ------------------------- | ------------------------ | ------------------------------------------------------- |
+| `<button>`                | `<vscode-button>`        | Never - always use vscode-button                        |
+| `<input type="text">`     | `<vscode-textfield>`     | Complex custom controls (e.g., combobox with filtering) |
+| `<input type="checkbox">` | `<vscode-checkbox>`      | Never - always use vscode-checkbox                      |
+| `<select>`                | `<vscode-single-select>` | Custom dropdowns with filtering/grouping                |
+| `<textarea>`              | `<vscode-textarea>`      | Never - always use vscode-textarea                      |
+| Custom spinner            | `<vscode-progress-ring>` | Never - always use progress-ring                        |
+| Custom progress bar       | `<vscode-progress-bar>`  | Complex custom visualizations                           |
+| CSS border separator      | `<vscode-divider>`       | When semantic divider not appropriate                   |
+| Button groups             | `<vscode-toolbar>`       | Non-linear layouts or hover-reveal conflicts            |
+| Indicator/label           | `<vscode-badge>`         | Complex styled indicators                               |
+
+### Event Handling in Svelte
+
+VSCode-elements support both standard DOM events and custom `vsc-*` events. Standard DOM events are simpler and recommended:
+
+```svelte
+<!-- Standard DOM events (recommended) -->
+<vscode-button onclick={handleClick}>Click me</vscode-button>
+<vscode-textfield value={myValue} oninput={(e) => (myValue = e.target.value)} />
+<vscode-checkbox checked={isChecked} onchange={(e) => (isChecked = e.target.checked)} />
+
+<!-- Custom vsc-* events (also available, use on: syntax) -->
+<vscode-textfield value={myValue} on:vsc-input={(e) => (myValue = e.target.value)} />
+<vscode-checkbox checked={isChecked} on:vsc-change={(e) => (isChecked = e.detail.checked)} />
+```
+
+**Note**: Standard events (`onclick`, `oninput`, `onchange`) bubble through web components and work reliably. Custom `vsc-*` events require Svelte's `on:` syntax.
+
+### Property Binding
+
+Web components don't support Svelte's `bind:value`. Use explicit property + event:
+
+```svelte
+<!-- WRONG: bind:value doesn't work with web components -->
+<vscode-textfield bind:value={name} />
+
+<!-- CORRECT: Set property and listen to event -->
+<vscode-textfield value={name} oninput={(e) => (name = e.target.value)} />
+```
+
+### Focus Management
+
+The dialog focus trap (`src/renderer/lib/utils/focus-trap.ts`) includes vscode-elements in its focusable selector. Tab navigation works automatically for:
+
+- `vscode-button`
+- `vscode-checkbox`
+- `vscode-textfield`
+- `vscode-textarea`
+- `vscode-single-select`
+
+For custom focus handling (e.g., focusing a specific element when dialog opens):
+
+```svelte
+<script>
+  let textfieldRef: HTMLElement;
+
+  $effect(() => {
+    if (open && textfieldRef) {
+      textfieldRef.focus();
+    }
+  });
+</script>
+
+<vscode-textfield bind:this={textfieldRef} value={name} oninput={...} />
+```
+
+### Exceptions
+
+The following components intentionally use native HTML:
+
+1. **BranchDropdown**: Uses native `<input>` + custom dropdown for filtering and grouped options (Local/Remote branches). `vscode-single-select` doesn't support these features.
+
+### Known Limitations
+
+1. **vscode-badge**: No built-in dimmed state. Use custom CSS: `.badge-dimmed { opacity: 0.4; }`
+2. **vscode-toolbar**: May conflict with hover-reveal patterns. Test and use custom grouping if needed.
+3. **vscode-button a11y warnings**: Svelte's a11y checks don't recognize `<vscode-button>` as interactive, producing false-positive warnings for `a11y_click_events_have_key_events` and `a11y_no_static_element_interactions`. These are safe to suppress with `svelte-ignore` comments, but require explicit user approval per project rules.
+
+### Importing
+
+vscode-elements are imported once via a setup module:
+
+```typescript
+// src/renderer/lib/vscode-elements-setup.ts
+import "@vscode-elements/elements/dist/bundled.js";
+
+// src/renderer/main.ts
+import "./lib/vscode-elements-setup.ts";
+```
+
+Components are then available globally as custom elements.
+
 ## UI Patterns
 
 ### Dropdown Selection with Mousedown

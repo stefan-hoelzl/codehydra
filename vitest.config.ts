@@ -6,10 +6,7 @@ import { resolve } from "path";
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],
   test: {
-    environment: "happy-dom",
-    include: ["src/**/*.{test,spec}.{js,ts}"],
     globals: true,
-    setupFiles: ["./src/test/setup.ts"],
     isolate: true,
     restoreMocks: true,
     clearMocks: true,
@@ -25,6 +22,34 @@ export default defineConfig({
         statements: 80,
       },
     },
+    // Split test environments using projects configuration (vitest 4.x)
+    projects: [
+      {
+        // Renderer tests: happy-dom environment with vscode-elements setup
+        extends: true,
+        test: {
+          name: "renderer",
+          environment: "happy-dom",
+          include: ["src/renderer/**/*.{test,spec}.{js,ts}"],
+          setupFiles: ["./src/test/setup.ts", "./src/test/setup-renderer.ts"],
+        },
+      },
+      {
+        // Node tests: main process and services
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: [
+            "src/main/**/*.{test,spec}.{js,ts}",
+            "src/services/**/*.{test,spec}.{js,ts}",
+            "src/shared/**/*.{test,spec}.{js,ts}",
+            "src/preload/**/*.{test,spec}.{js,ts}",
+          ],
+          setupFiles: ["./src/test/setup.ts"],
+        },
+      },
+    ],
   },
   resolve: {
     alias: {

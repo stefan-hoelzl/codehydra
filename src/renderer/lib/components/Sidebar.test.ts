@@ -218,10 +218,12 @@ describe("Sidebar component", () => {
     it("Open Project button triggers onOpenProject", async () => {
       const onOpenProject = vi.fn();
 
-      render(Sidebar, { props: { ...defaultProps, onOpenProject } });
+      const { container } = render(Sidebar, { props: { ...defaultProps, onOpenProject } });
 
-      const openButton = screen.getByRole("button", { name: /open project/i });
-      await fireEvent.click(openButton);
+      // vscode-button is a web component; query by class name
+      const openButton = container.querySelector(".open-project-btn");
+      expect(openButton).not.toBeNull();
+      await fireEvent.click(openButton!);
 
       expect(onOpenProject).toHaveBeenCalled();
     });
@@ -323,7 +325,8 @@ describe("Sidebar component", () => {
       // 11th workspace should show a dot
       const dot = screen.getByText("·");
       expect(dot).toBeInTheDocument();
-      expect(dot).toHaveClass("shortcut-index--dimmed");
+      // Using vscode-badge with .badge-dimmed class for unavailable shortcuts
+      expect(dot).toHaveClass("badge-dimmed");
     });
 
     it("should-have-aria-hidden-on-index-spans", () => {

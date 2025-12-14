@@ -276,7 +276,8 @@ describe("Integration tests", () => {
       });
 
       // Verify the dialog has a name input and branch dropdown
-      expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+      // Note: vscode-textfield is a web component, so we query by id
+      expect(document.getElementById("workspace-name")).toBeInTheDocument();
       expect(screen.getByRole("combobox")).toBeInTheDocument();
 
       // Simulate workspace:created event (as if creation succeeded via IPC)
@@ -314,10 +315,12 @@ describe("Integration tests", () => {
         expect(screen.getByText("Remove Workspace")).toBeInTheDocument();
       });
 
-      // Confirm removal - use the dialog's Remove button (not the sidebar one)
+      // Confirm removal - use the dialog's Remove button (vscode-button web component)
       mockApi.removeWorkspace.mockResolvedValue(undefined);
       const dialog = screen.getByRole("dialog");
-      const removeConfirmButton = dialog.querySelector("button.ok-button") as HTMLButtonElement;
+      const removeConfirmButton = Array.from(dialog.querySelectorAll("vscode-button")).find(
+        (btn) => btn.textContent?.trim() === "Remove"
+      ) as HTMLElement;
       await fireEvent.click(removeConfirmButton);
 
       // Verify removeWorkspace was called with correct params
@@ -444,7 +447,8 @@ describe("Integration tests", () => {
       });
 
       // Verify dialog opened with correct context (has name input and branch dropdown)
-      expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+      // Note: vscode-textfield is a web component, so we query by id
+      expect(document.getElementById("workspace-name")).toBeInTheDocument();
       expect(screen.getByRole("combobox")).toBeInTheDocument();
     });
 
@@ -470,9 +474,11 @@ describe("Integration tests", () => {
       // Make removeWorkspace fail
       mockApi.removeWorkspace.mockRejectedValue(new Error("Workspace has uncommitted changes"));
 
-      // Use the dialog's Remove button
+      // Use the dialog's Remove button (vscode-button web component)
       const dialog = screen.getByRole("dialog");
-      const removeConfirmButton = dialog.querySelector("button.ok-button") as HTMLButtonElement;
+      const removeConfirmButton = Array.from(dialog.querySelectorAll("vscode-button")).find(
+        (btn) => btn.textContent?.trim() === "Remove"
+      ) as HTMLElement;
       await fireEvent.click(removeConfirmButton);
 
       // Verify error is shown

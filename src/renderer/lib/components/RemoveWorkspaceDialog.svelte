@@ -61,9 +61,9 @@
     closeDialog();
   }
 
-  // Handle checkbox change
+  // Handle checkbox change (standard change event from vscode-checkbox)
   function handleCheckboxChange(event: Event): void {
-    const target = event.target as HTMLInputElement;
+    const target = event.target as HTMLElement & { checked: boolean };
     keepBranch = target.checked;
   }
 
@@ -72,7 +72,14 @@
   const descriptionId = "remove-workspace-desc";
 </script>
 
-<Dialog {open} onClose={handleCancel} busy={isSubmitting} {titleId} {descriptionId}>
+<Dialog
+  {open}
+  onClose={handleCancel}
+  busy={isSubmitting}
+  {titleId}
+  {descriptionId}
+  initialFocusSelector="vscode-button"
+>
   {#snippet title()}
     <h2 id={titleId}>Remove Workspace</h2>
   {/snippet}
@@ -91,15 +98,14 @@
       </div>
     {/if}
 
-    <label class="checkbox-label">
-      <input
-        type="checkbox"
+    <div class="checkbox-row">
+      <vscode-checkbox
         checked={keepBranch}
         onchange={handleCheckboxChange}
         disabled={isSubmitting}
-      />
-      Keep branch
-    </label>
+        label="Keep branch"
+      ></vscode-checkbox>
+    </div>
 
     {#if submitError}
       <div class="submit-error" role="alert">
@@ -109,18 +115,14 @@
   {/snippet}
 
   {#snippet actions()}
-    <button
-      type="button"
-      class="ok-button"
-      onclick={handleSubmit}
-      disabled={isSubmitting}
-      data-autofocus
-    >
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <vscode-button onclick={handleSubmit} disabled={isSubmitting}>
       {isSubmitting ? "Removing..." : "Remove"}
-    </button>
-    <button type="button" class="cancel-button" onclick={handleCancel} disabled={isSubmitting}>
+    </vscode-button>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <vscode-button secondary={true} onclick={handleCancel} disabled={isSubmitting}>
       Cancel
-    </button>
+    </vscode-button>
   {/snippet}
 </Dialog>
 
@@ -161,25 +163,8 @@
     flex-shrink: 0;
   }
 
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .checkbox-row {
     margin-bottom: 16px;
-    font-size: 13px;
-    color: var(--ch-foreground);
-    cursor: pointer;
-  }
-
-  .checkbox-label input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-  }
-
-  .checkbox-label input[type="checkbox"]:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
   }
 
   .submit-error {
@@ -189,38 +174,5 @@
     color: var(--ch-error-fg);
     border-radius: 2px;
     font-size: 13px;
-  }
-
-  button {
-    padding: 6px 14px;
-    font-size: 13px;
-    border-radius: 2px;
-    cursor: pointer;
-    border: none;
-  }
-
-  .cancel-button {
-    background: transparent;
-    color: var(--ch-foreground);
-    border: 1px solid var(--ch-input-border);
-  }
-
-  .cancel-button:hover:not(:disabled) {
-    background: var(--ch-input-bg);
-  }
-
-  .ok-button {
-    background: var(--ch-button-bg);
-    color: var(--ch-button-fg);
-  }
-
-  .ok-button:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .ok-button:disabled,
-  .cancel-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

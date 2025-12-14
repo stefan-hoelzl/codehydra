@@ -3,8 +3,25 @@
  * Traps keyboard focus within a container element.
  */
 
-const FOCUSABLE_SELECTOR =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+/**
+ * Selector for focusable elements.
+ * Includes standard HTML focusable elements and vscode-elements web components.
+ */
+const FOCUSABLE_SELECTOR = [
+  // Standard focusable elements
+  "button",
+  "[href]",
+  "input",
+  "select",
+  "textarea",
+  '[tabindex]:not([tabindex="-1"])',
+  // vscode-elements web components (they handle focus internally)
+  "vscode-button",
+  "vscode-checkbox",
+  "vscode-textfield",
+  "vscode-textarea",
+  "vscode-single-select",
+].join(", ");
 
 export interface FocusTrap {
   /** Start trapping focus within the container */
@@ -13,6 +30,8 @@ export interface FocusTrap {
   deactivate: () => void;
   /** Focus the first focusable element */
   focusFirst: () => void;
+  /** Focus an element matching the selector, or first focusable if not found */
+  focusSelector: (selector: string) => void;
 }
 
 /**
@@ -58,6 +77,20 @@ export function createFocusTrap(container: HTMLElement): FocusTrap {
       } else {
         // Fall back to container if no focusable elements
         container.focus();
+      }
+    },
+    focusSelector: (selector: string) => {
+      const element = container.querySelector<HTMLElement>(selector);
+      if (element) {
+        element.focus();
+      } else {
+        // Fall back to first focusable if selector not found
+        const first = getFocusables()[0];
+        if (first) {
+          first.focus();
+        } else {
+          container.focus();
+        }
       }
     },
   };

@@ -69,6 +69,18 @@ You are an expert in Svelte 5, CSS, HTML, and UI/UX design. You review feature p
 - Intuitive interactions
 - Consistent patterns across the app
 
+### 5. VSCode Elements Usage
+
+- All buttons MUST use `<vscode-button>` instead of native `<button>`
+- All text inputs MUST use `<vscode-textfield>` instead of native `<input type="text">`
+- All checkboxes MUST use `<vscode-checkbox>` instead of native `<input type="checkbox">`
+- Progress indicators MUST use `<vscode-progress-bar>` or `<vscode-progress-ring>`
+- Badges MUST use `<vscode-badge>` instead of custom styled spans
+- Dividers SHOULD use `<vscode-divider>` where semantically appropriate
+- **Exception**: BranchDropdown uses native `<input>` for filtering/grouping (documented in AGENTS.md)
+- **Exception**: Native buttons allowed for hover-reveal patterns in Sidebar
+- Web component events in Svelte 5: use `onchange`, `oninput` for standard events
+
 ## Review Process
 
 1. Read the provided plan carefully

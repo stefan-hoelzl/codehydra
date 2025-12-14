@@ -19,6 +19,7 @@
   let submitError = $state<string | null>(null);
   let isSubmitting = $state(false);
   let touched = $state(false);
+  let createButtonRef: HTMLElement | undefined = $state();
 
   // Get existing workspace names for duplicate validation
   const existingNames = $derived.by(() => {
@@ -63,6 +64,8 @@
   // Handle branch selection
   function handleBranchSelect(branch: string): void {
     selectedBranch = branch;
+    // Focus the Create button after branch selection
+    setTimeout(() => createButtonRef?.focus(), 0);
   }
 
   // Handle form submission
@@ -100,19 +103,20 @@
   {#snippet content()}
     <div class="form-field">
       <label for="workspace-name">Name</label>
-      <input
+      <vscode-textfield
         id="workspace-name"
-        type="text"
         value={name}
         oninput={handleNameInput}
         onblur={handleNameBlur}
         disabled={isSubmitting}
         aria-describedby={nameErrorId}
-        aria-invalid={nameError ? "true" : undefined}
-      />
-      <span id={nameErrorId} class="error-message" role="alert" aria-live="polite">
-        {nameError ?? ""}
-      </span>
+        invalid={nameError ? true : undefined}
+      ></vscode-textfield>
+      {#if nameError}
+        <vscode-form-helper id={nameErrorId}>
+          <span class="error-text">{nameError}</span>
+        </vscode-form-helper>
+      {/if}
     </div>
 
     <div class="form-field">
@@ -137,17 +141,18 @@
   {/snippet}
 
   {#snippet actions()}
-    <button
-      type="button"
-      class="ok-button"
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <vscode-button
+      bind:this={createButtonRef}
       onclick={handleSubmit}
       disabled={!isFormValid || isSubmitting}
     >
       {isSubmitting ? "Creating..." : "Create"}
-    </button>
-    <button type="button" class="cancel-button" onclick={handleCancel} disabled={isSubmitting}>
+    </vscode-button>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <vscode-button secondary={true} onclick={handleCancel} disabled={isSubmitting}>
       Cancel
-    </button>
+    </vscode-button>
   {/snippet}
 </Dialog>
 
@@ -170,35 +175,12 @@
     color: var(--ch-foreground);
   }
 
-  input[type="text"] {
+  vscode-textfield {
     width: 100%;
-    padding: 6px 8px;
-    background: var(--ch-input-bg);
-    color: var(--ch-foreground);
-    border: 1px solid var(--ch-input-border);
-    border-radius: 2px;
-    font-size: 13px;
-    box-sizing: border-box;
+    --vscode-font-size: 13px;
   }
 
-  input[type="text"]:focus {
-    outline: none;
-    border-color: var(--ch-focus-border);
-  }
-
-  input[type="text"]:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  input[aria-invalid="true"] {
-    border-color: var(--ch-error-fg);
-  }
-
-  .error-message {
-    display: block;
-    margin-top: 4px;
-    font-size: 12px;
+  .error-text {
     color: var(--ch-error-fg);
   }
 
@@ -216,38 +198,5 @@
     color: var(--ch-error-fg);
     border-radius: 2px;
     font-size: 13px;
-  }
-
-  button {
-    padding: 6px 14px;
-    font-size: 13px;
-    border-radius: 2px;
-    cursor: pointer;
-    border: none;
-  }
-
-  .cancel-button {
-    background: transparent;
-    color: var(--ch-foreground);
-    border: 1px solid var(--ch-input-border);
-  }
-
-  .cancel-button:hover:not(:disabled) {
-    background: var(--ch-input-bg);
-  }
-
-  .ok-button {
-    background: var(--ch-button-bg);
-    color: var(--ch-button-fg);
-  }
-
-  .ok-button:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .ok-button:disabled,
-  .cancel-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

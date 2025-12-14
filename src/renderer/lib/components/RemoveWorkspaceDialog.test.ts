@@ -40,6 +40,17 @@ vi.mock("$lib/stores/dialogs.svelte.js", () => ({
 import RemoveWorkspaceDialog from "./RemoveWorkspaceDialog.svelte";
 import { removeWorkspace, isWorkspaceDirty } from "$lib/api";
 
+/**
+ * Helper to get the keep branch checkbox (vscode-checkbox).
+ * Since vscode-checkbox is a web component, getByRole("checkbox") doesn't work.
+ * We query by tag name instead.
+ */
+function getKeepBranchCheckbox(): HTMLElement & { checked?: boolean } {
+  const checkbox = document.querySelector("vscode-checkbox");
+  if (!checkbox) throw new Error("Checkbox not found");
+  return checkbox as HTMLElement & { checked?: boolean };
+}
+
 describe("RemoveWorkspaceDialog component", () => {
   const defaultProps = {
     open: true,
@@ -79,9 +90,11 @@ describe("RemoveWorkspaceDialog component", () => {
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const checkbox = screen.getByRole("checkbox", { name: /keep branch/i });
+      const checkbox = getKeepBranchCheckbox();
       expect(checkbox).toBeInTheDocument();
-      expect(checkbox).not.toBeChecked();
+      // vscode-checkbox uses a .checked property, not the :checked pseudo-selector
+      // Keep branch is unchecked by default (branch will be deleted)
+      expect(checkbox.checked).toBe(false);
     });
   });
 
@@ -149,8 +162,10 @@ describe("RemoveWorkspaceDialog component", () => {
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      const checkbox = screen.getByRole("checkbox", { name: /keep branch/i });
-      expect(checkbox).not.toBeChecked();
+      const checkbox = getKeepBranchCheckbox();
+      // vscode-checkbox uses .checked property, not :checked pseudo-selector
+      // Keep branch is unchecked by default
+      expect(checkbox.checked).toBe(false);
 
       await fireEvent.keyDown(checkbox, { key: " " });
       // Note: actual toggle is handled by the browser, we verify it's focusable
@@ -184,9 +199,11 @@ describe("RemoveWorkspaceDialog component", () => {
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      // Check the "Keep branch" checkbox
-      const checkbox = screen.getByRole("checkbox", { name: /keep branch/i });
-      await fireEvent.click(checkbox);
+      // Check the "Keep branch" checkbox - vscode-checkbox is a web component so we need to
+      // set the property directly and dispatch a change event
+      const checkbox = getKeepBranchCheckbox();
+      checkbox.checked = true;
+      await fireEvent(checkbox, new Event("change", { bubbles: true }));
 
       // Click OK
       const okButton = screen.getByRole("button", { name: /ok|remove/i });
@@ -228,7 +245,7 @@ describe("RemoveWorkspaceDialog component", () => {
       const okButton = screen.getByRole("button", { name: /ok|remove/i });
       await fireEvent.click(okButton);
 
-      const checkbox = screen.getByRole("checkbox", { name: /keep branch/i });
+      const checkbox = getKeepBranchCheckbox();
       expect(checkbox).toBeDisabled();
 
       await vi.runAllTimersAsync();
@@ -293,7 +310,7 @@ describe("RemoveWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       // Form should be re-enabled
-      const checkbox = screen.getByRole("checkbox", { name: /keep branch/i });
+      const checkbox = getKeepBranchCheckbox();
       expect(checkbox).not.toBeDisabled();
       expect(okButton).not.toBeDisabled();
     });

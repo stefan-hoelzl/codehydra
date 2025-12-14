@@ -51,23 +51,30 @@ describe("SetupError component", () => {
 
   describe("buttons", () => {
     it("renders Retry button", () => {
-      render(SetupError, { props: { errorMessage: "Test error" } });
+      const { container } = render(SetupError, { props: { errorMessage: "Test error" } });
 
-      expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+      // vscode-button is a web component; query by tag name and text content
+      const retryButton = container.querySelector("vscode-button");
+      expect(retryButton).toBeInTheDocument();
+      expect(retryButton?.textContent).toMatch(/retry/i);
     });
 
     it("renders Quit button", () => {
-      render(SetupError, { props: { errorMessage: "Test error" } });
+      const { container } = render(SetupError, { props: { errorMessage: "Test error" } });
 
-      expect(screen.getByRole("button", { name: /quit/i })).toBeInTheDocument();
+      // vscode-button is a web component; query by tag name
+      const buttons = container.querySelectorAll("vscode-button");
+      expect(buttons).toHaveLength(2);
+      expect(buttons[1]?.textContent).toMatch(/quit/i);
     });
 
     it("auto-focuses the Retry button", async () => {
-      render(SetupError, { props: { errorMessage: "Test error" } });
+      const { container } = render(SetupError, { props: { errorMessage: "Test error" } });
 
       // Wait for the auto-focus to apply (on mount)
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: /retry/i })).toHaveFocus();
+        const retryButton = container.querySelector("vscode-button");
+        expect(retryButton).toHaveFocus();
       });
     });
   });
@@ -75,20 +82,26 @@ describe("SetupError component", () => {
   describe("events", () => {
     it("emits retry event when Retry button is clicked", async () => {
       const onRetry = vi.fn();
-      render(SetupError, { props: { errorMessage: "Test error", onretry: onRetry } });
+      const { container } = render(SetupError, {
+        props: { errorMessage: "Test error", onretry: onRetry },
+      });
 
-      const retryButton = screen.getByRole("button", { name: /retry/i });
-      await fireEvent.click(retryButton);
+      // vscode-button is a web component; query by tag name
+      const retryButton = container.querySelector("vscode-button");
+      await fireEvent.click(retryButton!);
 
       expect(onRetry).toHaveBeenCalledTimes(1);
     });
 
     it("emits quit event when Quit button is clicked", async () => {
       const onQuit = vi.fn();
-      render(SetupError, { props: { errorMessage: "Test error", onquit: onQuit } });
+      const { container } = render(SetupError, {
+        props: { errorMessage: "Test error", onquit: onQuit },
+      });
 
-      const quitButton = screen.getByRole("button", { name: /quit/i });
-      await fireEvent.click(quitButton);
+      // vscode-button is a web component; second button is Quit
+      const buttons = container.querySelectorAll("vscode-button");
+      await fireEvent.click(buttons[1]!);
 
       expect(onQuit).toHaveBeenCalledTimes(1);
     });
@@ -112,7 +125,7 @@ describe("SetupError component", () => {
     });
   });
 
-  describe("theme variables (Step 6)", () => {
+  describe("theme variables", () => {
     // Read CSS from component file to verify variable usage
     const componentCss = readFileSync(join(__dirname, "SetupError.svelte"), "utf-8");
 
@@ -120,12 +133,9 @@ describe("SetupError component", () => {
       expect(componentCss).toMatch(/h1[^{]*\{[^}]*var\(--ch-danger/);
     });
 
-    it("secondary button uses var(--ch-border) for border", () => {
-      expect(componentCss).toMatch(/button--secondary[^{]*\{[^}]*var\(--ch-border\)/);
-    });
-
-    it("primary button hover uses var(--ch-button-hover-bg)", () => {
-      expect(componentCss).toMatch(/button--primary:hover[^{]*\{[^}]*var\(--ch-button-hover-bg/);
+    it("uses vscode-button for button styling", () => {
+      // Verify we're using vscode-button web component (styling is handled by the component)
+      expect(componentCss).toContain("vscode-button");
     });
   });
 });

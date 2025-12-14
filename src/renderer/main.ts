@@ -1,4 +1,5 @@
 import { mount } from "svelte";
+import "./lib/vscode-elements-setup";
 import "./lib/styles/variables.css";
 import "./lib/styles/global.css";
 import App from "./App.svelte";

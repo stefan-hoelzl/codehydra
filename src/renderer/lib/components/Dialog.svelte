@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { tick } from "svelte";
   import { createFocusTrap } from "$lib/utils/focus-trap";
 
   interface DialogProps {
@@ -12,6 +11,8 @@
     actions?: Snippet;
     titleId: string;
     descriptionId?: string;
+    /** Optional selector for initial focus element. If not provided, focuses first focusable. */
+    initialFocusSelector?: string;
   }
 
   let {
@@ -23,6 +24,7 @@
     actions,
     titleId,
     descriptionId,
+    initialFocusSelector,
   }: DialogProps = $props();
 
   let dialogElement: HTMLDivElement | undefined = $state();
@@ -34,12 +36,17 @@
     const trap = createFocusTrap(dialogElement);
     trap.activate();
 
-    // Wait for DOM to update with snippet content before focusing
-    void tick().then(() => {
-      trap.focusFirst();
-    });
+    // Delay focus to allow web components to initialize
+    const focusTimeout = setTimeout(() => {
+      if (initialFocusSelector) {
+        trap.focusSelector(initialFocusSelector);
+      } else {
+        trap.focusFirst();
+      }
+    }, 0);
 
     return () => {
+      clearTimeout(focusTimeout);
       trap.deactivate();
       // Focus is handled by MainView's $effect when dialog closes
     };

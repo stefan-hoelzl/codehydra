@@ -143,7 +143,7 @@
 <svelte:window onkeydown={handleKeyDown} onkeyup={handleKeyUp} onblur={handleWindowBlur} />
 
 <!-- Screen reader announcements for mode transitions -->
-<div class="sr-only" aria-live="polite" aria-atomic="true">
+<div class="ch-visually-hidden" aria-live="polite" aria-atomic="true">
   {#if announceMessage}{announceMessage}{/if}
 </div>
 
@@ -220,17 +220,5 @@
     .main-view-container {
       animation: none;
     }
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
   }
 </style>

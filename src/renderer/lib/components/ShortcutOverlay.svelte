@@ -34,30 +34,32 @@
     class:shortcut-hint--hidden={!showNavigation}
     aria-label="Up and Down arrows to navigate"
   >
-    ↑↓ Navigate
+    <vscode-badge>↑↓</vscode-badge> Navigate
   </span>
   <span
     class="shortcut-hint"
     class:shortcut-hint--hidden={!showNew}
     aria-label="Enter key to create new workspace"
   >
-    ⏎ New
+    <vscode-badge>⏎</vscode-badge> New
   </span>
   <span
     class="shortcut-hint"
     class:shortcut-hint--hidden={!showDelete}
     aria-label="Delete key to remove workspace"
   >
-    ⌫ Del
+    <vscode-badge>⌫</vscode-badge> Del
   </span>
   <span
     class="shortcut-hint"
     class:shortcut-hint--hidden={!showJump}
     aria-label="Number keys 1 through 0 to jump"
   >
-    1-0 Jump
+    <vscode-badge>1-0</vscode-badge> Jump
   </span>
-  <span class="shortcut-hint" aria-label="O to open project"> O Open </span>
+  <span class="shortcut-hint" aria-label="O to open project">
+    <vscode-badge>O</vscode-badge> Open
+  </span>
 </div>
 
 <style>
