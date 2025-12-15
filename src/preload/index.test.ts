@@ -43,316 +43,395 @@ describe("preload API", () => {
     expect(exposedApi).toBeDefined();
   });
 
-  describe("commands", () => {
-    it("selectFolder calls ipcRenderer.invoke with project:select-folder", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue("/some/path");
+  // ============================================================================
+  // Setup Commands (OLD API - registered early in bootstrap)
+  // ============================================================================
 
-      const selectFolder = exposedApi.selectFolder as () => Promise<string | null>;
-      const result = await selectFolder();
+  describe("setup commands", () => {
+    it("setupReady calls ipcRenderer.invoke with setup:ready", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue({ ready: true });
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("project:select-folder");
-      expect(result).toBe("/some/path");
+      const setupReady = exposedApi.setupReady as () => Promise<{ ready: boolean }>;
+      const result = await setupReady();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("setup:ready");
+      expect(result).toEqual({ ready: true });
     });
 
-    it("openProject calls ipcRenderer.invoke with channel and path", async () => {
+    it("setupRetry calls ipcRenderer.invoke with setup:retry", async () => {
       mockIpcRenderer.invoke.mockResolvedValue(undefined);
 
-      const openProject = exposedApi.openProject as (path: string) => Promise<void>;
-      await openProject("/project/path");
+      const setupRetry = exposedApi.setupRetry as () => Promise<void>;
+      await setupRetry();
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("project:open", {
-        path: "/project/path",
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("setup:retry");
+    });
+
+    it("setupQuit calls ipcRenderer.invoke with setup:quit", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue(undefined);
+
+      const setupQuit = exposedApi.setupQuit as () => Promise<void>;
+      await setupQuit();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("setup:quit");
+    });
+  });
+
+  describe("setup event subscriptions", () => {
+    it("onSetupProgress subscribes to setup:progress and returns unsubscribe", () => {
+      const callback = vi.fn();
+
+      const onSetupProgress = exposedApi.onSetupProgress as (cb: () => void) => () => void;
+      const unsubscribe = onSetupProgress(callback);
+
+      expect(mockIpcRenderer.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
+      expect(unsubscribe).toBeInstanceOf(Function);
+
+      unsubscribe();
+      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
+        "setup:progress",
+        expect.any(Function)
+      );
+    });
+
+    it("onSetupComplete subscribes to setup:complete and returns unsubscribe", () => {
+      const callback = vi.fn();
+
+      const onSetupComplete = exposedApi.onSetupComplete as (cb: () => void) => () => void;
+      const unsubscribe = onSetupComplete(callback);
+
+      expect(mockIpcRenderer.on).toHaveBeenCalledWith("setup:complete", expect.any(Function));
+      expect(unsubscribe).toBeInstanceOf(Function);
+
+      unsubscribe();
+      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
+        "setup:complete",
+        expect.any(Function)
+      );
+    });
+
+    it("onSetupError subscribes to setup:error and returns unsubscribe", () => {
+      const callback = vi.fn();
+
+      const onSetupError = exposedApi.onSetupError as (cb: () => void) => () => void;
+      const unsubscribe = onSetupError(callback);
+
+      expect(mockIpcRenderer.on).toHaveBeenCalledWith("setup:error", expect.any(Function));
+      expect(unsubscribe).toBeInstanceOf(Function);
+
+      unsubscribe();
+      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
+        "setup:error",
+        expect.any(Function)
+      );
+    });
+  });
+
+  // ============================================================================
+  // Flat API (api: prefixed channels)
+  // ============================================================================
+
+  describe("flat API namespaces", () => {
+    it("exposes projects namespace on api", () => {
+      expect(exposedApi.projects).toBeDefined();
+      expect(typeof exposedApi.projects).toBe("object");
+    });
+
+    it("exposes workspaces namespace on api", () => {
+      expect(exposedApi.workspaces).toBeDefined();
+      expect(typeof exposedApi.workspaces).toBe("object");
+    });
+
+    it("exposes ui namespace on api", () => {
+      expect(exposedApi.ui).toBeDefined();
+      expect(typeof exposedApi.ui).toBe("object");
+    });
+
+    it("exposes lifecycle namespace on api", () => {
+      expect(exposedApi.lifecycle).toBeDefined();
+      expect(typeof exposedApi.lifecycle).toBe("object");
+    });
+
+    it("exposes on function on api", () => {
+      expect(exposedApi.on).toBeDefined();
+      expect(typeof exposedApi.on).toBe("function");
+    });
+  });
+
+  describe("projects", () => {
+    it("projects.open calls api:project:open with path", async () => {
+      const mockProject = {
+        id: "my-app-12345678",
+        name: "my-app",
+        path: "/test",
+        workspaces: [],
+      };
+      mockIpcRenderer.invoke.mockResolvedValue(mockProject);
+
+      const projects = exposedApi.projects as { open: (path: string) => Promise<unknown> };
+      const result = await projects.open("/test/path");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:project:open", {
+        path: "/test/path",
+      });
+      expect(result).toEqual(mockProject);
+    });
+
+    it("projects.close calls api:project:close with projectId", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue(undefined);
+
+      const projects = exposedApi.projects as { close: (projectId: string) => Promise<void> };
+      await projects.close("my-app-12345678");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:project:close", {
+        projectId: "my-app-12345678",
       });
     });
 
-    it("closeProject calls ipcRenderer.invoke with channel and path", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
-
-      const closeProject = exposedApi.closeProject as (path: string) => Promise<void>;
-      await closeProject("/project/path");
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("project:close", {
-        path: "/project/path",
-      });
-    });
-
-    it("listProjects calls ipcRenderer.invoke with project:list", async () => {
-      const mockProjects = [{ path: "/test", name: "test", workspaces: [] }];
+    it("projects.list calls api:project:list", async () => {
+      const mockProjects = [
+        { id: "my-app-12345678", name: "my-app", path: "/test", workspaces: [] },
+      ];
       mockIpcRenderer.invoke.mockResolvedValue(mockProjects);
 
-      const listProjects = exposedApi.listProjects as () => Promise<unknown[]>;
-      const result = await listProjects();
+      const projects = exposedApi.projects as { list: () => Promise<unknown[]> };
+      const result = await projects.list();
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("project:list");
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:project:list");
       expect(result).toEqual(mockProjects);
     });
 
-    it("createWorkspace calls ipcRenderer.invoke with correct payload", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
+    it("projects.get calls api:project:get with projectId", async () => {
+      const mockProject = {
+        id: "my-app-12345678",
+        name: "my-app",
+        path: "/test",
+        workspaces: [],
+      };
+      mockIpcRenderer.invoke.mockResolvedValue(mockProject);
 
-      const createWorkspace = exposedApi.createWorkspace as (
-        projectPath: string,
-        name: string,
-        baseBranch: string
-      ) => Promise<void>;
-      await createWorkspace("/project", "feature-1", "main");
+      const projects = exposedApi.projects as { get: (projectId: string) => Promise<unknown> };
+      const result = await projects.get("my-app-12345678");
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:create", {
-        projectPath: "/project",
-        name: "feature-1",
-        baseBranch: "main",
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:project:get", {
+        projectId: "my-app-12345678",
       });
+      expect(result).toEqual(mockProject);
     });
 
-    it("removeWorkspace calls ipcRenderer.invoke with correct payload", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
-
-      const removeWorkspace = exposedApi.removeWorkspace as (
-        workspacePath: string,
-        deleteBranch: boolean
-      ) => Promise<void>;
-      await removeWorkspace("/project/.worktrees/feature-1", true);
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:remove", {
-        workspacePath: "/project/.worktrees/feature-1",
-        deleteBranch: true,
-      });
-    });
-
-    it("switchWorkspace calls ipcRenderer.invoke with workspacePath and default focus", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
-
-      const switchWorkspace = exposedApi.switchWorkspace as (
-        workspacePath: string,
-        focusWorkspace?: boolean
-      ) => Promise<void>;
-      await switchWorkspace("/project/.worktrees/feature-1");
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:switch", {
-        workspacePath: "/project/.worktrees/feature-1",
-        focusWorkspace: undefined,
-      });
-    });
-
-    it("switchWorkspace passes focusWorkspace=false when specified", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
-
-      const switchWorkspace = exposedApi.switchWorkspace as (
-        workspacePath: string,
-        focusWorkspace?: boolean
-      ) => Promise<void>;
-      await switchWorkspace("/project/.worktrees/feature-1", false);
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:switch", {
-        workspacePath: "/project/.worktrees/feature-1",
-        focusWorkspace: false,
-      });
-    });
-
-    it("listBases calls ipcRenderer.invoke with projectPath", async () => {
-      const mockBases = [{ name: "main", isRemote: false }];
+    it("projects.fetchBases calls api:project:fetch-bases with projectId", async () => {
+      const mockBases = { bases: [{ name: "main", isRemote: false }] };
       mockIpcRenderer.invoke.mockResolvedValue(mockBases);
 
-      const listBases = exposedApi.listBases as (projectPath: string) => Promise<unknown[]>;
-      const result = await listBases("/project");
+      const projects = exposedApi.projects as {
+        fetchBases: (projectId: string) => Promise<unknown>;
+      };
+      const result = await projects.fetchBases("my-app-12345678");
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:list-bases", {
-        projectPath: "/project",
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:project:fetch-bases", {
+        projectId: "my-app-12345678",
       });
       expect(result).toEqual(mockBases);
     });
+  });
 
-    it("updateBases calls ipcRenderer.invoke with projectPath", async () => {
+  describe("workspaces", () => {
+    it("workspaces.create calls api:workspace:create", async () => {
+      const mockWorkspace = {
+        projectId: "my-app-12345678",
+        name: "feature",
+        branch: "feature",
+        path: "/ws/feature",
+      };
+      mockIpcRenderer.invoke.mockResolvedValue(mockWorkspace);
+
+      const workspaces = exposedApi.workspaces as {
+        create: (projectId: string, name: string, base: string) => Promise<unknown>;
+      };
+      const result = await workspaces.create("my-app-12345678", "feature", "main");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:workspace:create", {
+        projectId: "my-app-12345678",
+        name: "feature",
+        base: "main",
+      });
+      expect(result).toEqual(mockWorkspace);
+    });
+
+    it("workspaces.remove calls api:workspace:remove", async () => {
+      const mockResult = { branchDeleted: false };
+      mockIpcRenderer.invoke.mockResolvedValue(mockResult);
+
+      const workspaces = exposedApi.workspaces as {
+        remove: (
+          projectId: string,
+          workspaceName: string,
+          keepBranch?: boolean
+        ) => Promise<unknown>;
+      };
+      const result = await workspaces.remove("my-app-12345678", "feature", true);
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:workspace:remove", {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+        keepBranch: true,
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it("workspaces.get calls api:workspace:get", async () => {
+      const mockWorkspace = {
+        projectId: "my-app-12345678",
+        name: "feature",
+        branch: "feature",
+        path: "/ws/feature",
+      };
+      mockIpcRenderer.invoke.mockResolvedValue(mockWorkspace);
+
+      const workspaces = exposedApi.workspaces as {
+        get: (projectId: string, workspaceName: string) => Promise<unknown>;
+      };
+      const result = await workspaces.get("my-app-12345678", "feature");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:workspace:get", {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+      });
+      expect(result).toEqual(mockWorkspace);
+    });
+
+    it("workspaces.getStatus calls api:workspace:get-status", async () => {
+      const mockStatus = {
+        isDirty: true,
+        agent: { type: "busy", counts: { idle: 0, busy: 1, total: 1 } },
+      };
+      mockIpcRenderer.invoke.mockResolvedValue(mockStatus);
+
+      const workspaces = exposedApi.workspaces as {
+        getStatus: (projectId: string, workspaceName: string) => Promise<unknown>;
+      };
+      const result = await workspaces.getStatus("my-app-12345678", "feature");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:workspace:get-status", {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+      });
+      expect(result).toEqual(mockStatus);
+    });
+  });
+
+  describe("ui", () => {
+    it("ui.selectFolder calls api:ui:select-folder", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue("/selected/path");
+
+      const ui = exposedApi.ui as { selectFolder: () => Promise<string | null> };
+      const result = await ui.selectFolder();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:ui:select-folder");
+      expect(result).toBe("/selected/path");
+    });
+
+    it("ui.getActiveWorkspace calls api:ui:get-active-workspace", async () => {
+      const mockRef = {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+        path: "/ws/feature",
+      };
+      mockIpcRenderer.invoke.mockResolvedValue(mockRef);
+
+      const ui = exposedApi.ui as { getActiveWorkspace: () => Promise<unknown> };
+      const result = await ui.getActiveWorkspace();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:ui:get-active-workspace");
+      expect(result).toEqual(mockRef);
+    });
+
+    it("ui.switchWorkspace calls api:ui:switch-workspace", async () => {
       mockIpcRenderer.invoke.mockResolvedValue(undefined);
 
-      const updateBases = exposedApi.updateBases as (projectPath: string) => Promise<void>;
-      await updateBases("/project");
+      const ui = exposedApi.ui as {
+        switchWorkspace: (
+          projectId: string,
+          workspaceName: string,
+          focus?: boolean
+        ) => Promise<void>;
+      };
+      await ui.switchWorkspace("my-app-12345678", "feature", false);
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:update-bases", {
-        projectPath: "/project",
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:ui:switch-workspace", {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+        focus: false,
       });
     });
 
-    it("isWorkspaceDirty calls ipcRenderer.invoke with workspacePath", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(true);
+    it("ui.setDialogMode calls api:ui:set-dialog-mode", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue(undefined);
 
-      const isWorkspaceDirty = exposedApi.isWorkspaceDirty as (
-        workspacePath: string
-      ) => Promise<boolean>;
-      const result = await isWorkspaceDirty("/project/.worktrees/feature-1");
+      const ui = exposedApi.ui as { setDialogMode: (isOpen: boolean) => Promise<void> };
+      await ui.setDialogMode(true);
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("workspace:is-dirty", {
-        workspacePath: "/project/.worktrees/feature-1",
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:ui:set-dialog-mode", {
+        isOpen: true,
       });
-      expect(result).toBe(true);
     });
 
-    it("setDialogMode calls ipcRenderer.invoke with correct channel and payload", async () => {
+    it("ui.focusActiveWorkspace calls api:ui:focus-active-workspace", async () => {
       mockIpcRenderer.invoke.mockResolvedValue(undefined);
 
-      const setDialogMode = exposedApi.setDialogMode as (isOpen: boolean) => Promise<void>;
-      await setDialogMode(true);
+      const ui = exposedApi.ui as { focusActiveWorkspace: () => Promise<void> };
+      await ui.focusActiveWorkspace();
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("ui:set-dialog-mode", { isOpen: true });
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:ui:focus-active-workspace");
+    });
+  });
+
+  describe("lifecycle", () => {
+    it("lifecycle.getState calls api:lifecycle:get-state", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue("ready");
+
+      const lifecycle = exposedApi.lifecycle as { getState: () => Promise<string> };
+      const result = await lifecycle.getState();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:lifecycle:get-state");
+      expect(result).toBe("ready");
     });
 
-    it("focusActiveWorkspace calls ipcRenderer.invoke with correct channel", async () => {
+    it("lifecycle.setup calls api:lifecycle:setup", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue({ success: true });
+
+      const lifecycle = exposedApi.lifecycle as { setup: () => Promise<unknown> };
+      const result = await lifecycle.setup();
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:lifecycle:setup");
+      expect(result).toEqual({ success: true });
+    });
+
+    it("lifecycle.quit calls api:lifecycle:quit", async () => {
       mockIpcRenderer.invoke.mockResolvedValue(undefined);
 
-      const focusActiveWorkspace = exposedApi.focusActiveWorkspace as () => Promise<void>;
-      await focusActiveWorkspace();
+      const lifecycle = exposedApi.lifecycle as { quit: () => Promise<void> };
+      await lifecycle.quit();
 
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("ui:focus-active-workspace");
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:lifecycle:quit");
     });
   });
 
   describe("event subscriptions", () => {
-    it("onProjectOpened subscribes to project:opened and returns unsubscribe", () => {
+    it("on subscribes to api: prefixed events", () => {
       const callback = vi.fn();
 
-      const onProjectOpened = exposedApi.onProjectOpened as (cb: () => void) => () => void;
-      const unsubscribe = onProjectOpened(callback);
+      const on = exposedApi.on as (event: string, cb: () => void) => () => void;
+      const unsubscribe = on("project:opened", callback);
 
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("project:opened", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      // Test unsubscribe removes listener
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "project:opened",
-        expect.any(Function)
-      );
-    });
-
-    it("onProjectClosed subscribes to project:closed and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onProjectClosed = exposedApi.onProjectClosed as (cb: () => void) => () => void;
-      const unsubscribe = onProjectClosed(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("project:closed", expect.any(Function));
+      expect(mockIpcRenderer.on).toHaveBeenCalledWith("api:project:opened", expect.any(Function));
       expect(unsubscribe).toBeInstanceOf(Function);
 
       unsubscribe();
       expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "project:closed",
+        "api:project:opened",
         expect.any(Function)
       );
-    });
-
-    it("onWorkspaceCreated subscribes and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onWorkspaceCreated = exposedApi.onWorkspaceCreated as (cb: () => void) => () => void;
-      const unsubscribe = onWorkspaceCreated(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("workspace:created", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "workspace:created",
-        expect.any(Function)
-      );
-    });
-
-    it("onWorkspaceRemoved subscribes and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onWorkspaceRemoved = exposedApi.onWorkspaceRemoved as (cb: () => void) => () => void;
-      const unsubscribe = onWorkspaceRemoved(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("workspace:removed", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "workspace:removed",
-        expect.any(Function)
-      );
-    });
-
-    it("onWorkspaceSwitched subscribes and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onWorkspaceSwitched = exposedApi.onWorkspaceSwitched as (cb: () => void) => () => void;
-      const unsubscribe = onWorkspaceSwitched(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("workspace:switched", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "workspace:switched",
-        expect.any(Function)
-      );
-    });
-
-    it("event callbacks receive data from IPC event", () => {
-      const callback = vi.fn();
-      const mockEventData = { project: { path: "/test", name: "test", workspaces: [] } };
-
-      // Capture the handler passed to ipcRenderer.on
-      mockIpcRenderer.on.mockImplementation((_channel, handler) => {
-        // Simulate IPC event
-        handler({}, mockEventData);
-      });
-
-      const onProjectOpened = exposedApi.onProjectOpened as (
-        cb: (data: unknown) => void
-      ) => () => void;
-      onProjectOpened(callback);
-
-      expect(callback).toHaveBeenCalledWith(mockEventData);
-    });
-
-    describe("onShortcutEnable", () => {
-      it("preload-subscription-exists: onShortcutEnable exists on exposed API", () => {
-        expect(exposedApi.onShortcutEnable).toBeDefined();
-        expect(typeof exposedApi.onShortcutEnable).toBe("function");
-      });
-
-      it("preload-subscription-cleanup: returns cleanup function", () => {
-        const callback = vi.fn();
-        const onShortcutEnable = exposedApi.onShortcutEnable as (cb: () => void) => () => void;
-        const unsubscribe = onShortcutEnable(callback);
-
-        expect(mockIpcRenderer.on).toHaveBeenCalledWith("shortcut:enable", expect.any(Function));
-        expect(unsubscribe).toBeInstanceOf(Function);
-
-        unsubscribe();
-        expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-          "shortcut:enable",
-          expect.any(Function)
-        );
-      });
-
-      it("preload-subscription-callback: callback invoked on event with no arguments", () => {
-        const callback = vi.fn();
-
-        // Capture the handler passed to ipcRenderer.on
-        mockIpcRenderer.on.mockImplementation((_channel, handler) => {
-          // Simulate IPC event with no data
-          handler({});
-        });
-
-        const onShortcutEnable = exposedApi.onShortcutEnable as (cb: () => void) => () => void;
-        onShortcutEnable(callback);
-
-        // Callback should be invoked with no arguments
-        expect(callback).toHaveBeenCalledTimes(1);
-        expect(callback).toHaveBeenCalledWith(undefined);
-      });
-    });
-  });
-
-  describe("error handling", () => {
-    it("api functions propagate IPC errors to caller", async () => {
-      const error = new Error("IPC error");
-      mockIpcRenderer.invoke.mockRejectedValue(error);
-
-      const openProject = exposedApi.openProject as (path: string) => Promise<void>;
-      await expect(openProject("/project")).rejects.toThrow("IPC error");
     });
   });
 });

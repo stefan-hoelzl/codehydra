@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { WebContents, Event as ElectronEvent, Input, BaseWindow } from "electron";
-import { IpcChannels } from "../shared/ipc";
+import { ApiIpcChannels } from "../shared/ipc";
 import { ShortcutController } from "./shortcut-controller";
 
 /**
@@ -193,10 +193,10 @@ describe("ShortcutController", () => {
       expect(event.preventDefault).toHaveBeenCalled();
       expect(mockDeps.setDialogMode).toHaveBeenCalledWith(true);
       expect(mockDeps.focusUI).toHaveBeenCalled();
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(IpcChannels.SHORTCUT_ENABLE);
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(ApiIpcChannels.SHORTCUT_ENABLE);
     });
 
-    it("controller-uses-ipc-channel: webContents.send called with IpcChannels.SHORTCUT_ENABLE", () => {
+    it("controller-uses-ipc-channel: webContents.send called with ApiIpcChannels.SHORTCUT_ENABLE", () => {
       const webContents = createMockWebContents();
       controller.registerView(webContents);
 
@@ -209,8 +209,8 @@ describe("ShortcutController", () => {
       inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
 
       // Verify it uses the constant, not a hardcoded string
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith("shortcut:enable");
-      expect(IpcChannels.SHORTCUT_ENABLE).toBe("shortcut:enable");
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith("api:shortcut:enable");
+      expect(ApiIpcChannels.SHORTCUT_ENABLE).toBe("api:shortcut:enable");
     });
   });
 
@@ -460,7 +460,7 @@ describe("ShortcutController", () => {
       // Verify activation happened
       expect(mockDeps.setDialogMode).toHaveBeenCalledWith(true);
       expect(mockDeps.focusUI).toHaveBeenCalled();
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(IpcChannels.SHORTCUT_ENABLE);
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(ApiIpcChannels.SHORTCUT_ENABLE);
 
       // Step 2: Alt is released while workspace view still has focus
       // (simulates the race condition - focus hasn't switched yet)
@@ -468,7 +468,7 @@ describe("ShortcutController", () => {
       inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyUp"));
 
       // Step 3: SHORTCUT_DISABLE should be sent to notify UI
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(IpcChannels.SHORTCUT_DISABLE);
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(ApiIpcChannels.SHORTCUT_DISABLE);
     });
 
     it("should emit SHORTCUT_DISABLE when Alt is released after activation", () => {
@@ -484,14 +484,14 @@ describe("ShortcutController", () => {
       inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
 
       // Verify SHORTCUT_ENABLE was sent
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(IpcChannels.SHORTCUT_ENABLE);
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(ApiIpcChannels.SHORTCUT_ENABLE);
       mockDeps.mockUIWebContents.send.mockClear();
 
       // Now release Alt (this would normally be caught by workspace view before focus switches)
       inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyUp"));
 
       // Should emit SHORTCUT_DISABLE to notify UI
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(IpcChannels.SHORTCUT_DISABLE);
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(ApiIpcChannels.SHORTCUT_DISABLE);
     });
 
     it("should NOT emit SHORTCUT_DISABLE when Alt is released without prior activation", () => {
@@ -532,7 +532,7 @@ describe("ShortcutController", () => {
       // Now Alt keyup should NOT emit SHORTCUT_DISABLE (flag was reset by blur)
       inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyUp"));
       expect(mockDeps.mockUIWebContents.send).not.toHaveBeenCalledWith(
-        IpcChannels.SHORTCUT_DISABLE
+        ApiIpcChannels.SHORTCUT_DISABLE
       );
     });
 

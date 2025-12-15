@@ -1,14 +1,14 @@
 <script lang="ts">
   import Dialog from "./Dialog.svelte";
-  import { removeWorkspace, isWorkspaceDirty } from "$lib/api";
+  import { workspaces, type WorkspaceRef } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
 
   interface RemoveWorkspaceDialogProps {
     open: boolean;
-    workspacePath: string;
+    workspaceRef: WorkspaceRef;
   }
 
-  let { open, workspacePath }: RemoveWorkspaceDialogProps = $props();
+  let { open, workspaceRef }: RemoveWorkspaceDialogProps = $props();
 
   // Form state
   let keepBranch = $state(false);
@@ -17,8 +17,8 @@
   let isDirty = $state(false);
   let isCheckingDirty = $state(true);
 
-  // Extract workspace name from path
-  const workspaceName = $derived(workspacePath.split("/").pop() ?? workspacePath);
+  // Extract workspace name from ref
+  const workspaceName = $derived(workspaceRef.workspaceName);
 
   // Check dirty status on mount
   $effect(() => {
@@ -27,9 +27,10 @@
     isCheckingDirty = true;
     isDirty = false;
 
-    isWorkspaceDirty(workspacePath)
-      .then((dirty) => {
-        isDirty = dirty;
+    workspaces
+      .getStatus(workspaceRef.projectId, workspaceRef.workspaceName)
+      .then((status) => {
+        isDirty = status.isDirty;
       })
       .catch(() => {
         // Assume clean on error
@@ -48,8 +49,20 @@
     isSubmitting = true;
 
     try {
-      await removeWorkspace(workspacePath, !keepBranch);
-      closeDialog();
+      const result = await workspaces.remove(
+        workspaceRef.projectId,
+        workspaceRef.workspaceName,
+        keepBranch
+      );
+
+      // If branch deletion failed, show warning but still close dialog
+      if (!keepBranch && !result.branchDeleted && result.branchDeleteError) {
+        // Show brief error then close
+        submitError = `Workspace removed, but branch deletion failed: ${result.branchDeleteError}`;
+        setTimeout(() => closeDialog(), 2000);
+      } else {
+        closeDialog();
+      }
     } catch (error) {
       submitError = error instanceof Error ? error.message : "Failed to remove workspace";
       isSubmitting = false;

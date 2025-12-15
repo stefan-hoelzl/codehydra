@@ -7,11 +7,12 @@ import * as api from "$lib/api";
 import { dialogState, openCreateDialog, openRemoveDialog } from "./dialogs.svelte";
 import {
   getAllWorkspaces,
-  getWorkspaceByIndex,
+  getWorkspaceRefByIndex,
   findWorkspaceIndex,
   wrapIndex,
   activeWorkspacePath,
   activeProject,
+  activeWorkspace,
 } from "./projects.svelte";
 import {
   isActionKey,
@@ -63,8 +64,8 @@ export function handleShortcutDisable(): void {
   if (!_shortcutModeActive) return;
   _shortcutModeActive = false;
   // Fire-and-forget pattern - see AGENTS.md IPC Patterns
-  void api.setDialogMode(false);
-  void api.focusActiveWorkspace();
+  void api.ui.setDialogMode(false);
+  void api.ui.focusActiveWorkspace();
 }
 
 /**
@@ -98,8 +99,8 @@ export function handleWindowBlur(): void {
 export function exitShortcutMode(): void {
   _shortcutModeActive = false;
   // Fire-and-forget pattern - see AGENTS.md IPC Patterns
-  void api.setDialogMode(false);
-  void api.focusActiveWorkspace();
+  void api.ui.setDialogMode(false);
+  void api.ui.focusActiveWorkspace();
 }
 
 // ============ Action Handlers ============
@@ -152,14 +153,18 @@ async function handleNavigation(key: NavigationKey): Promise<void> {
   const direction = key === "ArrowUp" ? -1 : 1;
   const currentIndex = findWorkspaceIndex(activeWorkspacePath.value);
   const nextIndex = wrapIndex(currentIndex + direction, workspaces.length);
-  const targetWorkspace = workspaces[nextIndex];
+  const targetWorkspaceRef = getWorkspaceRefByIndex(nextIndex);
 
-  if (!targetWorkspace) return;
+  if (!targetWorkspaceRef) return;
 
   _switchingWorkspace = true;
   try {
     // Pass false to keep UI focused (shortcut mode active)
-    await api.switchWorkspace(targetWorkspace.path, false);
+    await api.ui.switchWorkspace(
+      targetWorkspaceRef.projectId,
+      targetWorkspaceRef.workspaceName,
+      false
+    );
   } catch (error) {
     logWorkspaceSwitchError("switch workspace", error);
   } finally {
@@ -174,14 +179,14 @@ async function handleNavigation(key: NavigationKey): Promise<void> {
  */
 async function handleJump(key: JumpKey): Promise<void> {
   const index = jumpKeyToIndex(key);
-  const workspace = getWorkspaceByIndex(index);
-  if (!workspace) return;
+  const workspaceRef = getWorkspaceRefByIndex(index);
+  if (!workspaceRef) return;
   if (_switchingWorkspace) return;
 
   _switchingWorkspace = true;
   try {
     // Pass false to keep UI focused (shortcut mode active)
-    await api.switchWorkspace(workspace.path, false);
+    await api.ui.switchWorkspace(workspaceRef.projectId, workspaceRef.workspaceName, false);
   } catch (error) {
     logWorkspaceSwitchError("jump to workspace", error);
   } finally {
@@ -195,17 +200,17 @@ async function handleJump(key: JumpKey): Promise<void> {
  */
 function handleDialog(key: DialogKey): void {
   if (key === "Enter") {
-    const projectPath = activeProject.value?.path;
-    if (!projectPath) return;
+    const project = activeProject.value;
+    if (!project) return;
     // Deactivate mode without calling full exitShortcutMode to avoid z-order thrashing
     _shortcutModeActive = false;
-    openCreateDialog(projectPath);
+    openCreateDialog(project.id);
   } else {
     // Delete or Backspace
-    const workspacePath = activeWorkspacePath.value;
-    if (!workspacePath) return;
+    const workspaceRef = activeWorkspace.value;
+    if (!workspaceRef) return;
     _shortcutModeActive = false;
-    openRemoveDialog(workspacePath);
+    openRemoveDialog(workspaceRef);
   }
 }
 
@@ -214,8 +219,8 @@ function handleDialog(key: DialogKey): void {
  */
 function handleProjectOpen(): void {
   exitShortcutMode();
-  void api.selectFolder().then((path) => {
-    if (path) void api.openProject(path);
+  void api.ui.selectFolder().then((path: string | null) => {
+    if (path) void api.projects.open(path);
   });
 }
 

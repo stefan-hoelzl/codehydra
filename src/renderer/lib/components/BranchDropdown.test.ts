@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
 import { tick } from "svelte";
-import type { BaseInfo } from "@shared/ipc";
+import type { BaseInfo } from "@shared/api/types";
+import type { ProjectId } from "@shared/api/types";
 
 // Mock branches data
 const mockLocalBranches: BaseInfo[] = [
@@ -21,8 +22,8 @@ const mockRemoteBranches: BaseInfo[] = [
 const allBranches = [...mockLocalBranches, ...mockRemoteBranches];
 
 // Use vi.hoisted to create mocks that can be referenced in vi.mock factory
-const { mockListBases } = vi.hoisted(() => ({
-  mockListBases: vi.fn(),
+const { mockFetchBases } = vi.hoisted(() => ({
+  mockFetchBases: vi.fn(),
 }));
 
 // Mock $lib/api module
@@ -34,7 +35,7 @@ vi.mock("$lib/api", () => ({
   createWorkspace: vi.fn().mockResolvedValue(undefined),
   removeWorkspace: vi.fn().mockResolvedValue(undefined),
   switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  listBases: mockListBases,
+  listBases: vi.fn().mockResolvedValue([]),
   updateBases: vi.fn().mockResolvedValue(undefined),
   isWorkspaceDirty: vi.fn().mockResolvedValue(false),
   onProjectOpened: vi.fn(() => vi.fn()),
@@ -42,15 +43,22 @@ vi.mock("$lib/api", () => ({
   onWorkspaceCreated: vi.fn(() => vi.fn()),
   onWorkspaceRemoved: vi.fn(() => vi.fn()),
   onWorkspaceSwitched: vi.fn(() => vi.fn()),
+  // Flat API structure
+  projects: {
+    fetchBases: mockFetchBases,
+  },
 }));
 
 // Import component after mock setup
 import BranchDropdown from "./BranchDropdown.svelte";
-import { listBases } from "$lib/api";
+import { projects } from "$lib/api";
+
+// Test project ID
+const testProjectId = "test-project-12345678" as ProjectId;
 
 describe("BranchDropdown component", () => {
   const defaultProps = {
-    projectPath: "/test/project",
+    projectId: testProjectId,
     value: "",
     onSelect: vi.fn(),
   };
@@ -58,8 +66,8 @@ describe("BranchDropdown component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    // Reset the mock implementation for each test
-    mockListBases.mockResolvedValue(allBranches);
+    // Reset the mock implementation for each test (v2 API returns { bases: [...] })
+    mockFetchBases.mockResolvedValue({ bases: allBranches });
   });
 
   afterEach(() => {
@@ -127,18 +135,18 @@ describe("BranchDropdown component", () => {
   });
 
   describe("loading", () => {
-    it("loads branches using api.listBases(projectPath) on mount", async () => {
+    it("loads branches using projects.fetchBases(projectId) on mount", async () => {
       render(BranchDropdown, { props: defaultProps });
 
       await vi.runAllTimersAsync();
 
-      expect(listBases).toHaveBeenCalledWith("/test/project");
+      expect(projects.fetchBases).toHaveBeenCalledWith(testProjectId);
     });
 
     it("shows spinner while loading", async () => {
       // Delay the response
-      mockListBases.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(allBranches), 1000))
+      mockFetchBases.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ bases: allBranches }), 1000))
       );
 
       render(BranchDropdown, { props: defaultProps });
@@ -148,8 +156,8 @@ describe("BranchDropdown component", () => {
       await vi.runAllTimersAsync();
     });
 
-    it("handles listBases error gracefully", async () => {
-      mockListBases.mockRejectedValue(new Error("Network error"));
+    it("handles fetchBases error gracefully", async () => {
+      mockFetchBases.mockRejectedValue(new Error("Network error"));
 
       render(BranchDropdown, { props: defaultProps });
 
@@ -504,8 +512,8 @@ describe("BranchDropdown component", () => {
       const onSelect = vi.fn();
 
       // Delay the response to keep loading state
-      mockListBases.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(allBranches), 1000))
+      mockFetchBases.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ bases: allBranches }), 1000))
       );
 
       render(BranchDropdown, {
@@ -669,7 +677,7 @@ describe("BranchDropdown component", () => {
     });
 
     it("renders only local header when no remote branches", async () => {
-      mockListBases.mockResolvedValue(mockLocalBranches);
+      mockFetchBases.mockResolvedValue({ bases: mockLocalBranches });
 
       render(BranchDropdown, { props: defaultProps });
 
@@ -683,7 +691,7 @@ describe("BranchDropdown component", () => {
     });
 
     it("renders only remote header when no local branches", async () => {
-      mockListBases.mockResolvedValue(mockRemoteBranches);
+      mockFetchBases.mockResolvedValue({ bases: mockRemoteBranches });
 
       render(BranchDropdown, { props: defaultProps });
 

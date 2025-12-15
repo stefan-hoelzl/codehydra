@@ -485,6 +485,8 @@ export class ViewManager implements IViewManager {
       } else {
         // Move UI to bottom (index 0 = behind workspaces)
         contentView.addChildView(this.uiView, 0);
+        // Focus the active workspace when exiting dialog mode
+        this.focusActiveWorkspace();
       }
     } catch {
       // Ignore errors during z-order change - window may be closing

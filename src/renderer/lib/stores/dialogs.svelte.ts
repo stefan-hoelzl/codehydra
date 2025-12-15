@@ -3,14 +3,15 @@
  * Manages the state of dialogs (create workspace, remove workspace).
  */
 
-import { activeProject, projects } from "./projects.svelte.js";
+import type { ProjectId, WorkspaceRef } from "@shared/api/types";
+import { activeWorkspace, projects } from "./projects.svelte.js";
 
 // ============ Types ============
 
 export type DialogState =
   | { type: "closed" }
-  | { type: "create"; projectPath: string }
-  | { type: "remove"; workspacePath: string };
+  | { type: "create"; projectId: ProjectId }
+  | { type: "remove"; workspaceRef: WorkspaceRef };
 
 // ============ State ============
 
@@ -28,21 +29,22 @@ export const dialogState = {
 
 /**
  * Open the create workspace dialog.
- * @param defaultProjectPath - Optional path of the project to create workspace in.
- *   Falls back to activeProject, then first project, then empty string.
+ * @param defaultProjectId - Optional ID of the project to create workspace in.
+ *   Falls back to activeWorkspace's project, then first project.
  */
-export function openCreateDialog(defaultProjectPath?: string): void {
-  const projectPath =
-    defaultProjectPath ?? activeProject.value?.path ?? projects.value[0]?.path ?? "";
-  _dialogState = { type: "create", projectPath };
+export function openCreateDialog(defaultProjectId?: ProjectId): void {
+  const projectId = defaultProjectId ?? activeWorkspace.value?.projectId ?? projects.value[0]?.id;
+  if (projectId) {
+    _dialogState = { type: "create", projectId };
+  }
 }
 
 /**
  * Open the remove workspace dialog.
- * @param workspacePath - Path of the workspace to remove
+ * @param workspaceRef - Reference to the workspace to remove (projectId + workspaceName + path)
  */
-export function openRemoveDialog(workspacePath: string): void {
-  _dialogState = { type: "remove", workspacePath };
+export function openRemoveDialog(workspaceRef: WorkspaceRef): void {
+  _dialogState = { type: "remove", workspaceRef };
 }
 
 /**

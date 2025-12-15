@@ -10,7 +10,6 @@ import type {
   Project,
   ProjectPath,
   Workspace,
-  WorkspacePath,
   ProjectOpenedEvent,
   ProjectClosedEvent,
   WorkspaceCreatedEvent,
@@ -23,11 +22,7 @@ function asProjectPath(path: string): ProjectPath {
   return path as ProjectPath;
 }
 
-function asWorkspacePath(path: string): WorkspacePath {
-  return path as WorkspacePath;
-}
-
-// Event callback storage
+// Event callback storage for old API (kept for backwards compatibility with some tests)
 type EventCallbacks = {
   onProjectOpened: ((event: ProjectOpenedEvent) => void) | null;
   onProjectClosed: ((event: ProjectClosedEvent) => void) | null;
@@ -49,53 +44,24 @@ const callbacks: EventCallbacks = {
   onShortcutDisable: null,
 };
 
+// v2 API event callbacks - MainView uses api.v2.on() which stores callbacks here
+type V2EventCallback = (...args: unknown[]) => void;
+const v2EventCallbacks = new Map<string, V2EventCallback>();
+
+// Helper to fire a v2 event
+function fireV2Event(event: string, payload?: unknown): void {
+  const callback = v2EventCallbacks.get(event);
+  if (callback) {
+    callback(payload);
+  }
+}
+
+// Helper to clear v2 event callbacks between tests
+function clearV2EventCallbacks(): void {
+  v2EventCallbacks.clear();
+}
+
 const mockApi = vi.hoisted(() => ({
-  selectFolder: vi.fn().mockResolvedValue(null),
-  openProject: vi.fn().mockResolvedValue(undefined),
-  closeProject: vi.fn().mockResolvedValue(undefined),
-  listProjects: vi.fn().mockResolvedValue({ projects: [], activeWorkspacePath: null }),
-  createWorkspace: vi.fn().mockResolvedValue(undefined),
-  removeWorkspace: vi.fn().mockResolvedValue(undefined),
-  switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  listBases: vi.fn().mockResolvedValue([]),
-  updateBases: vi.fn().mockResolvedValue(undefined),
-  isWorkspaceDirty: vi.fn().mockResolvedValue(false),
-  setDialogMode: vi.fn().mockResolvedValue(undefined),
-  getAgentStatus: vi.fn().mockResolvedValue({ status: "none", counts: { idle: 0, busy: 0 } }),
-  getAllAgentStatuses: vi.fn().mockResolvedValue({}),
-  refreshAgentStatus: vi.fn().mockResolvedValue(undefined),
-  onProjectOpened: vi.fn((cb: (e: ProjectOpenedEvent) => void): Unsubscribe => {
-    callbacks.onProjectOpened = cb;
-    return vi.fn();
-  }),
-  onProjectClosed: vi.fn((cb: (e: ProjectClosedEvent) => void): Unsubscribe => {
-    callbacks.onProjectClosed = cb;
-    return vi.fn();
-  }),
-  onWorkspaceCreated: vi.fn((cb: (e: WorkspaceCreatedEvent) => void): Unsubscribe => {
-    callbacks.onWorkspaceCreated = cb;
-    return vi.fn();
-  }),
-  onWorkspaceRemoved: vi.fn((cb: (e: WorkspaceRemovedEvent) => void): Unsubscribe => {
-    callbacks.onWorkspaceRemoved = cb;
-    return vi.fn();
-  }),
-  onWorkspaceSwitched: vi.fn((cb: (e: WorkspaceSwitchedEvent) => void): Unsubscribe => {
-    callbacks.onWorkspaceSwitched = cb;
-    return vi.fn();
-  }),
-  onShortcutEnable: vi.fn((cb: () => void): Unsubscribe => {
-    callbacks.onShortcutEnable = cb;
-    return vi.fn();
-  }),
-  onShortcutDisable: vi.fn((cb: () => void): Unsubscribe => {
-    callbacks.onShortcutDisable = cb;
-    return vi.fn();
-  }),
-  onAgentStatusChanged: vi.fn((): Unsubscribe => {
-    return vi.fn();
-  }),
-  focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
   // Setup API mocks
   setupReady: vi.fn().mockResolvedValue({ ready: true }),
   setupRetry: vi.fn().mockResolvedValue(undefined),
@@ -103,6 +69,40 @@ const mockApi = vi.hoisted(() => ({
   onSetupProgress: vi.fn((): Unsubscribe => vi.fn()),
   onSetupComplete: vi.fn((): Unsubscribe => vi.fn()),
   onSetupError: vi.fn((): Unsubscribe => vi.fn()),
+  // Normal API (flat structure)
+  workspaces: {
+    create: vi.fn().mockResolvedValue({}),
+    remove: vi.fn().mockResolvedValue({ branchDeleted: true }),
+    getStatus: vi.fn().mockResolvedValue({ isDirty: false, agent: { type: "none" } }),
+    get: vi.fn().mockResolvedValue(undefined),
+  },
+  projects: {
+    list: vi.fn().mockResolvedValue([]),
+    open: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    get: vi.fn().mockResolvedValue(undefined),
+    fetchBases: vi.fn().mockResolvedValue({ bases: [] }),
+  },
+  ui: {
+    selectFolder: vi.fn().mockResolvedValue(null),
+    getActiveWorkspace: vi.fn().mockResolvedValue(null),
+    switchWorkspace: vi.fn().mockResolvedValue(undefined),
+    setDialogMode: vi.fn().mockResolvedValue(undefined),
+    focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
+  },
+  lifecycle: {
+    getState: vi.fn().mockResolvedValue("ready"),
+    setup: vi.fn().mockResolvedValue({ success: true }),
+    quit: vi.fn().mockResolvedValue(undefined),
+  },
+  // on() captures callbacks by event name for tests to fire events
+  on: vi.fn((event: string, callback: V2EventCallback) => {
+    v2EventCallbacks.set(event, callback);
+    return vi.fn(); // unsubscribe
+  }),
+  // Legacy APIs (kept for backwards compatibility with some old tests)
+  listBases: vi.fn().mockResolvedValue([]),
+  isWorkspaceDirty: vi.fn().mockResolvedValue(false),
 }));
 
 // Mock the API module
@@ -128,21 +128,32 @@ function readCssFile(relativePath: string): string {
   return readFileSync(fullPath, "utf-8");
 }
 
-// Helper to create mock workspace
-function createWorkspace(name: string, projectPath: string): Workspace {
+// Helper to create mock workspace (v2 API format)
+function createWorkspace(name: string, projectPath: string, projectId?: string): Workspace {
   return {
     name,
     path: `${projectPath}/.worktrees/${name}`,
     branch: name,
+    // v2 API adds projectId to workspaces
+    ...(projectId ? { projectId } : {}),
   };
 }
 
-// Helper to create mock project
-function createProject(name: string, workspaces: Workspace[] = []): Project {
+// Helper to generate consistent project ID from name
+function projectIdFromName(name: string): string {
+  // Simple hash for deterministic IDs in tests
+  return `${name}-12345678`;
+}
+
+// Helper to create mock project (v2 API format with ID)
+function createProject(name: string, workspaces: Workspace[] = []): Project & { id: string } {
+  const id = projectIdFromName(name);
   return {
+    id,
     path: asProjectPath(`/test/${name}`),
     name,
-    workspaces,
+    // Add projectId to each workspace for v2 format
+    workspaces: workspaces.map((ws) => ({ ...ws, projectId: id })),
   };
 }
 
@@ -154,7 +165,10 @@ describe("Integration tests", () => {
     shortcutsStore.reset();
     agentStatusStore.reset();
 
-    // Reset callbacks
+    // Reset v2 event callbacks
+    clearV2EventCallbacks();
+
+    // Reset old callbacks (for backwards compatibility)
     callbacks.onProjectOpened = null;
     callbacks.onProjectClosed = null;
     callbacks.onWorkspaceCreated = null;
@@ -163,14 +177,25 @@ describe("Integration tests", () => {
     callbacks.onShortcutEnable = null;
     callbacks.onShortcutDisable = null;
 
-    // Default mocks
-    mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
+    // Default mocks for v2 API
+    mockApi.projects.list.mockResolvedValue([]);
+    mockApi.projects.fetchBases.mockResolvedValue({
+      bases: [
+        { name: "main", isRemote: false },
+        { name: "develop", isRemote: false },
+      ],
+    });
+    mockApi.ui.getActiveWorkspace.mockResolvedValue(null);
+    mockApi.workspaces.getStatus.mockResolvedValue({
+      isDirty: false,
+      agent: { type: "none" },
+    });
+    // Legacy mocks that may still be used in some places
     mockApi.listBases.mockResolvedValue([
       { name: "main", isRemote: false },
       { name: "develop", isRemote: false },
     ]);
     mockApi.isWorkspaceDirty.mockResolvedValue(false);
-    mockApi.getAllAgentStatuses.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -183,13 +208,10 @@ describe("Integration tests", () => {
       const existingProject = createProject("existing", [
         createWorkspace("main", "/test/existing"),
       ]);
-      mockApi.listProjects.mockResolvedValue({
-        projects: [existingProject],
-        activeWorkspacePath: null,
-      });
+      mockApi.projects.list.mockResolvedValue([existingProject]);
 
       const projectPath = "/test/my-project";
-      mockApi.selectFolder.mockResolvedValue(projectPath);
+      mockApi.ui.selectFolder.mockResolvedValue(projectPath);
 
       render(App);
 
@@ -202,19 +224,19 @@ describe("Integration tests", () => {
       const openButton = screen.getByRole("button", { name: /open project/i });
       await fireEvent.click(openButton);
 
-      // Verify selectFolder was called
+      // Verify selectFolder was called (v2 API)
       await waitFor(() => {
-        expect(mockApi.selectFolder).toHaveBeenCalledTimes(1);
+        expect(mockApi.ui.selectFolder).toHaveBeenCalledTimes(1);
       });
 
-      // Verify openProject was called with the path
+      // Verify openProject was called with the path (v2 API)
       await waitFor(() => {
-        expect(mockApi.openProject).toHaveBeenCalledWith(projectPath);
+        expect(mockApi.projects.open).toHaveBeenCalledWith(projectPath);
       });
 
-      // Simulate project:opened event
+      // Simulate project:opened event (v2 format includes id)
       const newProject = createProject("my-project", [createWorkspace("main", projectPath)]);
-      callbacks.onProjectOpened!({ project: newProject });
+      fireV2Event("project:opened", { project: newProject });
 
       // Verify new project appears in sidebar
       await waitFor(() => {
@@ -224,7 +246,7 @@ describe("Integration tests", () => {
 
     it("close project: click [×] → closeProject → project:closed event → project removed from sidebar", async () => {
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -233,17 +255,20 @@ describe("Integration tests", () => {
         expect(screen.getByText("my-project")).toBeInTheDocument();
       });
 
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
       // Click close project button
       const closeButton = screen.getByLabelText(/close project/i);
       await fireEvent.click(closeButton);
 
-      // Verify closeProject was called
+      // Verify closeProject was called (v2 API uses projectId)
       await waitFor(() => {
-        expect(mockApi.closeProject).toHaveBeenCalledWith(project.path);
+        expect(mockApi.projects.close).toHaveBeenCalledWith(actualProjectId);
       });
 
-      // Simulate project:closed event
-      callbacks.onProjectClosed!({ path: project.path });
+      // Simulate project:closed event (v2 format uses projectId not path)
+      fireV2Event("project:closed", { projectId: actualProjectId });
 
       // Verify project is removed
       await waitFor(() => {
@@ -256,7 +281,7 @@ describe("Integration tests", () => {
       // This test focuses on the dialog opening and event handling
       // BranchDropdown interaction is tested separately in BranchDropdown.test.ts
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -281,10 +306,12 @@ describe("Integration tests", () => {
       // Should have 2 comboboxes: project dropdown and branch dropdown
       expect(screen.getAllByRole("combobox")).toHaveLength(2);
 
-      // Simulate workspace:created event (as if creation succeeded via IPC)
-      const newWorkspace = createWorkspace("feature-x", "/test/my-project");
-      callbacks.onWorkspaceCreated!({
-        projectPath: project.path,
+      // Simulate workspace:created event (v2 format uses projectId)
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+      const newWorkspace = createWorkspace("feature-x", "/test/my-project", actualProjectId);
+      fireV2Event("workspace:created", {
+        projectId: actualProjectId,
         workspace: newWorkspace,
       });
 
@@ -297,7 +324,7 @@ describe("Integration tests", () => {
     it("remove workspace: click [×] → dialog opens → confirm → workspace:removed event → workspace removed from sidebar", async () => {
       const workspace = createWorkspace("feature-x", "/test/my-project");
       const project = createProject("my-project", [workspace]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -305,6 +332,9 @@ describe("Integration tests", () => {
       await waitFor(() => {
         expect(screen.getByText("feature-x")).toBeInTheDocument();
       });
+
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Click remove workspace button (use getByRole to target the button specifically)
       const removeButton = screen.getByRole("button", { name: /remove workspace/i });
@@ -317,25 +347,28 @@ describe("Integration tests", () => {
       });
 
       // Confirm removal - use the dialog's Remove button (vscode-button web component)
-      mockApi.removeWorkspace.mockResolvedValue(undefined);
+      mockApi.workspaces.remove.mockResolvedValue({ branchDeleted: true });
       const dialog = screen.getByRole("dialog");
       const removeConfirmButton = Array.from(dialog.querySelectorAll("vscode-button")).find(
         (btn) => btn.textContent?.trim() === "Remove"
       ) as HTMLElement;
       await fireEvent.click(removeConfirmButton);
 
-      // Verify removeWorkspace was called with correct params
+      // Verify v2.workspaces.remove was called with correct params
+      // (projectId is generated, workspaceName matches, keepBranch is false by default)
       await waitFor(() => {
-        expect(mockApi.removeWorkspace).toHaveBeenCalledWith(
-          workspace.path,
-          true // deleteBranch is checked by default
+        expect(mockApi.workspaces.remove).toHaveBeenCalledWith(
+          expect.any(String), // projectId (generated)
+          workspace.name, // workspaceName
+          false // keepBranch (default is unchecked, so keepBranch=false)
         );
       });
 
-      // Simulate workspace:removed event
-      callbacks.onWorkspaceRemoved!({
-        projectPath: project.path,
-        workspacePath: asWorkspacePath(workspace.path),
+      // Simulate workspace:removed event (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:removed", {
+        projectId: actualProjectId,
+        workspaceName: workspace.name,
+        path: workspace.path,
       });
 
       // Verify dialog closes and workspace is removed
@@ -349,7 +382,7 @@ describe("Integration tests", () => {
       const ws1 = createWorkspace("main", "/test/my-project");
       const ws2 = createWorkspace("feature-x", "/test/my-project");
       const project = createProject("my-project", [ws1, ws2]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -359,18 +392,24 @@ describe("Integration tests", () => {
         expect(screen.getByText("feature-x")).toBeInTheDocument();
       });
 
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
       // Click on feature-x workspace
       const featureButton = screen.getByRole("button", { name: "feature-x" });
       await fireEvent.click(featureButton);
 
-      // Verify switchWorkspace was called
+      // Verify switchWorkspace was called (v2 API uses projectId, workspaceName)
+      // Note: focus parameter is optional, MainView doesn't pass it (defaults to true)
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith(ws2.path);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(actualProjectId, ws2.name);
       });
 
-      // Simulate workspace:switched event
-      callbacks.onWorkspaceSwitched!({
-        workspacePath: asWorkspacePath(ws2.path),
+      // Simulate workspace:switched event (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:switched", {
+        projectId: actualProjectId,
+        workspaceName: ws2.name,
+        path: ws2.path,
       });
 
       // Verify aria-current updates
@@ -387,12 +426,9 @@ describe("Integration tests", () => {
       const existingProject = createProject("existing", [
         createWorkspace("main", "/test/existing"),
       ]);
-      mockApi.listProjects.mockResolvedValue({
-        projects: [existingProject],
-        activeWorkspacePath: null,
-      });
+      mockApi.projects.list.mockResolvedValue([existingProject]);
 
-      mockApi.selectFolder.mockResolvedValue(null);
+      mockApi.ui.selectFolder.mockResolvedValue(null);
 
       render(App);
 
@@ -404,18 +440,18 @@ describe("Integration tests", () => {
       await fireEvent.click(openButton);
 
       await waitFor(() => {
-        expect(mockApi.selectFolder).toHaveBeenCalledTimes(1);
+        expect(mockApi.ui.selectFolder).toHaveBeenCalledTimes(1);
       });
 
       // openProject should NOT be called
-      expect(mockApi.openProject).not.toHaveBeenCalled();
+      expect(mockApi.projects.open).not.toHaveBeenCalled();
 
       // Existing project should still be shown
       expect(screen.getByText("existing")).toBeInTheDocument();
     });
 
     it("API rejection during load → loadingState is 'error', loadingError has message", async () => {
-      mockApi.listProjects.mockRejectedValue(new Error("Database connection failed"));
+      mockApi.projects.list.mockRejectedValue(new Error("Database connection failed"));
 
       render(App);
 
@@ -431,7 +467,7 @@ describe("Integration tests", () => {
       // The full form validation and API error handling is tested in the component test
       // This integration test verifies the dialog opens and receives the project context
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -457,7 +493,7 @@ describe("Integration tests", () => {
     it("removeWorkspace rejects → error shown in dialog, form re-enabled", async () => {
       const workspace = createWorkspace("feature-x", "/test/my-project");
       const project = createProject("my-project", [workspace]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -473,8 +509,8 @@ describe("Integration tests", () => {
         expect(screen.getByRole("dialog")).toBeInTheDocument();
       });
 
-      // Make removeWorkspace fail
-      mockApi.removeWorkspace.mockRejectedValue(new Error("Workspace has uncommitted changes"));
+      // Make v2.workspaces.remove fail
+      mockApi.workspaces.remove.mockRejectedValue(new Error("Workspace has uncommitted changes"));
 
       // Use the dialog's Remove button (vscode-button web component)
       const dialog = screen.getByRole("dialog");
@@ -496,7 +532,7 @@ describe("Integration tests", () => {
   describe("dialog z-order integration", () => {
     it("calls api.setDialogMode(true) when dialog opens", async () => {
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -506,7 +542,7 @@ describe("Integration tests", () => {
       });
 
       // Clear any calls from initialization
-      mockApi.setDialogMode.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
 
       // Open create dialog
       const addButton = screen.getByLabelText(/add workspace/i);
@@ -518,12 +554,12 @@ describe("Integration tests", () => {
       });
 
       // Verify setDialogMode was called with true
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(true);
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(true);
     });
 
     it("calls api.setDialogMode(false) when dialog closes", async () => {
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -541,7 +577,7 @@ describe("Integration tests", () => {
       });
 
       // Clear calls and close dialog
-      mockApi.setDialogMode.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
 
       // Close dialog via Cancel button
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -553,13 +589,13 @@ describe("Integration tests", () => {
       });
 
       // Verify setDialogMode was called with false
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
     });
 
     it("handles api.setDialogMode failure gracefully", async () => {
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
-      mockApi.setDialogMode.mockRejectedValue(new Error("IPC failed"));
+      mockApi.projects.list.mockResolvedValue([project]);
+      mockApi.ui.setDialogMode.mockRejectedValue(new Error("IPC failed"));
 
       render(App);
 
@@ -581,9 +617,11 @@ describe("Integration tests", () => {
     it("focuses active workspace when dialog closes", async () => {
       const workspace = createWorkspace("main", "/test/my-project");
       const project = createProject("my-project", [workspace]);
-      mockApi.listProjects.mockResolvedValue({
-        projects: [project],
-        activeWorkspacePath: asWorkspacePath(workspace.path),
+      mockApi.projects.list.mockResolvedValue([project]);
+      mockApi.ui.getActiveWorkspace.mockResolvedValue({
+        projectId: project.id,
+        workspaceName: workspace.name,
+        path: workspace.path,
       });
 
       render(App);
@@ -603,8 +641,8 @@ describe("Integration tests", () => {
       });
 
       // Clear calls
-      mockApi.setDialogMode.mockClear();
-      mockApi.focusActiveWorkspace.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
+      mockApi.ui.focusActiveWorkspace.mockClear();
 
       // Close dialog via Cancel button
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -616,16 +654,14 @@ describe("Integration tests", () => {
       });
 
       // Verify both setDialogMode(false) AND focusActiveWorkspace() were called
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
 
     it("does NOT focus workspace when dialog closes and no active workspace", async () => {
       const project = createProject("my-project", [createWorkspace("main", "/test/my-project")]);
-      mockApi.listProjects.mockResolvedValue({
-        projects: [project],
-        activeWorkspacePath: null, // No active workspace
-      });
+      mockApi.projects.list.mockResolvedValue([project]);
+      mockApi.ui.getActiveWorkspace.mockResolvedValue(null); // No active workspace
 
       render(App);
 
@@ -643,8 +679,8 @@ describe("Integration tests", () => {
       });
 
       // Clear calls
-      mockApi.setDialogMode.mockClear();
-      mockApi.focusActiveWorkspace.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
+      mockApi.ui.focusActiveWorkspace.mockClear();
 
       // Close dialog via Cancel button
       const cancelButton = screen.getByRole("button", { name: /cancel/i });
@@ -656,8 +692,8 @@ describe("Integration tests", () => {
       });
 
       // Verify setDialogMode(false) was called but NOT focusActiveWorkspace()
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).not.toHaveBeenCalled();
     });
   });
 
@@ -667,7 +703,7 @@ describe("Integration tests", () => {
         createWorkspace("main", "/test/my-project"),
         createWorkspace("feature-x", "/test/my-project"),
       ]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -682,11 +718,11 @@ describe("Integration tests", () => {
       expect(screen.getByText("main")).toBeInTheDocument();
       expect(screen.getByText("feature-x")).toBeInTheDocument();
 
-      // Add another project via event
+      // Add another project via event (v2 format includes id)
       const newProject = createProject("new-project", [
         createWorkspace("develop", "/test/new-project"),
       ]);
-      callbacks.onProjectOpened!({ project: newProject });
+      fireV2Event("project:opened", { project: newProject });
 
       await waitFor(() => {
         expect(projectsStore.projects.value).toHaveLength(2);
@@ -700,7 +736,7 @@ describe("Integration tests", () => {
       const ws1 = createWorkspace("main", "/test/my-project");
       const ws2 = createWorkspace("feature-x", "/test/my-project");
       const project = createProject("my-project", [ws1, ws2]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -712,9 +748,14 @@ describe("Integration tests", () => {
       expect(projectsStore.activeWorkspacePath.value).toBeNull();
       expect(screen.queryByRole("listitem", { current: true })).toBeNull();
 
-      // Set active workspace via event
-      callbacks.onWorkspaceSwitched!({
-        workspacePath: asWorkspacePath(ws1.path),
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
+      // Set active workspace via event (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:switched", {
+        projectId: actualProjectId,
+        workspaceName: ws1.name,
+        path: ws1.path,
       });
 
       await waitFor(() => {
@@ -724,9 +765,11 @@ describe("Integration tests", () => {
       const mainItem = screen.getByText("main").closest("li");
       expect(mainItem).toHaveAttribute("aria-current", "true");
 
-      // Switch to another workspace
-      callbacks.onWorkspaceSwitched!({
-        workspacePath: asWorkspacePath(ws2.path),
+      // Switch to another workspace (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:switched", {
+        projectId: actualProjectId,
+        workspaceName: ws2.name,
+        path: ws2.path,
       });
 
       await waitFor(() => {
@@ -749,8 +792,8 @@ describe("Integration tests", () => {
       });
 
       // Clear any calls from initialization
-      mockApi.setDialogMode.mockClear();
-      mockApi.focusActiveWorkspace.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
+      mockApi.ui.focusActiveWorkspace.mockClear();
 
       // Verify overlay exists but is initially inactive (opacity 0)
       // Use { hidden: true } because aria-hidden="true" excludes from accessible tree
@@ -759,7 +802,7 @@ describe("Integration tests", () => {
       expect(overlay).not.toHaveClass("active");
 
       // Step 1: Simulate shortcut enable event (Alt+X pressed)
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
 
       // Step 2: Verify overlay becomes active
       await waitFor(() => {
@@ -776,9 +819,9 @@ describe("Integration tests", () => {
       });
       expect(shortcutsStore.shortcutModeActive.value).toBe(false);
 
-      // Step 5: Verify APIs were called
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      // Step 5: Verify APIs were called (v2 API)
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
   });
 
@@ -787,7 +830,7 @@ describe("Integration tests", () => {
       const ws1 = createWorkspace("main", "/test/my-project");
       const ws2 = createWorkspace("feature", "/test/my-project");
       const project = createProject("my-project", [ws1, ws2]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -797,17 +840,24 @@ describe("Integration tests", () => {
         expect(screen.getByText("feature")).toBeInTheDocument();
       });
 
-      // Set active workspace
-      callbacks.onWorkspaceSwitched!({ workspacePath: asWorkspacePath(ws1.path) });
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
+      // Set active workspace (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:switched", {
+        projectId: actualProjectId,
+        workspaceName: ws1.name,
+        path: ws1.path,
+      });
       await waitFor(() => {
         expect(projectsStore.activeWorkspacePath.value).toBe(ws1.path);
       });
 
       // Clear mocks
-      mockApi.switchWorkspace.mockClear();
+      mockApi.ui.switchWorkspace.mockClear();
 
       // Step 1: Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
       await waitFor(() => {
         expect(shortcutsStore.shortcutModeActive.value).toBe(true);
       });
@@ -815,9 +865,13 @@ describe("Integration tests", () => {
       // Step 2: Press ArrowDown
       await fireEvent.keyDown(window, { key: "ArrowDown" });
 
-      // Step 3: Verify workspace switch was called with focusWorkspace=false to keep shortcut mode active
+      // Step 3: Verify workspace switch was called (v2 API: projectId, workspaceName, focus)
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith(ws2.path, false);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+          actualProjectId,
+          ws2.name,
+          false // focus=false to keep shortcut mode active
+        );
       });
 
       // Step 4: Verify overlay is still active
@@ -837,7 +891,7 @@ describe("Integration tests", () => {
         createWorkspace(`ws${i + 1}`, "/test/my-project")
       );
       const project = createProject("my-project", workspaces);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -846,24 +900,35 @@ describe("Integration tests", () => {
         expect(screen.getByText("ws1")).toBeInTheDocument();
       });
 
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
       // Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
       await waitFor(() => {
         expect(shortcutsStore.shortcutModeActive.value).toBe(true);
       });
 
-      // Press 1 then wait for it to complete
+      // Press 1 then wait for it to complete (v2 API: projectId, workspaceName, focus)
       await fireEvent.keyDown(window, { key: "1" });
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith(workspaces[0]!.path, false);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+          actualProjectId,
+          workspaces[0]!.name,
+          false
+        );
       });
 
       // Clear and press 2
-      mockApi.switchWorkspace.mockClear();
+      mockApi.ui.switchWorkspace.mockClear();
       await fireEvent.keyDown(window, { key: "2" });
 
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith(workspaces[1]!.path, false);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+          actualProjectId,
+          workspaces[1]!.name,
+          false
+        );
       });
 
       // Verify overlay is still visible
@@ -873,7 +938,7 @@ describe("Integration tests", () => {
     it("should-open-dialog-and-hide-overlay: Alt+X → Enter → dialog opens, overlay hides", async () => {
       const ws = createWorkspace("main", "/test/my-project");
       const project = createProject("my-project", [ws]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -882,14 +947,21 @@ describe("Integration tests", () => {
         expect(screen.getByText("my-project")).toBeInTheDocument();
       });
 
-      // Set active workspace so activeProject is available
-      callbacks.onWorkspaceSwitched!({ workspacePath: asWorkspacePath(ws.path) });
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
+      // Set active workspace so activeProject is available (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:switched", {
+        projectId: actualProjectId,
+        workspaceName: ws.name,
+        path: ws.path,
+      });
       await waitFor(() => {
         expect(projectsStore.activeWorkspacePath.value).toBe(ws.path);
       });
 
       // Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
       await waitFor(() => {
         expect(shortcutsStore.shortcutModeActive.value).toBe(true);
       });
@@ -911,7 +983,7 @@ describe("Integration tests", () => {
       const ws1 = createWorkspace("first", "/test/my-project");
       const ws2 = createWorkspace("last", "/test/my-project");
       const project = createProject("my-project", [ws1, ws2]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -919,22 +991,29 @@ describe("Integration tests", () => {
         expect(screen.getByText("first")).toBeInTheDocument();
       });
 
-      // Set active to last workspace
-      callbacks.onWorkspaceSwitched!({ workspacePath: asWorkspacePath(ws2.path) });
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
+      // Set active to last workspace (v2 format uses WorkspaceRef)
+      fireV2Event("workspace:switched", {
+        projectId: actualProjectId,
+        workspaceName: ws2.name,
+        path: ws2.path,
+      });
       await waitFor(() => {
         expect(projectsStore.activeWorkspacePath.value).toBe(ws2.path);
       });
 
-      mockApi.switchWorkspace.mockClear();
+      mockApi.ui.switchWorkspace.mockClear();
 
       // Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
 
       // Press ArrowDown (should wrap to first)
       await fireEvent.keyDown(window, { key: "ArrowDown" });
 
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith(ws1.path, false);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(actualProjectId, ws1.name, false);
       });
     });
 
@@ -945,10 +1024,10 @@ describe("Integration tests", () => {
         expect(screen.getByText("No projects open.")).toBeInTheDocument();
       });
 
-      mockApi.selectFolder.mockClear();
+      mockApi.ui.selectFolder.mockClear();
 
       // Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
       await waitFor(() => {
         expect(shortcutsStore.shortcutModeActive.value).toBe(true);
       });
@@ -961,12 +1040,12 @@ describe("Integration tests", () => {
 
       // Verify folder picker called
       await waitFor(() => {
-        expect(mockApi.selectFolder).toHaveBeenCalled();
+        expect(mockApi.ui.selectFolder).toHaveBeenCalled();
       });
     });
 
     it("should-handle-no-workspaces-gracefully: no workspaces → only O Open visible", async () => {
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
 
@@ -975,7 +1054,7 @@ describe("Integration tests", () => {
       });
 
       // Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
       await waitFor(() => {
         expect(shortcutsStore.shortcutModeActive.value).toBe(true);
       });
@@ -992,15 +1071,15 @@ describe("Integration tests", () => {
       expect(openHint).not.toHaveClass("shortcut-hint--hidden");
 
       // Pressing arrow should be no-op
-      mockApi.switchWorkspace.mockClear();
+      mockApi.ui.switchWorkspace.mockClear();
       await fireEvent.keyDown(window, { key: "ArrowDown" });
-      expect(mockApi.switchWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
     });
 
     it("should-handle-single-workspace-gracefully: single workspace → navigate hints hidden, jump works for index 1", async () => {
       const ws = createWorkspace("only", "/test/my-project");
       const project = createProject("my-project", [ws]);
-      mockApi.listProjects.mockResolvedValue({ projects: [project], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([project]);
 
       render(App);
 
@@ -1008,8 +1087,11 @@ describe("Integration tests", () => {
         expect(screen.getByText("only")).toBeInTheDocument();
       });
 
+      // Get actual projectId from store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
       // Activate shortcut mode
-      callbacks.onShortcutEnable!();
+      fireV2Event("shortcut:enable");
       await waitFor(() => {
         expect(shortcutsStore.shortcutModeActive.value).toBe(true);
       });
@@ -1018,11 +1100,11 @@ describe("Integration tests", () => {
       const navigateHint = screen.getByLabelText("Up and Down arrows to navigate");
       expect(navigateHint).toHaveClass("shortcut-hint--hidden");
 
-      // Jump should still work for index 1
+      // Jump should still work for index 1 (v2 API: projectId, workspaceName, focus)
       await fireEvent.keyDown(window, { key: "1" });
 
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith(ws.path, false);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(actualProjectId, ws.name, false);
       });
     });
   });
@@ -1030,11 +1112,11 @@ describe("Integration tests", () => {
   describe("onboarding flow", () => {
     it("complete-onboarding-flow: empty state → auto-open picker → select folder → project with 0 workspaces → auto-open create dialog", async () => {
       // Start with no projects (empty state)
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([]);
 
       // Defer folder selection to simulate user selecting a folder
       let folderPromiseResolve: (value: string | null) => void = () => {};
-      mockApi.selectFolder.mockImplementation(() => {
+      mockApi.ui.selectFolder.mockImplementation(() => {
         return new Promise((resolve) => {
           folderPromiseResolve = resolve;
         });
@@ -1044,12 +1126,12 @@ describe("Integration tests", () => {
 
       // Wait for MainView to load (should see EmptyState briefly, then folder picker auto-opens)
       await waitFor(() => {
-        expect(mockApi.listProjects).toHaveBeenCalled();
+        expect(mockApi.projects.list).toHaveBeenCalled();
       });
 
       // Verify folder picker was automatically triggered (auto-open on empty state)
       await waitFor(() => {
-        expect(mockApi.selectFolder).toHaveBeenCalledTimes(1);
+        expect(mockApi.ui.selectFolder).toHaveBeenCalledTimes(1);
       });
 
       // Simulate user selecting a folder
@@ -1058,12 +1140,12 @@ describe("Integration tests", () => {
 
       // Verify openProject was called with the selected path
       await waitFor(() => {
-        expect(mockApi.openProject).toHaveBeenCalledWith(selectedPath);
+        expect(mockApi.projects.open).toHaveBeenCalledWith(selectedPath);
       });
 
-      // Simulate project:opened event with a project that has NO workspaces
+      // Simulate project:opened event with a project that has NO workspaces (v2 format)
       const emptyProject = createProject("new-project", []);
-      callbacks.onProjectOpened!({ project: emptyProject });
+      fireV2Event("project:opened", { project: emptyProject });
 
       // Verify create workspace dialog auto-opens because project has 0 workspaces
       await waitFor(() => {
@@ -1071,22 +1153,23 @@ describe("Integration tests", () => {
         expect(screen.getByText("Create Workspace")).toBeInTheDocument();
       });
 
-      // Verify dialog is for the correct project
+      // Verify dialog is for the correct project (uses project ID, not path)
       expect(dialogsStore.dialogState.value.type).toBe("create");
       if (dialogsStore.dialogState.value.type === "create") {
-        expect(dialogsStore.dialogState.value.projectPath).toBe("/test/new-project");
+        // The project ID is generated from the path, so we just verify it's set
+        expect(dialogsStore.dialogState.value.projectId).toBeDefined();
       }
     });
 
     it("auto-open-picker-cancelled: empty state → picker cancelled → EmptyState shown", async () => {
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
-      mockApi.selectFolder.mockResolvedValue(null); // User cancels
+      mockApi.projects.list.mockResolvedValue([]);
+      mockApi.ui.selectFolder.mockResolvedValue(null); // User cancels
 
       render(App);
 
       // Wait for auto-open
       await waitFor(() => {
-        expect(mockApi.selectFolder).toHaveBeenCalled();
+        expect(mockApi.ui.selectFolder).toHaveBeenCalled();
       });
 
       // Verify EmptyState is shown after cancel
@@ -1095,17 +1178,14 @@ describe("Integration tests", () => {
       });
 
       // Verify openProject was NOT called
-      expect(mockApi.openProject).not.toHaveBeenCalled();
+      expect(mockApi.projects.open).not.toHaveBeenCalled();
     });
 
     it("project-with-workspaces-no-auto-dialog: opening project with workspaces does not auto-open dialog", async () => {
       const existingProject = createProject("existing", [
         createWorkspace("main", "/test/existing"),
       ]);
-      mockApi.listProjects.mockResolvedValue({
-        projects: [existingProject],
-        activeWorkspacePath: null,
-      });
+      mockApi.projects.list.mockResolvedValue([existingProject]);
 
       render(App);
 
@@ -1116,21 +1196,21 @@ describe("Integration tests", () => {
 
       // Open another project with workspaces
       const projectPath = "/test/another-project";
-      mockApi.selectFolder.mockResolvedValue(projectPath);
+      mockApi.ui.selectFolder.mockResolvedValue(projectPath);
 
       // Click Open Project button
       const openButton = screen.getByRole("button", { name: /open project/i });
       await fireEvent.click(openButton);
 
       await waitFor(() => {
-        expect(mockApi.openProject).toHaveBeenCalledWith(projectPath);
+        expect(mockApi.projects.open).toHaveBeenCalledWith(projectPath);
       });
 
-      // Simulate project:opened with workspaces
+      // Simulate project:opened with workspaces (v2 format)
       const newProject = createProject("another-project", [
         createWorkspace("develop", "/test/another-project"),
       ]);
-      callbacks.onProjectOpened!({ project: newProject });
+      fireV2Event("project:opened", { project: newProject });
 
       // Verify project is added
       await waitFor(() => {
@@ -1321,13 +1401,13 @@ describe("Integration tests", () => {
   describe("setup flow integration", () => {
     it("routes-to-mainview-when-ready-true: setupReady returns ready, MainView mounts and calls listProjects", async () => {
       mockApi.setupReady.mockResolvedValue({ ready: true });
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
+      mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
 
-      // Wait for MainView to mount and call listProjects
+      // Wait for MainView to mount and call listProjects (v2 API)
       await waitFor(() => {
-        expect(mockApi.listProjects).toHaveBeenCalled();
+        expect(mockApi.projects.list).toHaveBeenCalled();
       });
 
       // Verify we're in normal app mode (empty state shown)
@@ -1346,8 +1426,8 @@ describe("Integration tests", () => {
         expect(screen.getByText("Setting up VSCode...")).toBeInTheDocument();
       });
 
-      // Verify listProjects was NOT called (we're in setup mode)
-      expect(mockApi.listProjects).not.toHaveBeenCalled();
+      // Verify v2.projects.list was NOT called (we're in setup mode)
+      expect(mockApi.projects.list).not.toHaveBeenCalled();
     });
 
     // Note: setup:complete event transition is tested in App.test.ts with proper mock setup
@@ -1364,15 +1444,13 @@ describe("Integration tests", () => {
       });
 
       // Verify no domain IPC calls during setup
-      expect(mockApi.listProjects).not.toHaveBeenCalled();
-      expect(mockApi.getAllAgentStatuses).not.toHaveBeenCalled();
+      expect(mockApi.projects.list).not.toHaveBeenCalled();
     });
 
     it("complete-event-triggers-mainview-mount-and-initialization: setup:complete triggers MainView mount", async () => {
       // Start in setup mode
       mockApi.setupReady.mockResolvedValue({ ready: false });
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
-      mockApi.getAllAgentStatuses.mockResolvedValue({});
+      mockApi.projects.list.mockResolvedValue([]);
 
       // Capture the setup complete callback
       let setupCompleteCallback: (() => void) | null = null;
@@ -1394,7 +1472,7 @@ describe("Integration tests", () => {
       });
 
       // Verify IPC hasn't been called yet
-      expect(mockApi.listProjects).not.toHaveBeenCalled();
+      expect(mockApi.projects.list).not.toHaveBeenCalled();
 
       // Simulate setup complete event
       setupCompleteCallback!();
@@ -1405,10 +1483,10 @@ describe("Integration tests", () => {
       });
 
       // The SetupComplete timer will transition to MainView
-      // After transition, MainView should call listProjects
+      // After transition, MainView should call v2.projects.list
       await waitFor(
         () => {
-          expect(mockApi.listProjects).toHaveBeenCalled();
+          expect(mockApi.projects.list).toHaveBeenCalled();
         },
         { timeout: 3000 }
       ); // Allow time for the 1.5s success screen
@@ -1417,23 +1495,16 @@ describe("Integration tests", () => {
     it("handlers-registered-before-setupReady-returns: normal handlers available when setup is complete", async () => {
       // This test verifies that when setupReady returns { ready: true },
       // the IPC handlers that MainView needs are already registered.
-      // We can verify this by checking that listProjects succeeds.
+      // We can verify this by checking that v2.projects.list succeeds.
       mockApi.setupReady.mockResolvedValue({ ready: true });
-      const mockProjects = [
-        {
-          path: asProjectPath("/test/project"),
-          name: "my-project",
-          workspaces: [],
-        },
-      ];
-      mockApi.listProjects.mockResolvedValue({ projects: mockProjects, activeWorkspacePath: null });
-      mockApi.getAllAgentStatuses.mockResolvedValue({});
+      const mockProjects = [createProject("my-project", [])];
+      mockApi.projects.list.mockResolvedValue(mockProjects);
 
       render(App);
 
       // Wait for MainView to mount and successfully call IPC
       await waitFor(() => {
-        expect(mockApi.listProjects).toHaveBeenCalled();
+        expect(mockApi.projects.list).toHaveBeenCalled();
       });
 
       // Verify the project loaded successfully (no handler-not-registered error)

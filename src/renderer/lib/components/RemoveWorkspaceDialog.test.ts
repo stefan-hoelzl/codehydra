@@ -4,31 +4,37 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
+import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
 
 // Create mock functions with vi.hoisted
-const { mockRemoveWorkspace, mockIsWorkspaceDirty, mockCloseDialog } = vi.hoisted(() => ({
+const { mockRemoveWorkspace, mockGetStatus, mockCloseDialog } = vi.hoisted(() => ({
   mockRemoveWorkspace: vi.fn(),
-  mockIsWorkspaceDirty: vi.fn(),
+  mockGetStatus: vi.fn(),
   mockCloseDialog: vi.fn(),
 }));
 
-// Mock $lib/api
+// Mock $lib/api - using v2 API
 vi.mock("$lib/api", () => ({
   selectFolder: vi.fn().mockResolvedValue(null),
   openProject: vi.fn().mockResolvedValue(undefined),
   closeProject: vi.fn().mockResolvedValue(undefined),
   listProjects: vi.fn().mockResolvedValue({ projects: [], activeWorkspacePath: null }),
   createWorkspace: vi.fn().mockResolvedValue(undefined),
-  removeWorkspace: mockRemoveWorkspace,
+  removeWorkspace: vi.fn().mockResolvedValue(undefined),
   switchWorkspace: vi.fn().mockResolvedValue(undefined),
   listBases: vi.fn().mockResolvedValue([]),
   updateBases: vi.fn().mockResolvedValue(undefined),
-  isWorkspaceDirty: mockIsWorkspaceDirty,
+  isWorkspaceDirty: vi.fn().mockResolvedValue(false),
   onProjectOpened: vi.fn(() => vi.fn()),
   onProjectClosed: vi.fn(() => vi.fn()),
   onWorkspaceCreated: vi.fn(() => vi.fn()),
   onWorkspaceRemoved: vi.fn(() => vi.fn()),
   onWorkspaceSwitched: vi.fn(() => vi.fn()),
+  // Flat API structure
+  workspaces: {
+    remove: mockRemoveWorkspace,
+    getStatus: mockGetStatus,
+  },
 }));
 
 // Mock $lib/stores/dialogs.svelte.js
@@ -38,7 +44,16 @@ vi.mock("$lib/stores/dialogs.svelte.js", () => ({
 
 // Import component after mocks
 import RemoveWorkspaceDialog from "./RemoveWorkspaceDialog.svelte";
-import { removeWorkspace, isWorkspaceDirty } from "$lib/api";
+import { workspaces } from "$lib/api";
+
+// Test workspace ref
+const testProjectId = "test-project-12345678" as ProjectId;
+const testWorkspaceName = "feature-branch" as WorkspaceName;
+const testWorkspaceRef: WorkspaceRef = {
+  projectId: testProjectId,
+  workspaceName: testWorkspaceName,
+  path: "/test/project/.worktrees/feature-branch",
+};
 
 /**
  * Helper to get the keep branch checkbox (vscode-checkbox).
@@ -54,14 +69,16 @@ function getKeepBranchCheckbox(): HTMLElement & { checked?: boolean } {
 describe("RemoveWorkspaceDialog component", () => {
   const defaultProps = {
     open: true,
-    workspacePath: "/test/project/.worktrees/feature-branch",
+    workspaceRef: testWorkspaceRef,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    mockRemoveWorkspace.mockResolvedValue(undefined);
-    mockIsWorkspaceDirty.mockResolvedValue(false);
+    // v2 API returns WorkspaceRemovalResult
+    mockRemoveWorkspace.mockResolvedValue({ branchDeleted: true });
+    // v2 API returns WorkspaceStatus
+    mockGetStatus.mockResolvedValue({ isDirty: false, agent: { type: "none" } });
   });
 
   afterEach(() => {
@@ -99,17 +116,20 @@ describe("RemoveWorkspaceDialog component", () => {
   });
 
   describe("dirty status", () => {
-    it("loads dirty status using api.isWorkspaceDirty(workspacePath) on mount", async () => {
+    it("loads dirty status using workspaces.getStatus on mount", async () => {
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
-      expect(isWorkspaceDirty).toHaveBeenCalledWith("/test/project/.worktrees/feature-branch");
+      expect(workspaces.getStatus).toHaveBeenCalledWith(testProjectId, testWorkspaceName);
     });
 
     it("shows spinner while checking dirty status", async () => {
-      // Delay the API response
-      mockIsWorkspaceDirty.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(false), 1000))
+      // Delay the API response - v2 returns WorkspaceStatus object
+      mockGetStatus.mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ isDirty: false, agent: { type: "none" } }), 1000)
+          )
       );
 
       render(RemoveWorkspaceDialog, { props: defaultProps });
@@ -120,7 +140,7 @@ describe("RemoveWorkspaceDialog component", () => {
     });
 
     it("shows warning box when workspace is dirty", async () => {
-      mockIsWorkspaceDirty.mockResolvedValue(true);
+      mockGetStatus.mockResolvedValue({ isDirty: true, agent: { type: "none" } });
 
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
@@ -129,7 +149,7 @@ describe("RemoveWorkspaceDialog component", () => {
     });
 
     it("hides warning box when workspace is clean", async () => {
-      mockIsWorkspaceDirty.mockResolvedValue(false);
+      mockGetStatus.mockResolvedValue({ isDirty: false, agent: { type: "none" } });
 
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
@@ -138,7 +158,7 @@ describe("RemoveWorkspaceDialog component", () => {
     });
 
     it("handles isWorkspaceDirty error gracefully (assume clean)", async () => {
-      mockIsWorkspaceDirty.mockRejectedValue(new Error("Network error"));
+      mockGetStatus.mockRejectedValue(new Error("Network error"));
 
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
@@ -182,7 +202,7 @@ describe("RemoveWorkspaceDialog component", () => {
   });
 
   describe("submit flow", () => {
-    it("OK calls api.removeWorkspace with deleteBranch=true when keepBranch unchecked (default)", async () => {
+    it("OK calls workspaces.remove with keepBranch=false when checkbox unchecked (default)", async () => {
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
@@ -192,10 +212,11 @@ describe("RemoveWorkspaceDialog component", () => {
 
       await vi.runAllTimersAsync();
 
-      expect(removeWorkspace).toHaveBeenCalledWith("/test/project/.worktrees/feature-branch", true);
+      // API uses keepBranch (inverted from old deleteBranch)
+      expect(workspaces.remove).toHaveBeenCalledWith(testProjectId, testWorkspaceName, false);
     });
 
-    it("OK calls api.removeWorkspace with deleteBranch=false when keepBranch checked", async () => {
+    it("OK calls workspaces.remove with keepBranch=true when checkbox checked", async () => {
       render(RemoveWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
@@ -211,10 +232,7 @@ describe("RemoveWorkspaceDialog component", () => {
 
       await vi.runAllTimersAsync();
 
-      expect(removeWorkspace).toHaveBeenCalledWith(
-        "/test/project/.worktrees/feature-branch",
-        false
-      );
+      expect(workspaces.remove).toHaveBeenCalledWith(testProjectId, testWorkspaceName, true);
     });
 
     it("OK shows spinner during submit", async () => {

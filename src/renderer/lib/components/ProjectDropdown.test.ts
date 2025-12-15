@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
 import { tick } from "svelte";
-import type { Project, ProjectPath } from "@shared/ipc";
+import type { ProjectPath } from "@shared/ipc";
+import type { ProjectId } from "@shared/api/types";
 
 // Create mock projects function
 const { mockProjects } = vi.hoisted(() => ({
@@ -24,19 +25,28 @@ vi.mock("$lib/stores/projects.svelte.js", () => ({
 // Import component after mock setup
 import ProjectDropdown from "./ProjectDropdown.svelte";
 
+// Test project IDs
+const alphaProjectId = "project-alpha-12345678" as ProjectId;
+const betaProjectId = "project-beta-87654321" as ProjectId;
+const anotherProjectId = "another-project-11111111" as ProjectId;
+
 describe("ProjectDropdown component", () => {
-  const mockProjectsList: Project[] = [
+  // Projects with IDs for the new v2 API
+  const mockProjectsList = [
     {
+      id: alphaProjectId,
       path: "/home/user/projects/project-alpha" as ProjectPath,
       name: "project-alpha",
       workspaces: [],
     },
     {
+      id: betaProjectId,
       path: "/home/user/projects/project-beta" as ProjectPath,
       name: "project-beta",
       workspaces: [],
     },
     {
+      id: anotherProjectId,
       path: "/home/user/projects/another-project" as ProjectPath,
       name: "another-project",
       workspaces: [],
@@ -44,7 +54,7 @@ describe("ProjectDropdown component", () => {
   ];
 
   const defaultProps = {
-    value: "/home/user/projects/project-alpha",
+    value: alphaProjectId,
     onSelect: vi.fn(),
   };
 
@@ -83,7 +93,7 @@ describe("ProjectDropdown component", () => {
       expect(options[2]).toHaveTextContent("another-project");
     });
 
-    it("onSelect returns project path (not name)", async () => {
+    it("onSelect returns project ID (not name or path)", async () => {
       const onSelect = vi.fn();
       render(ProjectDropdown, { props: { ...defaultProps, onSelect } });
 
@@ -93,7 +103,8 @@ describe("ProjectDropdown component", () => {
       const option = screen.getByText("project-beta");
       await fireEvent.mouseDown(option);
 
-      expect(onSelect).toHaveBeenCalledWith("/home/user/projects/project-beta");
+      // Should return the project ID, not the path
+      expect(onSelect).toHaveBeenCalledWith(betaProjectId);
     });
 
     it("displays current value in input (shows project name)", async () => {
@@ -158,7 +169,8 @@ describe("ProjectDropdown component", () => {
       await fireEvent.keyDown(input, { key: "ArrowDown" });
       await fireEvent.keyDown(input, { key: "Enter" });
 
-      expect(onSelect).toHaveBeenCalledWith("/home/user/projects/project-alpha");
+      // Should return project ID, not path
+      expect(onSelect).toHaveBeenCalledWith(alphaProjectId);
     });
 
     it("Escape closes dropdown without selecting", async () => {
@@ -179,8 +191,10 @@ describe("ProjectDropdown component", () => {
   describe("long project names", () => {
     it("handles very long project names without layout break", async () => {
       const longProjectName = "this-is-a-very-long-project-name-that-should-still-work-properly";
+      const longProjectId = "long-project-12345678" as ProjectId;
       mockProjects.mockReturnValue([
         {
+          id: longProjectId,
           path: `/home/user/${longProjectName}` as ProjectPath,
           name: longProjectName,
           workspaces: [],
@@ -188,7 +202,7 @@ describe("ProjectDropdown component", () => {
       ]);
 
       render(ProjectDropdown, {
-        props: { ...defaultProps, value: `/home/user/${longProjectName}` },
+        props: { ...defaultProps, value: longProjectId },
       });
 
       const input = screen.getByRole("combobox");

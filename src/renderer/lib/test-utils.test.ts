@@ -7,58 +7,91 @@ import { createMockApi } from "./test-utils";
 import { createMockProject, createMockWorkspace, createMockBaseInfo } from "./test-fixtures";
 
 describe("createMockApi", () => {
-  it("returns object with all Api functions", () => {
+  it("returns object with setup and normal API functions", () => {
     const api = createMockApi();
 
-    // Commands
-    expect(api.selectFolder).toBeInstanceOf(Function);
-    expect(api.openProject).toBeInstanceOf(Function);
-    expect(api.closeProject).toBeInstanceOf(Function);
-    expect(api.listProjects).toBeInstanceOf(Function);
-    expect(api.createWorkspace).toBeInstanceOf(Function);
-    expect(api.removeWorkspace).toBeInstanceOf(Function);
-    expect(api.switchWorkspace).toBeInstanceOf(Function);
-    expect(api.listBases).toBeInstanceOf(Function);
-    expect(api.updateBases).toBeInstanceOf(Function);
-    expect(api.isWorkspaceDirty).toBeInstanceOf(Function);
+    // Setup commands
+    expect(api.setupReady).toBeInstanceOf(Function);
+    expect(api.setupRetry).toBeInstanceOf(Function);
+    expect(api.setupQuit).toBeInstanceOf(Function);
 
-    // Events
-    expect(api.onProjectOpened).toBeInstanceOf(Function);
-    expect(api.onProjectClosed).toBeInstanceOf(Function);
-    expect(api.onWorkspaceCreated).toBeInstanceOf(Function);
-    expect(api.onWorkspaceRemoved).toBeInstanceOf(Function);
-    expect(api.onWorkspaceSwitched).toBeInstanceOf(Function);
+    // Setup events
+    expect(api.onSetupProgress).toBeInstanceOf(Function);
+    expect(api.onSetupComplete).toBeInstanceOf(Function);
+    expect(api.onSetupError).toBeInstanceOf(Function);
+
+    // Normal API (flat structure, not nested under v2)
+    expect(api.projects).toBeDefined();
+    expect(api.workspaces).toBeDefined();
+    expect(api.ui).toBeDefined();
+    expect(api.lifecycle).toBeDefined();
+    expect(api.on).toBeInstanceOf(Function);
   });
 
-  it("event subscriptions return unsubscribe functions", () => {
+  it("setup event subscriptions return unsubscribe functions", () => {
     const api = createMockApi();
 
-    const unsubProjectOpened = api.onProjectOpened(vi.fn());
-    const unsubProjectClosed = api.onProjectClosed(vi.fn());
-    const unsubWorkspaceCreated = api.onWorkspaceCreated(vi.fn());
-    const unsubWorkspaceRemoved = api.onWorkspaceRemoved(vi.fn());
-    const unsubWorkspaceSwitched = api.onWorkspaceSwitched(vi.fn());
+    const unsubProgress = api.onSetupProgress(vi.fn());
+    const unsubComplete = api.onSetupComplete(vi.fn());
+    const unsubError = api.onSetupError(vi.fn());
 
-    expect(unsubProjectOpened).toBeInstanceOf(Function);
-    expect(unsubProjectClosed).toBeInstanceOf(Function);
-    expect(unsubWorkspaceCreated).toBeInstanceOf(Function);
-    expect(unsubWorkspaceRemoved).toBeInstanceOf(Function);
-    expect(unsubWorkspaceSwitched).toBeInstanceOf(Function);
+    expect(unsubProgress).toBeInstanceOf(Function);
+    expect(unsubComplete).toBeInstanceOf(Function);
+    expect(unsubError).toBeInstanceOf(Function);
   });
 
-  it("command mocks return expected default values", async () => {
+  it("setup command mocks return expected default values", async () => {
     const api = createMockApi();
 
-    expect(await api.selectFolder()).toBeNull();
-    expect(await api.openProject("/path")).toBeUndefined();
-    expect(await api.closeProject("/path")).toBeUndefined();
-    expect(await api.listProjects()).toEqual([]);
-    expect(await api.createWorkspace("/path", "name", "main")).toBeUndefined();
-    expect(await api.removeWorkspace("/path", true)).toBeUndefined();
-    expect(await api.switchWorkspace("/path")).toBeUndefined();
-    expect(await api.listBases("/path")).toEqual([]);
-    expect(await api.updateBases("/path")).toBeUndefined();
-    expect(await api.isWorkspaceDirty("/path")).toBe(false);
+    expect(await api.setupReady()).toEqual({ ready: true });
+    expect(await api.setupRetry()).toBeUndefined();
+    expect(await api.setupQuit()).toBeUndefined();
+  });
+
+  it("projects methods return expected default values", async () => {
+    const api = createMockApi();
+
+    const project = await api.projects.open("/test");
+    expect(project.id).toBe("test-12345678");
+
+    expect(await api.projects.close("id")).toBeUndefined();
+    expect(await api.projects.list()).toEqual([]);
+    expect(await api.projects.get("id")).toBeUndefined();
+    expect(await api.projects.fetchBases("id")).toEqual({ bases: [] });
+  });
+
+  it("workspaces methods return expected default values", async () => {
+    const api = createMockApi();
+
+    const workspace = await api.workspaces.create("id", "name", "main");
+    expect(workspace.name).toBe("ws");
+
+    const removeResult = await api.workspaces.remove("id", "name");
+    expect(removeResult.branchDeleted).toBe(false);
+
+    expect(await api.workspaces.get("id", "name")).toBeUndefined();
+
+    const status = await api.workspaces.getStatus("id", "name");
+    expect(status.isDirty).toBe(false);
+    expect(status.agent.type).toBe("none");
+  });
+
+  it("ui methods return expected default values", async () => {
+    const api = createMockApi();
+
+    expect(await api.ui.selectFolder()).toBeNull();
+    expect(await api.ui.getActiveWorkspace()).toBeNull();
+    expect(await api.ui.switchWorkspace("id", "name")).toBeUndefined();
+    expect(await api.ui.setDialogMode(true)).toBeUndefined();
+    expect(await api.ui.focusActiveWorkspace()).toBeUndefined();
+  });
+
+  it("lifecycle methods return expected default values", async () => {
+    const api = createMockApi();
+
+    expect(await api.lifecycle.getState()).toBe("ready");
+    expect(await api.lifecycle.setup()).toEqual({ success: true });
+    expect(await api.lifecycle.quit()).toBeUndefined();
   });
 });
 

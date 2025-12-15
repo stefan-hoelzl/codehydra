@@ -28,7 +28,16 @@ import {
 import { WindowManager } from "./managers/window-manager";
 import { ViewManager } from "./managers/view-manager";
 import { AppState } from "./app-state";
-import { registerAllHandlers, createSetupRetryHandler, createSetupQuitHandler } from "./ipc";
+import {
+  createSetupRetryHandler,
+  createSetupQuitHandler,
+  registerApiHandlers,
+  wireApiEvents,
+} from "./ipc";
+import { CodeHydraApiImpl } from "./api/codehydra-api";
+import { generateProjectId } from "./api/id-utils";
+import type { ICodeHydraApi, Unsubscribe } from "../shared/api/interfaces";
+import type { WorkspaceName, WorkspaceStatus } from "../shared/api/types";
 import { IpcChannels, type SetupProgress, type SetupErrorPayload } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
@@ -143,6 +152,9 @@ let codeServerManager: CodeServerManager | null = null;
 let discoveryService: DiscoveryService | null = null;
 let agentStatusManager: AgentStatusManager | null = null;
 let scanInterval: ReturnType<typeof setInterval> | null = null;
+let codeHydraApi: ICodeHydraApi | null = null;
+let apiEventCleanup: Unsubscribe | null = null;
+let agentStatusCleanup: Unsubscribe | null = null;
 
 /**
  * Shared ProcessRunner instance for both VscodeSetupService and CodeServerManager.
@@ -291,8 +303,64 @@ async function startServices(): Promise<void> {
     }
   }, 1000);
 
-  // Register IPC handlers
-  registerAllHandlers(appState, viewManager);
+  // Create and register API-based handlers
+  codeHydraApi = new CodeHydraApiImpl(
+    appState,
+    viewManager,
+    dialog,
+    app,
+    vscodeSetupService ?? undefined
+  );
+
+  // Register API handlers
+  registerApiHandlers(codeHydraApi);
+
+  // Wire API events to IPC emission
+  apiEventCleanup = wireApiEvents(codeHydraApi, () => {
+    return viewManager?.getUIView().webContents ?? null;
+  });
+
+  // Wire agent status changes to API events
+  // This bridges the AgentStatusManager callback to the v2 API event system
+  const api = codeHydraApi as CodeHydraApiImpl;
+  const appStateRef = appState; // Capture for closure (appState is guaranteed non-null here)
+  agentStatusCleanup = agentStatusManager.onStatusChanged((workspacePath, aggregatedStatus) => {
+    // Find the project containing this workspace
+    const project = appStateRef.findProjectForWorkspace(workspacePath);
+    if (!project) {
+      return; // Workspace not in any known project, skip
+    }
+
+    // Generate IDs
+    const projectId = generateProjectId(project.path);
+    const workspaceName = workspacePath.split("/").pop() as WorkspaceName;
+
+    // Convert old AggregatedAgentStatus to v2 WorkspaceStatus format
+    // Note: isDirty is not available from the status callback, so we set it to false
+    // The renderer will fetch the full status via getStatus() if needed
+    const status: WorkspaceStatus =
+      aggregatedStatus.status === "none"
+        ? { isDirty: false, agent: { type: "none" } }
+        : {
+            isDirty: false,
+            agent: {
+              type: aggregatedStatus.status,
+              counts: {
+                idle: aggregatedStatus.counts.idle,
+                busy: aggregatedStatus.counts.busy,
+                total: aggregatedStatus.counts.idle + aggregatedStatus.counts.busy,
+              },
+            },
+          };
+
+    // Emit through the API
+    api.emit("workspace:status-changed", {
+      projectId,
+      workspaceName,
+      path: workspacePath,
+      status,
+    });
+  });
 
   // Load persisted projects
   await appState.loadPersistedProjects();
@@ -533,6 +601,24 @@ async function cleanup(): Promise<void> {
   if (discoveryService) {
     discoveryService.dispose();
     discoveryService = null;
+  }
+
+  // Cleanup API event wiring
+  if (apiEventCleanup) {
+    apiEventCleanup();
+    apiEventCleanup = null;
+  }
+
+  // Cleanup agent status wiring
+  if (agentStatusCleanup) {
+    agentStatusCleanup();
+    agentStatusCleanup = null;
+  }
+
+  // Dispose CodeHydra API
+  if (codeHydraApi) {
+    codeHydraApi.dispose();
+    codeHydraApi = null;
   }
 
   // Destroy all views

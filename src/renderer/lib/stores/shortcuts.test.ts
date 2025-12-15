@@ -6,12 +6,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Create mock API functions with vi.hoisted for proper hoisting
+// Uses flat API namespace (no longer nested under v2)
 const mockApi = vi.hoisted(() => ({
-  setDialogMode: vi.fn(),
-  focusActiveWorkspace: vi.fn(),
-  switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  selectFolder: vi.fn().mockResolvedValue(null),
-  openProject: vi.fn().mockResolvedValue(undefined),
+  ui: {
+    setDialogMode: vi.fn().mockResolvedValue(undefined),
+    focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
+    switchWorkspace: vi.fn().mockResolvedValue(undefined),
+    selectFolder: vi.fn().mockResolvedValue(null),
+  },
+  projects: {
+    open: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // Create mock dialog state with vi.hoisted
@@ -31,10 +36,17 @@ interface MockWorkspace {
   branch: string | null;
 }
 
+// WorkspaceRef type for mocking
+interface MockWorkspaceRef {
+  projectId: string;
+  workspaceName: string;
+  path: string;
+}
+
 // Create mock projects store functions
 const mockProjectsStore = vi.hoisted(() => ({
   getAllWorkspaces: vi.fn((): MockWorkspace[] => []),
-  getWorkspaceByIndex: vi.fn((index: number): MockWorkspace | undefined => {
+  getWorkspaceRefByIndex: vi.fn((index: number): MockWorkspaceRef | undefined => {
     void index;
     return undefined;
   }),
@@ -44,7 +56,10 @@ const mockProjectsStore = vi.hoisted(() => ({
   }),
   wrapIndex: vi.fn((i: number, l: number) => ((i % l) + l) % l),
   activeWorkspacePath: { value: null as string | null },
-  activeProject: { value: null as { path: string } | null },
+  // activeProject now has id (ProjectWithId)
+  activeProject: { value: null as { id: string; path: string } | null },
+  // activeWorkspace is now used for remove dialog
+  activeWorkspace: { value: null as MockWorkspaceRef | null },
 }));
 
 // Mock the API module before any imports use it
@@ -105,16 +120,16 @@ describe("shortcuts store", () => {
       handleShortcutDisable();
 
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
 
     it("should-ignore-disable-when-already-inactive: handleShortcutDisable when inactive is no-op", () => {
       handleShortcutDisable();
 
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
-      expect(mockApi.focusActiveWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.focusActiveWorkspace).not.toHaveBeenCalled();
     });
   });
 
@@ -128,8 +143,8 @@ describe("shortcuts store", () => {
       handleKeyUp(event);
 
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
 
     it("should-ignore-keyup-for-non-alt-keys: handleKeyUp with other keys is ignored", () => {
@@ -141,7 +156,7 @@ describe("shortcuts store", () => {
       handleKeyUp(event);
 
       expect(shortcutModeActive.value).toBe(true);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
     });
 
     it("should-ignore-keyup-when-inactive: handleKeyUp when inactive is no-op", () => {
@@ -149,8 +164,8 @@ describe("shortcuts store", () => {
       handleKeyUp(event);
 
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
-      expect(mockApi.focusActiveWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.focusActiveWorkspace).not.toHaveBeenCalled();
     });
 
     it("should-ignore-repeat-keyup-events: handleKeyUp with event.repeat=true is ignored", () => {
@@ -162,7 +177,7 @@ describe("shortcuts store", () => {
       handleKeyUp(event);
 
       expect(shortcutModeActive.value).toBe(true);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
     });
   });
 
@@ -175,16 +190,16 @@ describe("shortcuts store", () => {
       handleWindowBlur();
 
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
 
     it("handleWindowBlur when inactive is no-op", () => {
       handleWindowBlur();
 
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
-      expect(mockApi.focusActiveWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.focusActiveWorkspace).not.toHaveBeenCalled();
     });
 
     it("should-not-exit-shortcut-mode-on-blur-during-navigation", async () => {
@@ -193,13 +208,18 @@ describe("shortcuts store", () => {
         { path: "/ws1", name: "ws1", branch: null },
         { path: "/ws2", name: "ws2", branch: null },
       ];
+      const workspaceRefs: MockWorkspaceRef[] = [
+        { projectId: "test-project-12345678", workspaceName: "ws1", path: "/ws1" },
+        { projectId: "test-project-12345678", workspaceName: "ws2", path: "/ws2" },
+      ];
       mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+      mockProjectsStore.getWorkspaceRefByIndex.mockImplementation((i: number) => workspaceRefs[i]);
       mockProjectsStore.findWorkspaceIndex.mockReturnValue(0);
       mockProjectsStore.activeWorkspacePath.value = "/ws1";
 
       // Make switchWorkspace slow so we can test blur during switch
       let resolveSwitch: () => void;
-      mockApi.switchWorkspace.mockImplementation(
+      mockApi.ui.switchWorkspace.mockImplementation(
         () =>
           new Promise<void>((resolve) => {
             resolveSwitch = resolve;
@@ -217,8 +237,8 @@ describe("shortcuts store", () => {
 
       // Should NOT exit shortcut mode because we're switching workspaces
       expect(shortcutModeActive.value).toBe(true);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
-      expect(mockApi.focusActiveWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.focusActiveWorkspace).not.toHaveBeenCalled();
 
       // Complete the switch
       resolveSwitch!();
@@ -231,12 +251,16 @@ describe("shortcuts store", () => {
         { path: "/ws1", name: "ws1", branch: null },
         { path: "/ws2", name: "ws2", branch: null },
       ];
+      const workspaceRefs: MockWorkspaceRef[] = [
+        { projectId: "test-project-12345678", workspaceName: "ws1", path: "/ws1" },
+        { projectId: "test-project-12345678", workspaceName: "ws2", path: "/ws2" },
+      ];
       mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
-      mockProjectsStore.getWorkspaceByIndex.mockImplementation((i: number) => workspaces[i]);
+      mockProjectsStore.getWorkspaceRefByIndex.mockImplementation((i: number) => workspaceRefs[i]);
 
       // Make switchWorkspace slow so we can test blur during switch
       let resolveSwitch: () => void;
-      mockApi.switchWorkspace.mockImplementation(
+      mockApi.ui.switchWorkspace.mockImplementation(
         () =>
           new Promise<void>((resolve) => {
             resolveSwitch = resolve;
@@ -254,8 +278,8 @@ describe("shortcuts store", () => {
 
       // Should NOT exit shortcut mode because we're switching workspaces
       expect(shortcutModeActive.value).toBe(true);
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
-      expect(mockApi.focusActiveWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.focusActiveWorkspace).not.toHaveBeenCalled();
 
       // Complete the switch
       resolveSwitch!();
@@ -271,8 +295,8 @@ describe("shortcuts store", () => {
 
       // Should exit shortcut mode normally
       expect(shortcutModeActive.value).toBe(false);
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
   });
 
@@ -281,14 +305,14 @@ describe("shortcuts store", () => {
       handleShortcutEnable();
       handleWindowBlur(); // Uses exitShortcutMode internally
 
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
     });
 
     it("should-call-focusActiveWorkspace-on-exit: exitShortcutMode calls api.focusActiveWorkspace()", () => {
       handleShortcutEnable();
       handleWindowBlur(); // Uses exitShortcutMode internally
 
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
   });
 
@@ -323,8 +347,8 @@ describe("shortcuts store", () => {
       expect(shortcutModeActive.value).toBe(false);
 
       // After all toggles, state should be consistent
-      expect(mockApi.setDialogMode).toHaveBeenCalledTimes(2); // Called on each disable
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalledTimes(2);
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledTimes(2); // Called on each disable
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalledTimes(2);
     });
 
     it("should-reset-state-for-testing: reset() sets state to false", () => {
@@ -340,7 +364,7 @@ describe("shortcuts store", () => {
     beforeEach(() => {
       // Reset projects store mocks
       mockProjectsStore.getAllWorkspaces.mockReturnValue([]);
-      mockProjectsStore.getWorkspaceByIndex.mockReturnValue(undefined);
+      mockProjectsStore.getWorkspaceRefByIndex.mockReturnValue(undefined);
       mockProjectsStore.findWorkspaceIndex.mockReturnValue(-1);
       mockProjectsStore.activeWorkspacePath.value = null;
       mockProjectsStore.activeProject.value = null;
@@ -353,7 +377,7 @@ describe("shortcuts store", () => {
       handleKeyDown(event);
 
       expect(preventDefaultSpy).not.toHaveBeenCalled();
-      expect(mockApi.switchWorkspace).not.toHaveBeenCalled();
+      expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
     });
 
     it("should-ignore-non-action-keys", () => {
@@ -373,9 +397,19 @@ describe("shortcuts store", () => {
         { path: "/ws3", name: "ws3", branch: null },
       ];
 
+      const createWorkspaceRefs = (): MockWorkspaceRef[] => [
+        { projectId: "test-project-12345678", workspaceName: "ws1", path: "/ws1" },
+        { projectId: "test-project-12345678", workspaceName: "ws2", path: "/ws2" },
+        { projectId: "test-project-12345678", workspaceName: "ws3", path: "/ws3" },
+      ];
+
       it("should-navigate-to-next-workspace-on-arrow-down", async () => {
         const workspaces = createWorkspaces();
+        const workspaceRefs = createWorkspaceRefs();
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
         mockProjectsStore.findWorkspaceIndex.mockReturnValue(0);
         mockProjectsStore.activeWorkspacePath.value = "/ws1";
 
@@ -385,14 +419,22 @@ describe("shortcuts store", () => {
 
         // Wait for async action to complete
         await vi.waitFor(() => {
-          // Should pass false to keep shortcut mode active
-          expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws2", false);
+          // Should pass projectId, workspaceName, false to keep shortcut mode active
+          expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+            "test-project-12345678",
+            "ws2",
+            false
+          );
         });
       });
 
       it("should-navigate-to-previous-workspace-on-arrow-up", async () => {
         const workspaces = createWorkspaces();
+        const workspaceRefs = createWorkspaceRefs();
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
         mockProjectsStore.findWorkspaceIndex.mockReturnValue(1);
         mockProjectsStore.activeWorkspacePath.value = "/ws2";
 
@@ -401,14 +443,22 @@ describe("shortcuts store", () => {
         handleKeyDown(event);
 
         await vi.waitFor(() => {
-          // Should pass false to keep shortcut mode active
-          expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws1", false);
+          // Should pass projectId, workspaceName, false to keep shortcut mode active
+          expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+            "test-project-12345678",
+            "ws1",
+            false
+          );
         });
       });
 
       it("should-wrap-to-last-workspace-when-navigating-up-from-first", async () => {
         const workspaces = createWorkspaces();
+        const workspaceRefs = createWorkspaceRefs();
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
         mockProjectsStore.findWorkspaceIndex.mockReturnValue(0);
         mockProjectsStore.activeWorkspacePath.value = "/ws1";
 
@@ -417,14 +467,22 @@ describe("shortcuts store", () => {
         handleKeyDown(event);
 
         await vi.waitFor(() => {
-          // Should pass false to keep shortcut mode active
-          expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws3", false);
+          // Should pass projectId, workspaceName, false to keep shortcut mode active
+          expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+            "test-project-12345678",
+            "ws3",
+            false
+          );
         });
       });
 
       it("should-wrap-to-first-workspace-when-navigating-down-from-last", async () => {
         const workspaces = createWorkspaces();
+        const workspaceRefs = createWorkspaceRefs();
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
         mockProjectsStore.findWorkspaceIndex.mockReturnValue(2);
         mockProjectsStore.activeWorkspacePath.value = "/ws3";
 
@@ -433,8 +491,12 @@ describe("shortcuts store", () => {
         handleKeyDown(event);
 
         await vi.waitFor(() => {
-          // Should pass false to keep shortcut mode active
-          expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws1", false);
+          // Should pass projectId, workspaceName, false to keep shortcut mode active
+          expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+            "test-project-12345678",
+            "ws1",
+            false
+          );
         });
       });
 
@@ -445,7 +507,7 @@ describe("shortcuts store", () => {
         const event = new KeyboardEvent("keydown", { key: "ArrowDown" });
         handleKeyDown(event);
 
-        expect(mockApi.switchWorkspace).not.toHaveBeenCalled();
+        expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
       });
 
       it("should-not-navigate-when-single-workspace", () => {
@@ -457,18 +519,22 @@ describe("shortcuts store", () => {
         const event = new KeyboardEvent("keydown", { key: "ArrowDown" });
         handleKeyDown(event);
 
-        expect(mockApi.switchWorkspace).not.toHaveBeenCalled();
+        expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
       });
 
       it("should-prevent-concurrent-navigation-during-rapid-keypresses", async () => {
         const workspaces = createWorkspaces();
+        const workspaceRefs = createWorkspaceRefs();
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
         mockProjectsStore.findWorkspaceIndex.mockReturnValue(0);
         mockProjectsStore.activeWorkspacePath.value = "/ws1";
 
         // Make switchWorkspace slow
         let resolveSwitch: () => void;
-        mockApi.switchWorkspace.mockImplementation(
+        mockApi.ui.switchWorkspace.mockImplementation(
           () =>
             new Promise<void>((resolve) => {
               resolveSwitch = resolve;
@@ -483,7 +549,7 @@ describe("shortcuts store", () => {
         handleKeyDown(new KeyboardEvent("keydown", { key: "ArrowDown" }));
 
         // Only first should have been called
-        expect(mockApi.switchWorkspace).toHaveBeenCalledTimes(1);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledTimes(1);
 
         // Complete the switch
         resolveSwitch!();
@@ -499,10 +565,20 @@ describe("shortcuts store", () => {
           branch: null,
         }));
 
+      const createWorkspaceRefs = (count: number): MockWorkspaceRef[] =>
+        Array.from({ length: count }, (_, i) => ({
+          projectId: "test-project-12345678",
+          workspaceName: `ws${i + 1}`,
+          path: `/ws${i + 1}`,
+        }));
+
       it("should-jump-to-workspace-1-through-9", async () => {
         const workspaces = createWorkspaces(9);
+        const workspaceRefs = createWorkspaceRefs(9);
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
-        mockProjectsStore.getWorkspaceByIndex.mockImplementation((i: number) => workspaces[i]);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
 
         handleShortcutEnable();
 
@@ -510,48 +586,64 @@ describe("shortcuts store", () => {
         handleKeyDown(new KeyboardEvent("keydown", { key: "5" }));
 
         await vi.waitFor(() => {
-          // Should pass false to keep shortcut mode active
-          expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws5", false);
+          // Should pass projectId, workspaceName, false to keep shortcut mode active
+          expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+            "test-project-12345678",
+            "ws5",
+            false
+          );
         });
       });
 
       it("should-jump-to-workspace-10-on-key-0", async () => {
         const workspaces = createWorkspaces(10);
+        const workspaceRefs = createWorkspaceRefs(10);
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
-        mockProjectsStore.getWorkspaceByIndex.mockImplementation((i: number) => workspaces[i]);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
 
         handleShortcutEnable();
         handleKeyDown(new KeyboardEvent("keydown", { key: "0" }));
 
         await vi.waitFor(() => {
-          // Should pass false to keep shortcut mode active
-          expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws10", false);
+          // Should pass projectId, workspaceName, false to keep shortcut mode active
+          expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+            "test-project-12345678",
+            "ws10",
+            false
+          );
         });
       });
 
       it("should-not-jump-when-index-out-of-range", () => {
         const workspaces = createWorkspaces(3);
+        const workspaceRefs = createWorkspaceRefs(3);
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
-        mockProjectsStore.getWorkspaceByIndex.mockImplementation((i: number) => workspaces[i]);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
 
         handleShortcutEnable();
         // Try to jump to workspace 5 when only 3 exist
         handleKeyDown(new KeyboardEvent("keydown", { key: "5" }));
 
-        expect(mockApi.switchWorkspace).not.toHaveBeenCalled();
+        expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
       });
     });
 
     describe("dialog actions", () => {
       it("should-open-create-dialog-on-enter", () => {
-        mockProjectsStore.activeProject.value = { path: "/project" };
+        // activeProject now has id (ProjectWithId)
+        mockProjectsStore.activeProject.value = { id: "project-12345678", path: "/project" };
 
         handleShortcutEnable();
         expect(shortcutModeActive.value).toBe(true);
 
         handleKeyDown(new KeyboardEvent("keydown", { key: "Enter" }));
 
-        expect(mockDialogState.openCreateDialog).toHaveBeenCalledWith("/project");
+        // Now passes projectId instead of path
+        expect(mockDialogState.openCreateDialog).toHaveBeenCalledWith("project-12345678");
         expect(shortcutModeActive.value).toBe(false);
       });
 
@@ -565,28 +657,40 @@ describe("shortcuts store", () => {
       });
 
       it("should-open-remove-dialog-on-delete", () => {
-        mockProjectsStore.activeWorkspacePath.value = "/workspace";
+        // Now uses activeWorkspace (WorkspaceRef) instead of activeWorkspacePath
+        const workspaceRef = {
+          projectId: "project-12345678",
+          workspaceName: "feature",
+          path: "/workspace",
+        };
+        mockProjectsStore.activeWorkspace.value = workspaceRef;
 
         handleShortcutEnable();
         expect(shortcutModeActive.value).toBe(true);
 
         handleKeyDown(new KeyboardEvent("keydown", { key: "Delete" }));
 
-        expect(mockDialogState.openRemoveDialog).toHaveBeenCalledWith("/workspace");
+        // Now passes WorkspaceRef instead of path
+        expect(mockDialogState.openRemoveDialog).toHaveBeenCalledWith(workspaceRef);
         expect(shortcutModeActive.value).toBe(false);
       });
 
       it("should-open-remove-dialog-on-backspace", () => {
-        mockProjectsStore.activeWorkspacePath.value = "/workspace";
+        const workspaceRef = {
+          projectId: "project-12345678",
+          workspaceName: "feature",
+          path: "/workspace",
+        };
+        mockProjectsStore.activeWorkspace.value = workspaceRef;
 
         handleShortcutEnable();
         handleKeyDown(new KeyboardEvent("keydown", { key: "Backspace" }));
 
-        expect(mockDialogState.openRemoveDialog).toHaveBeenCalledWith("/workspace");
+        expect(mockDialogState.openRemoveDialog).toHaveBeenCalledWith(workspaceRef);
       });
 
       it("should-not-open-remove-dialog-when-no-active-workspace", () => {
-        mockProjectsStore.activeWorkspacePath.value = null;
+        mockProjectsStore.activeWorkspace.value = null;
 
         handleShortcutEnable();
         handleKeyDown(new KeyboardEvent("keydown", { key: "Delete" }));
@@ -595,7 +699,10 @@ describe("shortcuts store", () => {
       });
 
       it("should-deactivate-shortcut-mode-before-opening-dialog", () => {
-        mockProjectsStore.activeProject.value = { path: "/project" };
+        mockProjectsStore.activeProject.value = {
+          id: "test-project-12345678",
+          path: "/project",
+        };
 
         handleShortcutEnable();
         expect(shortcutModeActive.value).toBe(true);
@@ -612,7 +719,7 @@ describe("shortcuts store", () => {
         handleKeyDown(new KeyboardEvent("keydown", { key: "o" }));
 
         await vi.waitFor(() => {
-          expect(mockApi.selectFolder).toHaveBeenCalled();
+          expect(mockApi.ui.selectFolder).toHaveBeenCalled();
         });
       });
 
@@ -621,7 +728,7 @@ describe("shortcuts store", () => {
         handleKeyDown(new KeyboardEvent("keydown", { key: "O" }));
 
         await vi.waitFor(() => {
-          expect(mockApi.selectFolder).toHaveBeenCalled();
+          expect(mockApi.ui.selectFolder).toHaveBeenCalled();
         });
       });
 
@@ -636,27 +743,27 @@ describe("shortcuts store", () => {
       });
 
       it("should-open-project-when-folder-selected", async () => {
-        mockApi.selectFolder.mockResolvedValue("/selected/path");
+        mockApi.ui.selectFolder.mockResolvedValue("/selected/path");
 
         handleShortcutEnable();
         handleKeyDown(new KeyboardEvent("keydown", { key: "o" }));
 
         await vi.waitFor(() => {
-          expect(mockApi.openProject).toHaveBeenCalledWith("/selected/path");
+          expect(mockApi.projects.open).toHaveBeenCalledWith("/selected/path");
         });
       });
 
       it("should-not-open-project-when-folder-selection-cancelled", async () => {
-        mockApi.selectFolder.mockResolvedValue(null);
+        mockApi.ui.selectFolder.mockResolvedValue(null);
 
         handleShortcutEnable();
         handleKeyDown(new KeyboardEvent("keydown", { key: "o" }));
 
         await vi.waitFor(() => {
-          expect(mockApi.selectFolder).toHaveBeenCalled();
+          expect(mockApi.ui.selectFolder).toHaveBeenCalled();
         });
 
-        expect(mockApi.openProject).not.toHaveBeenCalled();
+        expect(mockApi.projects.open).not.toHaveBeenCalled();
       });
     });
 
@@ -667,10 +774,17 @@ describe("shortcuts store", () => {
           { path: "/ws1", name: "ws1", branch: null },
           { path: "/ws2", name: "ws2", branch: null },
         ];
+        const workspaceRefs: MockWorkspaceRef[] = [
+          { projectId: "test-project-12345678", workspaceName: "ws1", path: "/ws1" },
+          { projectId: "test-project-12345678", workspaceName: "ws2", path: "/ws2" },
+        ];
         mockProjectsStore.getAllWorkspaces.mockReturnValue(workspaces);
+        mockProjectsStore.getWorkspaceRefByIndex.mockImplementation(
+          (i: number) => workspaceRefs[i]
+        );
         mockProjectsStore.findWorkspaceIndex.mockReturnValue(0);
         mockProjectsStore.activeWorkspacePath.value = "/ws1";
-        mockApi.switchWorkspace.mockRejectedValue(new Error("Switch failed"));
+        mockApi.ui.switchWorkspace.mockRejectedValue(new Error("Switch failed"));
 
         handleShortcutEnable();
         handleKeyDown(new KeyboardEvent("keydown", { key: "ArrowDown" }));
@@ -679,8 +793,12 @@ describe("shortcuts store", () => {
           expect(consoleSpy).toHaveBeenCalledWith("Failed to switch workspace:", expect.any(Error));
         });
 
-        // Verify the call was made with focusWorkspace=false
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/ws2", false);
+        // Verify the call was made with projectId, workspaceName, false
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
+          "test-project-12345678",
+          "ws2",
+          false
+        );
 
         consoleSpy.mockRestore();
       });

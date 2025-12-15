@@ -1,33 +1,34 @@
 <script lang="ts">
-  import { listBases, type BaseInfo } from "$lib/api";
+  import { projects, type ProjectId, type BaseInfoV2 } from "$lib/api";
   import FilterableDropdown, { type DropdownOption } from "./FilterableDropdown.svelte";
 
   interface BranchDropdownProps {
-    projectPath: string;
+    projectId: ProjectId;
     value: string;
     onSelect: (branch: string) => void;
     disabled?: boolean;
   }
 
-  let { projectPath, value, onSelect, disabled = false }: BranchDropdownProps = $props();
+  let { projectId, value, onSelect, disabled = false }: BranchDropdownProps = $props();
 
   // State
-  let branches = $state<BaseInfo[]>([]);
+  let branches = $state<readonly BaseInfoV2[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let hasValidatedInitialValue = $state(false);
 
-  // Load branches on mount or when projectPath changes
+  // Load branches on mount or when projectId changes
   $effect(() => {
     loading = true;
     error = null;
 
-    listBases(projectPath)
-      .then((result) => {
-        branches = result;
+    projects
+      .fetchBases(projectId)
+      .then((result: { bases: readonly BaseInfoV2[] }) => {
+        branches = result.bases;
         loading = false;
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         error = err instanceof Error ? err.message : "Failed to load branches";
         loading = false;
       });
@@ -118,7 +119,7 @@
       {disabled}
       placeholder="Select branch..."
       filterOption={filterBranch}
-      id={`branch-dropdown-${projectPath.replace(/\//g, "-")}`}
+      id={`branch-dropdown-${projectId}`}
     >
       {#snippet optionSnippet(option)}
         {#if option.type === "header"}

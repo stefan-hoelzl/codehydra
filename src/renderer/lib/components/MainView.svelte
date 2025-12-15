@@ -41,18 +41,60 @@
   import CreateWorkspaceDialog from "./CreateWorkspaceDialog.svelte";
   import RemoveWorkspaceDialog from "./RemoveWorkspaceDialog.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
-  import type { ProjectPath } from "$lib/api";
+  import type { ProjectId, WorkspaceRef } from "$lib/api";
+  import type { AggregatedAgentStatus } from "@shared/ipc";
+  import type { Project, WorkspaceStatus, AgentStatus } from "@shared/api/types";
 
   // Container ref for focus management
   let containerRef: HTMLElement;
 
+  /**
+   * Convert v2 AgentStatus to old AggregatedAgentStatus format.
+   * The old format uses 'status' field, v2 uses 'type' field.
+   */
+  function toAggregatedStatus(agent: AgentStatus): AggregatedAgentStatus {
+    if (agent.type === "none") {
+      return { status: "none", counts: { idle: 0, busy: 0 } };
+    }
+    // Strip 'total' from counts as old format doesn't have it
+    return { status: agent.type, counts: { idle: agent.counts.idle, busy: agent.counts.busy } };
+  }
+
+  /**
+   * Fetch all workspace statuses using v2 API and convert to old format.
+   * Iterates all workspaces across all projects.
+   */
+  async function fetchAllAgentStatuses(
+    projectList: readonly Project[]
+  ): Promise<Record<string, AggregatedAgentStatus>> {
+    const result: Record<string, AggregatedAgentStatus> = {};
+
+    // Fetch status for each workspace in parallel
+    const statusPromises: Promise<void>[] = [];
+    for (const project of projectList) {
+      for (const workspace of project.workspaces) {
+        const promise = api.workspaces
+          .getStatus(project.id, workspace.name)
+          .then((status: WorkspaceStatus) => {
+            result[workspace.path] = toAggregatedStatus(status.agent);
+          })
+          .catch(() => {
+            // Ignore errors for individual workspaces
+          });
+        statusPromises.push(promise);
+      }
+    }
+    await Promise.all(statusPromises);
+    return result;
+  }
+
   // Sync dialog state with main process z-order and focus
   $effect(() => {
     const isDialogOpen = dialogState.value.type !== "closed";
-    void api.setDialogMode(isDialogOpen);
+    void api.ui.setDialogMode(isDialogOpen);
     // When dialog closes and there's an active workspace, focus it
     if (!isDialogOpen && activeWorkspacePath.value) {
-      void api.focusActiveWorkspace();
+      void api.ui.focusActiveWorkspace();
     }
   });
 
@@ -62,59 +104,97 @@
     // This must be created before setupDomainEvents so we can seed it with initial statuses
     const notificationService = new AgentNotificationService();
 
-    // Initialize - load projects and optionally auto-open picker
-    const initProjects = async (): Promise<void> => {
+    // Initialize - load projects, agent statuses, and optionally auto-open picker
+    const initProjectsAndStatuses = async (): Promise<void> => {
       try {
-        const result = await api.listProjects();
-        setProjects(result.projects);
-        // Set initial active workspace from main process state
-        if (result.activeWorkspacePath) {
-          setActiveWorkspace(result.activeWorkspacePath);
+        // Use v2 API for listing projects (returns projects with IDs)
+        const projectList = await api.projects.list();
+        // v2 projects have IDs - store now accepts v2 Project type directly
+        setProjects([...projectList]);
+
+        // Get initial active workspace from main process state
+        const activeRef = await api.ui.getActiveWorkspace();
+        if (activeRef) {
+          setActiveWorkspace(activeRef.path);
         }
         setLoaded();
 
+        // Focus first focusable element after DOM settles with project list rendered
+        await tick();
+        const firstFocusable = containerRef?.querySelector<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        firstFocusable?.focus();
+
+        // Fetch agent statuses for all workspaces using v2 API
+        try {
+          const statuses = await fetchAllAgentStatuses(projectList);
+          setAllStatuses(statuses);
+          // Seed notification service with initial counts so chimes work on first status change
+          const initialCounts = Object.fromEntries(
+            Object.entries(statuses).map(([path, status]) => [path, status.counts])
+          );
+          notificationService.seedInitialCounts(initialCounts);
+        } catch {
+          // Agent status is optional, don't fail if it doesn't work
+        }
+
         // Auto-open project picker when no projects exist (first launch experience)
-        if (result.projects.length === 0) {
+        if (projectList.length === 0) {
           await handleOpenProject();
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load projects");
       }
     };
-    void initProjects();
+    void initProjectsAndStatuses();
 
-    // Initialize - load agent statuses and seed notification service
-    const initAgentStatuses = async (): Promise<void> => {
-      try {
-        const statuses = await api.getAllAgentStatuses();
-        setAllStatuses(statuses);
-        // Seed notification service with initial counts so chimes work on first status change
-        const initialCounts = Object.fromEntries(
-          Object.entries(statuses).map(([path, status]) => [path, status.counts])
-        );
-        notificationService.seedInitialCounts(initialCounts);
-      } catch {
-        // Agent status is optional, don't fail if it doesn't work
-      }
-    };
-    void initAgentStatuses();
-
-    // Subscribe to domain events using helper
+    // Subscribe to domain events using API helper
+    // API uses ProjectId and WorkspaceRef instead of paths.
+    // Store functions accept API types directly.
+    // Cast api to DomainEventApi since preload has looser typing
     const cleanup = setupDomainEvents(
-      api,
+      api as import("$lib/utils/domain-events").DomainEventApi,
       {
-        addProject,
-        removeProject,
-        addWorkspace,
-        removeWorkspace,
-        setActiveWorkspace,
-        updateAgentStatus: updateStatus,
+        addProject: (project) => {
+          // Project format - store accepts directly
+          addProject(project);
+        },
+        removeProject: (projectId) => {
+          // Find project by ID and remove by path
+          const project = projects.value.find((p) => p.id === projectId);
+          if (project) {
+            removeProject(project.path);
+          }
+        },
+        addWorkspace: (projectId, workspace) => {
+          // Find project by ID to get path
+          const project = projects.value.find((p) => p.id === projectId);
+          if (project) {
+            addWorkspace(project.path, workspace);
+          }
+        },
+        removeWorkspace: (ref) => {
+          // Find project by ID to get path
+          const project = projects.value.find((p) => p.id === ref.projectId);
+          if (project) {
+            removeWorkspace(project.path, ref.path);
+          }
+        },
+        setActiveWorkspace: (ref) => {
+          // uses WorkspaceRef | null, store uses path | null
+          setActiveWorkspace(ref?.path ?? null);
+        },
+        updateAgentStatus: (ref, status) => {
+          // Convert WorkspaceStatus to AggregatedAgentStatus
+          updateStatus(ref.path, toAggregatedStatus(status.agent));
+        },
       },
       {
         // Auto-open create dialog when project has no workspaces
         onProjectOpenedHook: (project) => {
           if (project.workspaces.length === 0 && dialogState.value.type === "closed") {
-            openCreateDialog(project.path);
+            openCreateDialog(project.id);
           }
         },
       },
@@ -124,46 +204,36 @@
       }
     );
 
-    // Focus first focusable element after DOM settles
-    const initFocus = async (): Promise<void> => {
-      await tick();
-      const firstFocusable = containerRef?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      firstFocusable?.focus();
-    };
-    void initFocus();
-
     // Cleanup subscriptions on unmount
     return cleanup;
   });
 
   // Handle opening a project
   async function handleOpenProject(): Promise<void> {
-    const path = await api.selectFolder();
+    const path = await api.ui.selectFolder();
     if (path) {
-      await api.openProject(path);
+      await api.projects.open(path);
     }
   }
 
   // Handle closing a project
-  async function handleCloseProject(path: ProjectPath): Promise<void> {
-    await api.closeProject(path);
+  async function handleCloseProject(projectId: ProjectId): Promise<void> {
+    await api.projects.close(projectId);
   }
 
   // Handle switching workspace
-  async function handleSwitchWorkspace(workspacePath: string): Promise<void> {
-    await api.switchWorkspace(workspacePath);
+  async function handleSwitchWorkspace(workspaceRef: WorkspaceRef): Promise<void> {
+    await api.ui.switchWorkspace(workspaceRef.projectId, workspaceRef.workspaceName);
   }
 
   // Handle opening create dialog
-  function handleOpenCreateDialog(projectPath: string): void {
-    openCreateDialog(projectPath);
+  function handleOpenCreateDialog(projectId: ProjectId): void {
+    openCreateDialog(projectId);
   }
 
   // Handle opening remove dialog
-  function handleOpenRemoveDialog(workspacePath: string): void {
-    openRemoveDialog(workspacePath);
+  function handleOpenRemoveDialog(workspaceRef: WorkspaceRef): void {
+    openRemoveDialog(workspaceRef);
   }
 </script>
 
@@ -182,9 +252,9 @@
   />
 
   {#if dialogState.value.type === "create"}
-    <CreateWorkspaceDialog open={true} projectPath={dialogState.value.projectPath} />
+    <CreateWorkspaceDialog open={true} projectId={dialogState.value.projectId} />
   {:else if dialogState.value.type === "remove"}
-    <RemoveWorkspaceDialog open={true} workspacePath={dialogState.value.workspacePath} />
+    <RemoveWorkspaceDialog open={true} workspaceRef={dialogState.value.workspaceRef} />
   {/if}
 
   <ShortcutOverlay

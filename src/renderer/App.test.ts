@@ -6,60 +6,94 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
 import type { Unsubscribe } from "@shared/electron-api";
-import type {
-  Project,
-  ProjectPath,
-  ProjectOpenedEvent,
-  ProjectClosedEvent,
-  WorkspaceSwitchedEvent,
-  WorkspacePath,
-  AgentStatusChangedEvent,
-  AggregatedAgentStatus,
-} from "@shared/ipc";
+import type { ProjectPath } from "@shared/ipc";
+import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
 
 // Helper to create typed ProjectPath
 function asProjectPath(path: string): ProjectPath {
   return path as ProjectPath;
 }
 
-// Helper to create typed WorkspacePath
-function asWorkspacePath(path: string): WorkspacePath {
-  return path as WorkspacePath;
+// Helper to create typed ProjectId
+function asProjectId(id: string): ProjectId {
+  return id as ProjectId;
 }
 
-// Create mock API functions with vi.hoisted for proper hoisting
-const mockApi = vi.hoisted(() => ({
-  selectFolder: vi.fn().mockResolvedValue(null),
-  openProject: vi.fn().mockResolvedValue(undefined),
-  closeProject: vi.fn().mockResolvedValue(undefined),
-  listProjects: vi.fn().mockResolvedValue({ projects: [], activeWorkspacePath: null }),
-  createWorkspace: vi.fn().mockResolvedValue(undefined),
-  removeWorkspace: vi.fn().mockResolvedValue(undefined),
-  switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  listBases: vi.fn().mockResolvedValue([]),
-  updateBases: vi.fn().mockResolvedValue(undefined),
-  isWorkspaceDirty: vi.fn().mockResolvedValue(false),
-  setDialogMode: vi.fn().mockResolvedValue(undefined),
-  focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
-  getAgentStatus: vi.fn().mockResolvedValue({ status: "none", counts: { idle: 0, busy: 0 } }),
-  getAllAgentStatuses: vi.fn().mockResolvedValue({}),
-  refreshAgentStatus: vi.fn().mockResolvedValue(undefined),
-  onProjectOpened: vi.fn(() => vi.fn()),
-  onProjectClosed: vi.fn(() => vi.fn()),
-  onWorkspaceCreated: vi.fn(() => vi.fn()),
-  onWorkspaceRemoved: vi.fn(() => vi.fn()),
-  onWorkspaceSwitched: vi.fn(() => vi.fn()),
-  onShortcutEnable: vi.fn(() => vi.fn()),
-  onShortcutDisable: vi.fn(() => vi.fn()),
-  onAgentStatusChanged: vi.fn(() => vi.fn()),
-  // Setup API methods
-  setupReady: vi.fn().mockResolvedValue({ ready: true }),
-  setupRetry: vi.fn().mockResolvedValue(undefined),
-  setupQuit: vi.fn().mockResolvedValue(undefined),
-  onSetupProgress: vi.fn(() => vi.fn()),
-  onSetupComplete: vi.fn(() => vi.fn()),
-  onSetupError: vi.fn(() => vi.fn()),
-}));
+// Helper to create typed WorkspaceRef
+function asWorkspaceRef(projectId: string, workspaceName: string, path: string): WorkspaceRef {
+  return {
+    projectId: projectId as ProjectId,
+    workspaceName: workspaceName as WorkspaceName,
+    path,
+  };
+}
+
+// API event callbacks - must be hoisted with mockApi so it's available when mock runs
+type EventCallback = (...args: unknown[]) => void;
+const { mockApi, eventCallbacks } = vi.hoisted(() => {
+  const callbacks = new Map<string, EventCallback>();
+  return {
+    eventCallbacks: callbacks,
+    mockApi: {
+      // Setup API methods
+      setupReady: vi.fn().mockResolvedValue({ ready: true }),
+      setupRetry: vi.fn().mockResolvedValue(undefined),
+      setupQuit: vi.fn().mockResolvedValue(undefined),
+      onSetupProgress: vi.fn(() => vi.fn()),
+      onSetupComplete: vi.fn(() => vi.fn()),
+      onSetupError: vi.fn(() => vi.fn()),
+      // Normal API (flat structure)
+      workspaces: {
+        create: vi.fn().mockResolvedValue({}),
+        remove: vi.fn().mockResolvedValue({ branchDeleted: true }),
+        getStatus: vi.fn().mockResolvedValue({ isDirty: false, agent: { type: "none" } }),
+        get: vi.fn().mockResolvedValue(undefined),
+      },
+      projects: {
+        list: vi.fn().mockResolvedValue([]),
+        open: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        get: vi.fn().mockResolvedValue(undefined),
+        fetchBases: vi.fn().mockResolvedValue({ bases: [] }),
+      },
+      ui: {
+        selectFolder: vi.fn().mockResolvedValue(null),
+        getActiveWorkspace: vi.fn().mockResolvedValue(null),
+        switchWorkspace: vi.fn().mockResolvedValue(undefined),
+        setDialogMode: vi.fn().mockResolvedValue(undefined),
+        focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
+      },
+      lifecycle: {
+        getState: vi.fn().mockResolvedValue("ready"),
+        setup: vi.fn().mockResolvedValue({ success: true }),
+        quit: vi.fn().mockResolvedValue(undefined),
+      },
+      // on() captures callbacks by event name for tests to fire events
+      on: vi.fn((event: string, callback: EventCallback) => {
+        callbacks.set(event, callback);
+        return vi.fn(); // unsubscribe
+      }),
+    },
+  };
+});
+
+// Helper to get an event callback
+function getEventCallback(event: string): EventCallback | undefined {
+  return eventCallbacks.get(event);
+}
+
+// Helper to fire an event
+function fireEvent(event: string, payload?: unknown): void {
+  const callback = eventCallbacks.get(event);
+  if (callback) {
+    callback(payload);
+  }
+}
+
+// Helper to clear event callbacks between tests
+function clearEventCallbacks(): void {
+  eventCallbacks.clear();
+}
 
 // Mock the API module before any imports use it
 vi.mock("$lib/api", () => mockApi);
@@ -82,10 +116,15 @@ describe("App component", () => {
     shortcutsStore.reset();
     agentStatusStore.reset();
     setupStore.resetSetup();
+    // Reset v2 event callbacks
+    clearEventCallbacks();
+    // Reset v2.on implementation to capture callbacks (some tests override it)
+    mockApi.on.mockImplementation((event: string, callback: EventCallback) => {
+      eventCallbacks.set(event, callback);
+      return vi.fn();
+    });
     // Default to returning empty projects
-    mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
-    // Default to returning empty agent statuses
-    mockApi.getAllAgentStatuses.mockResolvedValue({});
+    mockApi.projects.list.mockResolvedValue([]);
     // Default to setup complete (ready mode)
     mockApi.setupReady.mockResolvedValue({ ready: true });
   });
@@ -107,7 +146,7 @@ describe("App component", () => {
       render(App);
 
       // Open create dialog
-      dialogsStore.openCreateDialog("/test/project");
+      dialogsStore.openCreateDialog(asProjectId("test-project-12345678"));
 
       // Wait for dialog to appear
       await waitFor(() => {
@@ -123,7 +162,9 @@ describe("App component", () => {
       render(App);
 
       // Open remove dialog
-      dialogsStore.openRemoveDialog("/test/.worktrees/feature");
+      dialogsStore.openRemoveDialog(
+        asWorkspaceRef("test-project-12345678", "feature", "/test/.worktrees/feature")
+      );
 
       // Wait for dialog to appear
       await waitFor(() => {
@@ -148,19 +189,22 @@ describe("App component", () => {
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.listProjects).toHaveBeenCalledTimes(1);
+        // Now uses v2 API
+        expect(mockApi.projects.list).toHaveBeenCalledTimes(1);
       });
     });
 
     it("sets loadingState to 'loaded' after successful listProjects", async () => {
-      const mockProjects: Project[] = [
+      const mockProjects = [
         {
+          id: asProjectId("test-project-12345678"),
           path: asProjectPath("/test/project"),
           name: "test-project",
           workspaces: [],
         },
       ];
-      mockApi.listProjects.mockResolvedValue({ projects: mockProjects, activeWorkspacePath: null });
+      // Now uses v2 API
+      mockApi.projects.list.mockResolvedValue(mockProjects);
 
       render(App);
 
@@ -171,7 +215,8 @@ describe("App component", () => {
     });
 
     it("sets loadingState to 'error' with message on listProjects failure", async () => {
-      mockApi.listProjects.mockRejectedValue(new Error("Network error"));
+      // Now uses v2 API
+      mockApi.projects.list.mockRejectedValue(new Error("Network error"));
 
       render(App);
 
@@ -183,182 +228,154 @@ describe("App component", () => {
   });
 
   describe("event subscriptions", () => {
-    it("subscribes to all IPC events on mount", async () => {
+    it("subscribes to all domain events via v2.on() on mount", async () => {
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.onProjectOpened).toHaveBeenCalledTimes(1);
-        expect(mockApi.onProjectClosed).toHaveBeenCalledTimes(1);
-        expect(mockApi.onWorkspaceCreated).toHaveBeenCalledTimes(1);
-        expect(mockApi.onWorkspaceRemoved).toHaveBeenCalledTimes(1);
-        expect(mockApi.onWorkspaceSwitched).toHaveBeenCalledTimes(1);
+        // Now uses v2 API events via api.v2.on() for domain events
+        expect(mockApi.on).toHaveBeenCalledWith("project:opened", expect.any(Function));
+        expect(mockApi.on).toHaveBeenCalledWith("project:closed", expect.any(Function));
+        expect(mockApi.on).toHaveBeenCalledWith("workspace:created", expect.any(Function));
+        expect(mockApi.on).toHaveBeenCalledWith("workspace:removed", expect.any(Function));
+        expect(mockApi.on).toHaveBeenCalledWith("workspace:switched", expect.any(Function));
       });
     });
 
-    it("unsubscribes from all IPC events on unmount", async () => {
-      const unsubProjectOpened = vi.fn();
-      const unsubProjectClosed = vi.fn();
-      const unsubWorkspaceCreated = vi.fn();
-      const unsubWorkspaceRemoved = vi.fn();
-      const unsubWorkspaceSwitched = vi.fn();
-
-      mockApi.onProjectOpened.mockReturnValue(unsubProjectOpened);
-      mockApi.onProjectClosed.mockReturnValue(unsubProjectClosed);
-      mockApi.onWorkspaceCreated.mockReturnValue(unsubWorkspaceCreated);
-      mockApi.onWorkspaceRemoved.mockReturnValue(unsubWorkspaceRemoved);
-      mockApi.onWorkspaceSwitched.mockReturnValue(unsubWorkspaceSwitched);
+    it("unsubscribes from all v2 events on unmount", async () => {
+      // Track unsubscribe functions per event
+      const unsubFunctions = new Map<string, ReturnType<typeof vi.fn>>();
+      mockApi.on.mockImplementation((event: string) => {
+        const unsub = vi.fn();
+        unsubFunctions.set(event, unsub);
+        return unsub;
+      });
 
       const { unmount } = render(App);
 
       // Wait for subscriptions to be set up
       await waitFor(() => {
-        expect(mockApi.onProjectOpened).toHaveBeenCalled();
+        expect(mockApi.on).toHaveBeenCalledWith("project:opened", expect.any(Function));
       });
 
       // Unmount the component
       unmount();
 
-      // Verify all unsubscribe functions were called
-      expect(unsubProjectOpened).toHaveBeenCalledTimes(1);
-      expect(unsubProjectClosed).toHaveBeenCalledTimes(1);
-      expect(unsubWorkspaceCreated).toHaveBeenCalledTimes(1);
-      expect(unsubWorkspaceRemoved).toHaveBeenCalledTimes(1);
-      expect(unsubWorkspaceSwitched).toHaveBeenCalledTimes(1);
+      // Verify domain event unsubscribe functions were called
+      expect(unsubFunctions.get("project:opened")).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("project:closed")).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("workspace:created")).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("workspace:removed")).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("workspace:switched")).toHaveBeenCalledTimes(1);
     });
 
     it("handles project:opened event by adding project to store", async () => {
-      let projectOpenedCallback: ((event: ProjectOpenedEvent) => void) | null = null;
-      (
-        mockApi.onProjectOpened as unknown as {
-          mockImplementation: (
-            fn: (cb: (event: ProjectOpenedEvent) => void) => Unsubscribe
-          ) => void;
-        }
-      ).mockImplementation((cb) => {
-        projectOpenedCallback = cb;
-        return vi.fn();
-      });
-
       render(App);
 
       // Wait for subscriptions
       await waitFor(() => {
-        expect(projectOpenedCallback).not.toBeNull();
+        expect(getEventCallback("project:opened")).toBeDefined();
       });
 
-      // Simulate project opened event
-      const newProject: Project = {
+      // Simulate v2 project opened event (includes id)
+      const newProject = {
+        id: asProjectId("new-project-12345678"),
         path: asProjectPath("/test/new-project"),
         name: "new-project",
         workspaces: [],
       };
-      projectOpenedCallback!({ project: newProject });
+      fireEvent("project:opened", { project: newProject });
 
-      // Verify project was added
-      expect(projectsStore.projects.value).toContainEqual(newProject);
+      // Verify project was added (check path since projects now have generated id)
+      const addedProject = projectsStore.projects.value.find((p) => p.path === newProject.path);
+      expect(addedProject).toBeDefined();
+      expect(addedProject?.name).toBe(newProject.name);
     });
 
     it("handles project:closed event by removing project from store", async () => {
-      // Pre-populate store with a project
-      const existingProject: Project = {
+      // Pre-populate store with a project - use v2 API format with ID
+      const existingProject = {
+        id: asProjectId("existing-12345678"),
         path: asProjectPath("/test/existing"),
         name: "existing",
         workspaces: [],
       };
-      mockApi.listProjects.mockResolvedValue({
-        projects: [existingProject],
-        activeWorkspacePath: null,
-      });
-
-      let projectClosedCallback: ((event: ProjectClosedEvent) => void) | null = null;
-      (
-        mockApi.onProjectClosed as unknown as {
-          mockImplementation: (
-            fn: (cb: (event: ProjectClosedEvent) => void) => Unsubscribe
-          ) => void;
-        }
-      ).mockImplementation((cb) => {
-        projectClosedCallback = cb;
-        return vi.fn();
-      });
+      mockApi.projects.list.mockResolvedValue([existingProject]);
 
       render(App);
 
       // Wait for initial load and subscriptions
       await waitFor(() => {
         expect(projectsStore.projects.value).toHaveLength(1);
-        expect(projectClosedCallback).not.toBeNull();
+        expect(getEventCallback("project:closed")).toBeDefined();
       });
 
-      // Simulate project closed event
-      projectClosedCallback!({ path: asProjectPath("/test/existing") });
+      // Get the actual project ID from the store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
+      // Simulate v2 project closed event (uses projectId not path)
+      fireEvent("project:closed", { projectId: actualProjectId });
 
       // Verify project was removed
       expect(projectsStore.projects.value).toHaveLength(0);
     });
 
     it("handles workspace:switched event by updating active workspace", async () => {
-      let workspaceSwitchedCallback: ((event: WorkspaceSwitchedEvent) => void) | null = null;
-      (
-        mockApi.onWorkspaceSwitched as unknown as {
-          mockImplementation: (
-            fn: (cb: (event: WorkspaceSwitchedEvent) => void) => Unsubscribe
-          ) => void;
-        }
-      ).mockImplementation((cb) => {
-        workspaceSwitchedCallback = cb;
-        return vi.fn();
-      });
-
       render(App);
 
       await waitFor(() => {
-        expect(workspaceSwitchedCallback).not.toBeNull();
+        expect(getEventCallback("workspace:switched")).toBeDefined();
       });
 
-      // Simulate workspace switched event
-      workspaceSwitchedCallback!({
-        workspacePath: asWorkspacePath("/test/.worktrees/feature"),
-      });
+      // Simulate v2 workspace switched event (uses WorkspaceRef)
+      fireEvent(
+        "workspace:switched",
+        asWorkspaceRef("test-12345678", "feature", "/test/.worktrees/feature")
+      );
 
       expect(projectsStore.activeWorkspacePath.value).toBe("/test/.worktrees/feature");
     });
   });
 
   describe("shortcut mode handling", () => {
-    it("should-subscribe-to-shortcut-enable-on-mount: subscribes to onShortcutEnable via $effect", async () => {
+    it("should-subscribe-to-shortcut-enable-on-mount: subscribes to v2.on('shortcut:enable') via $effect", async () => {
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.onShortcutEnable).toHaveBeenCalledTimes(1);
+        // Now uses v2 API events via api.v2.on()
+        expect(mockApi.on).toHaveBeenCalledWith("shortcut:enable", expect.any(Function));
       });
     });
 
-    it("should-subscribe-to-shortcut-disable-on-mount: subscribes to onShortcutDisable via $effect", async () => {
+    it("should-subscribe-to-shortcut-disable-on-mount: subscribes to v2.on('shortcut:disable') via $effect", async () => {
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.onShortcutDisable).toHaveBeenCalledTimes(1);
+        // Now uses v2 API events via api.v2.on()
+        expect(mockApi.on).toHaveBeenCalledWith("shortcut:disable", expect.any(Function));
       });
     });
 
     it("should-cleanup-subscriptions-on-unmount: unsubscribe called when component unmounts", async () => {
-      const unsubShortcutEnable = vi.fn();
-      const unsubShortcutDisable = vi.fn();
-      mockApi.onShortcutEnable.mockReturnValue(unsubShortcutEnable);
-      mockApi.onShortcutDisable.mockReturnValue(unsubShortcutDisable);
+      // Track unsubscribe functions per event
+      const unsubFunctions = new Map<string, ReturnType<typeof vi.fn>>();
+      mockApi.on.mockImplementation((event: string) => {
+        const unsub = vi.fn();
+        unsubFunctions.set(event, unsub);
+        return unsub;
+      });
 
       const { unmount } = render(App);
 
       await waitFor(() => {
-        expect(mockApi.onShortcutEnable).toHaveBeenCalled();
-        expect(mockApi.onShortcutDisable).toHaveBeenCalled();
+        expect(mockApi.on).toHaveBeenCalledWith("shortcut:enable", expect.any(Function));
+        expect(mockApi.on).toHaveBeenCalledWith("shortcut:disable", expect.any(Function));
       });
 
       unmount();
 
-      expect(unsubShortcutEnable).toHaveBeenCalledTimes(1);
-      expect(unsubShortcutDisable).toHaveBeenCalledTimes(1);
+      // Both shortcut event unsubscribe functions should be called
+      expect(unsubFunctions.get("shortcut:enable")).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("shortcut:disable")).toHaveBeenCalledTimes(1);
     });
 
     it("should-render-shortcut-overlay-component: ShortcutOverlay is rendered", async () => {
@@ -375,24 +392,15 @@ describe("App component", () => {
     });
 
     it("should-pass-active-prop-to-overlay: overlay shows when shortcut mode active", async () => {
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
-
       render(App);
 
+      // Wait for subscription
       await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
+        expect(getEventCallback("shortcut:enable")).toBeDefined();
       });
 
-      // Trigger shortcut enable
-      shortcutEnableCallback!();
+      // Trigger shortcut enable via v2 event
+      fireEvent("shortcut:enable");
 
       // Overlay should now be active (aria-hidden=false)
       await waitFor(() => {
@@ -402,89 +410,72 @@ describe("App component", () => {
     });
 
     it("should-wire-keyup-handler-to-window: Alt keyup disables shortcut mode", async () => {
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
-
       render(App);
 
+      // Wait for subscription
       await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
+        expect(getEventCallback("shortcut:enable")).toBeDefined();
       });
 
-      // Enable shortcut mode first
-      shortcutEnableCallback!();
+      // Enable shortcut mode first via v2 event
+      fireEvent("shortcut:enable");
 
       // Clear calls from dialog state sync
-      mockApi.setDialogMode.mockClear();
-      mockApi.focusActiveWorkspace.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
+      mockApi.ui.focusActiveWorkspace.mockClear();
 
       // Simulate Alt keyup
       window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt" }));
 
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
 
     it("should-wire-blur-handler-to-window: window blur disables shortcut mode", async () => {
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
-
       render(App);
 
+      // Wait for subscription
       await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
+        expect(getEventCallback("shortcut:enable")).toBeDefined();
       });
 
-      // Enable shortcut mode first
-      shortcutEnableCallback!();
+      // Enable shortcut mode first via v2 event
+      fireEvent("shortcut:enable");
 
       // Clear calls from dialog state sync
-      mockApi.setDialogMode.mockClear();
-      mockApi.focusActiveWorkspace.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
+      mockApi.ui.focusActiveWorkspace.mockClear();
 
       // Simulate window blur
       window.dispatchEvent(new Event("blur"));
 
-      expect(mockApi.setDialogMode).toHaveBeenCalledWith(false);
-      expect(mockApi.focusActiveWorkspace).toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).toHaveBeenCalledWith(false);
+      expect(mockApi.ui.focusActiveWorkspace).toHaveBeenCalled();
     });
 
     it("does not call setDialogMode when shortcut mode is not active", async () => {
       render(App);
 
-      // Wait for component to mount
+      // Wait for component to mount (uses v2 API)
       await waitFor(() => {
-        expect(mockApi.onShortcutEnable).toHaveBeenCalled();
+        expect(mockApi.on).toHaveBeenCalledWith("shortcut:enable", expect.any(Function));
       });
 
       // Clear initial calls from dialog state sync
-      mockApi.setDialogMode.mockClear();
+      mockApi.ui.setDialogMode.mockClear();
 
       // Simulate Alt keyup without shortcut mode being enabled
       window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt" }));
 
       // setDialogMode should not be called when shortcut mode is not active
-      expect(mockApi.setDialogMode).not.toHaveBeenCalled();
+      expect(mockApi.ui.setDialogMode).not.toHaveBeenCalled();
     });
 
     it("should-connect-handleKeyDown-to-window: action key triggers action during shortcut mode", async () => {
-      // Set up projects with workspaces
-      const mockProjects: Project[] = [
+      // Set up projects with workspaces - use v2 API format with ID
+      const mockProjects = [
         {
+          id: asProjectId("test-project-12345678"),
           path: asProjectPath("/test/project"),
           name: "test-project",
           workspaces: [
@@ -493,66 +484,51 @@ describe("App component", () => {
           ],
         },
       ];
-      mockApi.listProjects.mockResolvedValue({ projects: mockProjects, activeWorkspacePath: null });
-
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
+      mockApi.projects.list.mockResolvedValue(mockProjects);
 
       render(App);
 
-      // Wait for projects to load
+      // Wait for projects to load and subscriptions to be set up
       await waitFor(() => {
         expect(projectsStore.projects.value).toHaveLength(1);
-        expect(shortcutEnableCallback).not.toBeNull();
+        expect(getEventCallback("shortcut:enable")).toBeDefined();
       });
 
-      // Enable shortcut mode
-      shortcutEnableCallback!();
+      // Get the actual project ID from the store (ID is regenerated from path)
+      const actualProjectId = projectsStore.projects.value[0]!.id;
+
+      // Enable shortcut mode via v2 event
+      fireEvent("shortcut:enable");
 
       // Press "1" key to jump to first workspace
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "1" }));
 
-      // Should have called switchWorkspace with focusWorkspace=false to keep shortcut mode active
+      // Should have called v2.ui.switchWorkspace with focus=false to keep shortcut mode active
+      // Note: Now uses projectId (from store) and workspaceName instead of path
       await waitFor(() => {
-        expect(mockApi.switchWorkspace).toHaveBeenCalledWith("/test/.worktrees/ws1", false);
+        expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(actualProjectId, "ws1", false);
       });
     });
 
     it("should-pass-shortcutModeActive-to-sidebar: sidebar shows index numbers when active", async () => {
-      const mockProjects: Project[] = [
+      const mockProjects = [
         {
+          id: asProjectId("test-project-12345678"),
           path: asProjectPath("/test/project"),
           name: "test-project",
           workspaces: [{ path: "/test/.worktrees/ws1", name: "ws1", branch: "main" }],
         },
       ];
-      mockApi.listProjects.mockResolvedValue({ projects: mockProjects, activeWorkspacePath: null });
-
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
+      mockApi.projects.list.mockResolvedValue(mockProjects);
 
       render(App);
 
       await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
+        expect(getEventCallback("shortcut:enable")).toBeDefined();
       });
 
-      // Enable shortcut mode
-      shortcutEnableCallback!();
+      // Enable shortcut mode via v2 event
+      fireEvent("shortcut:enable");
 
       // Sidebar should show the index number
       await waitFor(() => {
@@ -562,26 +538,16 @@ describe("App component", () => {
 
     it("should-pass-all-context-props-to-overlay: overlay hides hints when no context", async () => {
       // Empty projects = no workspaces, no active project/workspace
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
-
-      let shortcutEnableCallback: (() => void) | null = null;
-      (
-        mockApi.onShortcutEnable as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        shortcutEnableCallback = cb;
-        return vi.fn();
-      });
+      mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
 
       await waitFor(() => {
-        expect(shortcutEnableCallback).not.toBeNull();
+        expect(getEventCallback("shortcut:enable")).toBeDefined();
       });
 
-      // Enable shortcut mode
-      shortcutEnableCallback!();
+      // Enable shortcut mode via v2 event
+      fireEvent("shortcut:enable");
 
       // With no workspaces, navigate and jump hints should be hidden
       await waitFor(() => {
@@ -599,87 +565,128 @@ describe("App component", () => {
   });
 
   describe("agent status handling", () => {
-    it("calls getAllAgentStatuses on mount to initialize", async () => {
+    it("fetches workspace statuses via v2 API after loading projects", async () => {
+      // Setup mock projects with workspaces
+      const mockProjects = [
+        {
+          id: asProjectId("test-project-12345678"),
+          path: asProjectPath("/test/project"),
+          name: "test-project",
+          workspaces: [
+            { name: "ws1", branch: "ws1", path: "/test/.worktrees/ws1" },
+            { name: "ws2", branch: "ws2", path: "/test/.worktrees/ws2" },
+          ],
+        },
+      ];
+      mockApi.projects.list.mockResolvedValue(mockProjects);
+
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.getAllAgentStatuses).toHaveBeenCalledTimes(1);
+        // Should call getStatus for each workspace
+        expect(mockApi.workspaces.getStatus).toHaveBeenCalledWith("test-project-12345678", "ws1");
+        expect(mockApi.workspaces.getStatus).toHaveBeenCalledWith("test-project-12345678", "ws2");
       });
     });
 
-    it("sets initial statuses from getAllAgentStatuses response", async () => {
-      const initialStatuses: Record<string, AggregatedAgentStatus> = {
-        "/test/.worktrees/ws1": { status: "idle", counts: { idle: 2, busy: 0 } },
-        "/test/.worktrees/ws2": { status: "busy", counts: { idle: 0, busy: 1 } },
-      };
-      mockApi.getAllAgentStatuses.mockResolvedValue(initialStatuses);
+    it("sets initial statuses from v2.workspaces.getStatus responses", async () => {
+      // Setup mock projects with workspaces
+      const mockProjects = [
+        {
+          id: asProjectId("test-project-12345678"),
+          path: asProjectPath("/test/project"),
+          name: "test-project",
+          workspaces: [
+            { name: "ws1", branch: "ws1", path: "/test/.worktrees/ws1" },
+            { name: "ws2", branch: "ws2", path: "/test/.worktrees/ws2" },
+          ],
+        },
+      ];
+      mockApi.projects.list.mockResolvedValue(mockProjects);
 
-      render(App);
-
-      await waitFor(() => {
-        expect(agentStatusStore.getStatus("/test/.worktrees/ws1")).toEqual(
-          initialStatuses["/test/.worktrees/ws1"]
-        );
-        expect(agentStatusStore.getStatus("/test/.worktrees/ws2")).toEqual(
-          initialStatuses["/test/.worktrees/ws2"]
-        );
-      });
-    });
-
-    it("subscribes to onAgentStatusChanged on mount", async () => {
-      render(App);
-
-      await waitFor(() => {
-        expect(mockApi.onAgentStatusChanged).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    it("updates store on agent:status-changed event", async () => {
-      let agentStatusCallback: ((event: AgentStatusChangedEvent) => void) | null = null;
-      (
-        mockApi.onAgentStatusChanged as unknown as {
-          mockImplementation: (
-            fn: (cb: (event: AgentStatusChangedEvent) => void) => Unsubscribe
-          ) => void;
+      // Mock different statuses for each workspace
+      mockApi.workspaces.getStatus.mockImplementation(
+        (_projectId: string, workspaceName: string) => {
+          if (workspaceName === "ws1") {
+            return Promise.resolve({
+              isDirty: false,
+              agent: { type: "idle", counts: { idle: 2, busy: 0, total: 2 } },
+            });
+          } else {
+            return Promise.resolve({
+              isDirty: true,
+              agent: { type: "busy", counts: { idle: 0, busy: 1, total: 1 } },
+            });
+          }
         }
-      ).mockImplementation((cb) => {
-        agentStatusCallback = cb;
-        return vi.fn();
-      });
+      );
 
       render(App);
 
       await waitFor(() => {
-        expect(agentStatusCallback).not.toBeNull();
+        // Verify statuses were converted and stored
+        expect(agentStatusStore.getStatus("/test/.worktrees/ws1")).toEqual({
+          status: "idle",
+          counts: { idle: 2, busy: 0 },
+        });
+        expect(agentStatusStore.getStatus("/test/.worktrees/ws2")).toEqual({
+          status: "busy",
+          counts: { idle: 0, busy: 1 },
+        });
+      });
+    });
+
+    it("subscribes to workspace:status-changed via v2.on() on mount", async () => {
+      render(App);
+
+      await waitFor(() => {
+        expect(mockApi.on).toHaveBeenCalledWith("workspace:status-changed", expect.any(Function));
+      });
+    });
+
+    it("updates store on workspace:status-changed v2 event", async () => {
+      render(App);
+
+      await waitFor(() => {
+        expect(getEventCallback("workspace:status-changed")).toBeDefined();
       });
 
-      // Simulate agent status changed event
-      const newStatus: AggregatedAgentStatus = {
+      // Simulate v2 workspace:status-changed event (uses WorkspaceRef + WorkspaceStatus)
+      fireEvent("workspace:status-changed", {
+        projectId: asProjectId("test-12345678"),
+        workspaceName: "feature",
+        path: "/test/.worktrees/feature",
+        status: {
+          isDirty: false,
+          agent: { type: "busy", counts: { idle: 0, busy: 3, total: 3 } },
+        },
+      });
+
+      // Verify status was converted and stored (v2 AgentStatus → AggregatedAgentStatus)
+      expect(agentStatusStore.getStatus("/test/.worktrees/feature")).toEqual({
         status: "busy",
         counts: { idle: 0, busy: 3 },
-      };
-      agentStatusCallback!({
-        workspacePath: asWorkspacePath("/test/.worktrees/feature"),
-        status: newStatus,
       });
-
-      // Verify status was updated in store
-      expect(agentStatusStore.getStatus("/test/.worktrees/feature")).toEqual(newStatus);
     });
 
-    it("unsubscribes from onAgentStatusChanged on unmount", async () => {
-      const unsubAgentStatus = vi.fn();
-      mockApi.onAgentStatusChanged.mockReturnValue(unsubAgentStatus);
+    it("unsubscribes from workspace:status-changed v2 event on unmount", async () => {
+      // Track unsubscribe functions per event
+      const unsubFunctions = new Map<string, ReturnType<typeof vi.fn>>();
+      mockApi.on.mockImplementation((event: string) => {
+        const unsub = vi.fn();
+        unsubFunctions.set(event, unsub);
+        return unsub;
+      });
 
       const { unmount } = render(App);
 
       await waitFor(() => {
-        expect(mockApi.onAgentStatusChanged).toHaveBeenCalled();
+        expect(mockApi.on).toHaveBeenCalledWith("workspace:status-changed", expect.any(Function));
       });
 
       unmount();
 
-      expect(unsubAgentStatus).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("workspace:status-changed")).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -724,8 +731,8 @@ describe("App component", () => {
     });
 
     it("shows SetupScreen when in loading state", async () => {
-      // Keep loading state by never resolving listProjects
-      mockApi.listProjects.mockReturnValue(new Promise(() => {}));
+      // Keep loading state by never resolving projects.list
+      mockApi.projects.list.mockReturnValue(new Promise(() => {}));
 
       render(App);
 
@@ -888,9 +895,9 @@ describe("App component", () => {
       expect(mockApi.setupQuit).toHaveBeenCalledTimes(1);
     });
 
-    it("transitions to normal app after listProjects succeeds", async () => {
-      // Normal mode - listProjects returns immediately
-      mockApi.listProjects.mockResolvedValue({ projects: [], activeWorkspacePath: null });
+    it("transitions to normal app after projects.list succeeds", async () => {
+      // Normal mode - projects.list returns immediately
+      mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
 

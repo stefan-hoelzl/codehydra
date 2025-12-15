@@ -4,27 +4,35 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
+import type { ProjectId } from "@shared/api/types";
 
 // Create mock functions with vi.hoisted - using pattern from working ProjectDropdown tests
-const { mockCreateWorkspace, mockListBases, mockCloseDialog, mockProjectsStore } = vi.hoisted(
-  () => ({
-    mockCreateWorkspace: vi.fn(),
-    mockListBases: vi.fn(),
-    mockCloseDialog: vi.fn(),
-    mockProjectsStore: vi.fn(),
-  })
-);
+const {
+  mockCreateWorkspace,
+  mockFetchBases,
+  mockCloseDialog,
+  mockProjectsStore,
+  mockGetProjectById,
+  mockSwitchWorkspace,
+} = vi.hoisted(() => ({
+  mockCreateWorkspace: vi.fn(),
+  mockFetchBases: vi.fn(),
+  mockCloseDialog: vi.fn(),
+  mockProjectsStore: vi.fn(),
+  mockGetProjectById: vi.fn(),
+  mockSwitchWorkspace: vi.fn(),
+}));
 
-// Mock $lib/api
+// Mock $lib/api - using v2 API
 vi.mock("$lib/api", () => ({
   selectFolder: vi.fn().mockResolvedValue(null),
   openProject: vi.fn().mockResolvedValue(undefined),
   closeProject: vi.fn().mockResolvedValue(undefined),
   listProjects: vi.fn().mockResolvedValue({ projects: [], activeWorkspacePath: null }),
-  createWorkspace: mockCreateWorkspace,
+  createWorkspace: vi.fn().mockResolvedValue(undefined),
   removeWorkspace: vi.fn().mockResolvedValue(undefined),
   switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  listBases: mockListBases,
+  listBases: vi.fn().mockResolvedValue([]),
   updateBases: vi.fn().mockResolvedValue(undefined),
   isWorkspaceDirty: vi.fn().mockResolvedValue(false),
   onProjectOpened: vi.fn(() => vi.fn()),
@@ -32,6 +40,16 @@ vi.mock("$lib/api", () => ({
   onWorkspaceCreated: vi.fn(() => vi.fn()),
   onWorkspaceRemoved: vi.fn(() => vi.fn()),
   onWorkspaceSwitched: vi.fn(() => vi.fn()),
+  // Flat API structure
+  workspaces: {
+    create: mockCreateWorkspace,
+  },
+  projects: {
+    fetchBases: mockFetchBases,
+  },
+  ui: {
+    switchWorkspace: mockSwitchWorkspace,
+  },
 }));
 
 // Mock $lib/stores/projects - using hoisted mock function pattern from ProjectDropdown tests
@@ -41,6 +59,7 @@ vi.mock("$lib/stores/projects.svelte.js", () => ({
       return mockProjectsStore();
     },
   },
+  getProjectById: mockGetProjectById,
 }));
 
 // Mock $lib/stores/dialogs.svelte.js
@@ -50,7 +69,11 @@ vi.mock("$lib/stores/dialogs.svelte.js", () => ({
 
 // Import component after mocks
 import CreateWorkspaceDialog from "./CreateWorkspaceDialog.svelte";
-import { createWorkspace } from "$lib/api";
+import { workspaces } from "$lib/api";
+
+// Test project IDs
+const testProjectId = "test-project-12345678" as ProjectId;
+const otherProjectId = "other-project-87654321" as ProjectId;
 
 /**
  * Helper to get the name input (vscode-textfield).
@@ -94,12 +117,13 @@ describe("CreateWorkspaceDialog component", () => {
 
   const defaultProps = {
     open: true,
-    projectPath: "/test/project",
+    projectId: testProjectId,
   };
 
-  // Projects data used by tests
+  // Projects data used by tests (now with IDs)
   const mockProjectsList = [
     {
+      id: testProjectId,
       path: "/test/project",
       name: "test-project",
       workspaces: [
@@ -107,6 +131,7 @@ describe("CreateWorkspaceDialog component", () => {
       ],
     },
     {
+      id: otherProjectId,
       path: "/test/other-project",
       name: "other-project",
       workspaces: [{ path: "/test/other-project/.worktrees/ws1", name: "ws1", branch: "main" }],
@@ -118,11 +143,25 @@ describe("CreateWorkspaceDialog component", () => {
     vi.useFakeTimers();
     // Setup projects store mock with both projects
     mockProjectsStore.mockReturnValue(mockProjectsList);
-    mockListBases.mockResolvedValue([
-      { name: "main", isRemote: false },
-      { name: "develop", isRemote: false },
-    ]);
-    mockCreateWorkspace.mockResolvedValue(undefined);
+    // Setup getProjectById to return project when called
+    mockGetProjectById.mockImplementation((id: ProjectId) =>
+      mockProjectsList.find((p) => p.id === id)
+    );
+    // v2 API returns { bases: [...] }
+    mockFetchBases.mockResolvedValue({
+      bases: [
+        { name: "main", isRemote: false },
+        { name: "develop", isRemote: false },
+      ],
+    });
+    // Return a workspace object with the name that was passed in
+    mockCreateWorkspace.mockImplementation(async (_projectId, name) => ({
+      name,
+      path: `/test/project/.worktrees/${name}`,
+      branch: name,
+      projectId: _projectId,
+    }));
+    mockSwitchWorkspace.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -237,8 +276,8 @@ describe("CreateWorkspaceDialog component", () => {
       await fireEvent.click(okButton);
       await vi.runAllTimersAsync();
 
-      // Should have called createWorkspace (project path depends on what was selected)
-      expect(createWorkspace).toHaveBeenCalled();
+      // Should have called workspaces.create (project ID depends on what was selected)
+      expect(workspaces.create).toHaveBeenCalled();
     });
 
     it("validation checks selected project's workspaces", async () => {
@@ -414,7 +453,7 @@ describe("CreateWorkspaceDialog component", () => {
       await vi.runAllTimersAsync();
 
       expect(mockCreateWorkspace).toHaveBeenCalledWith(
-        defaultProps.projectPath,
+        defaultProps.projectId,
         "valid-name",
         expect.any(String)
       );
@@ -591,10 +630,10 @@ describe("CreateWorkspaceDialog component", () => {
 
       await vi.runAllTimersAsync();
 
-      expect(createWorkspace).toHaveBeenCalledWith("/test/project", "my-feature", "main");
+      expect(workspaces.create).toHaveBeenCalledWith(testProjectId, "my-feature", "main");
     });
 
-    it("success closes dialog", async () => {
+    it("success switches to new workspace and closes dialog", async () => {
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
 
@@ -613,6 +652,8 @@ describe("CreateWorkspaceDialog component", () => {
 
       await vi.runAllTimersAsync();
 
+      // Should switch to the newly created workspace
+      expect(mockSwitchWorkspace).toHaveBeenCalledWith(testProjectId, "my-feature");
       expect(mockCloseDialog).toHaveBeenCalled();
     });
   });
@@ -701,18 +742,22 @@ describe("CreateWorkspaceDialog component", () => {
     }
 
     it("changing project clears branch selection", async () => {
-      // Setup mock to return different branches per project
-      mockListBases.mockImplementation((projectPath: string) => {
-        if (projectPath === "/test/project") {
-          return Promise.resolve([
-            { name: "main", isRemote: false },
-            { name: "develop", isRemote: false },
-          ]);
+      // Setup mock to return different branches per project ID
+      mockFetchBases.mockImplementation((projectId: ProjectId) => {
+        if (projectId === testProjectId) {
+          return Promise.resolve({
+            bases: [
+              { name: "main", isRemote: false },
+              { name: "develop", isRemote: false },
+            ],
+          });
         } else {
-          return Promise.resolve([
-            { name: "feature-branch", isRemote: false },
-            { name: "release", isRemote: false },
-          ]);
+          return Promise.resolve({
+            bases: [
+              { name: "feature-branch", isRemote: false },
+              { name: "release", isRemote: false },
+            ],
+          });
         }
       });
 
@@ -739,18 +784,22 @@ describe("CreateWorkspaceDialog component", () => {
     });
 
     it("branch dropdown shows new project's branches after project change", async () => {
-      // Setup mock to return different branches per project
-      mockListBases.mockImplementation((projectPath: string) => {
-        if (projectPath === "/test/project") {
-          return Promise.resolve([
-            { name: "main", isRemote: false },
-            { name: "develop", isRemote: false },
-          ]);
+      // Setup mock to return different branches per project ID
+      mockFetchBases.mockImplementation((projectId: ProjectId) => {
+        if (projectId === testProjectId) {
+          return Promise.resolve({
+            bases: [
+              { name: "main", isRemote: false },
+              { name: "develop", isRemote: false },
+            ],
+          });
         } else {
-          return Promise.resolve([
-            { name: "feature-branch", isRemote: false },
-            { name: "release", isRemote: false },
-          ]);
+          return Promise.resolve({
+            bases: [
+              { name: "feature-branch", isRemote: false },
+              { name: "release", isRemote: false },
+            ],
+          });
         }
       });
 
@@ -860,7 +909,13 @@ describe("CreateWorkspaceDialog component", () => {
         ...mockProjectsList[0],
         defaultBaseBranch: "develop",
       };
-      mockProjectsStore.mockReturnValue([projectWithDefault, mockProjectsList[1]]);
+      const otherProject = mockProjectsList[1]!;
+      const projectsWithDefault = [projectWithDefault, otherProject];
+      mockProjectsStore.mockReturnValue(projectsWithDefault);
+      // Also update getProjectById to use the updated projects list
+      mockGetProjectById.mockImplementation((id: ProjectId) =>
+        projectsWithDefault.find((p) => p.id === id)
+      );
 
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();
@@ -885,7 +940,13 @@ describe("CreateWorkspaceDialog component", () => {
         ...mockProjectsList[0],
         defaultBaseBranch: "main",
       };
-      mockProjectsStore.mockReturnValue([projectWithDefault, mockProjectsList[1]]);
+      const otherProject = mockProjectsList[1]!;
+      const projectsWithDefault = [projectWithDefault, otherProject];
+      mockProjectsStore.mockReturnValue(projectsWithDefault);
+      // Also update getProjectById to use the updated projects list
+      mockGetProjectById.mockImplementation((id: ProjectId) =>
+        projectsWithDefault.find((p) => p.id === id)
+      );
 
       render(CreateWorkspaceDialog, { props: defaultProps });
       await vi.runAllTimersAsync();

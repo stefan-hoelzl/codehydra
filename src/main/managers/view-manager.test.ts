@@ -1190,6 +1190,62 @@ describe("ViewManager", () => {
       expect(manager.getWorkspaceView("/path/to/workspace1")).toBeDefined();
       expect(manager.getWorkspaceView("/path/to/workspace2")).toBeDefined();
     });
+
+    it("focuses active workspace when exiting dialog mode", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      // Create and activate workspace
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      workspaceView?.webContents.focus.mockClear();
+
+      // Enter dialog mode
+      manager.setDialogMode(true);
+
+      // Exit dialog mode
+      manager.setDialogMode(false);
+
+      // Active workspace should be focused
+      expect(workspaceView?.webContents.focus).toHaveBeenCalled();
+    });
+
+    it("does not focus workspace when entering dialog mode", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      // Create and activate workspace
+      manager.createWorkspaceView("/path/to/workspace", "http://localhost:8080/?folder=/path");
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      workspaceView?.webContents.focus.mockClear();
+
+      // Enter dialog mode
+      manager.setDialogMode(true);
+
+      // Workspace should NOT be focused when entering dialog mode
+      expect(workspaceView?.webContents.focus).not.toHaveBeenCalled();
+    });
+
+    it("does not throw when exiting dialog mode with no active workspace", () => {
+      const manager = ViewManager.create(mockWindowManager as unknown as WindowManager, {
+        uiPreloadPath: "/path/to/preload.js",
+        codeServerPort: 8080,
+      });
+
+      // Enter dialog mode without any workspace
+      manager.setDialogMode(true);
+
+      // Exit dialog mode - should not throw
+      expect(() => manager.setDialogMode(false)).not.toThrow();
+    });
   });
 
   describe("destroy", () => {

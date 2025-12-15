@@ -5,46 +5,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
 import type { Api } from "@shared/electron-api";
+import { createMockApi } from "../test-utils";
 
-// Create mock API
-const mockApi: Api = {
-  selectFolder: vi.fn().mockResolvedValue(null),
-  openProject: vi.fn().mockResolvedValue(undefined),
-  closeProject: vi.fn().mockResolvedValue(undefined),
-  listProjects: vi.fn().mockResolvedValue({ projects: [], activeWorkspacePath: null }),
-  createWorkspace: vi.fn().mockResolvedValue(undefined),
-  removeWorkspace: vi.fn().mockResolvedValue(undefined),
-  switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  listBases: vi.fn().mockResolvedValue([]),
-  updateBases: vi.fn().mockResolvedValue(undefined),
-  isWorkspaceDirty: vi.fn().mockResolvedValue(false),
-  setDialogMode: vi.fn().mockResolvedValue(undefined),
-  focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
-  getAgentStatus: vi.fn().mockResolvedValue({ status: "none", counts: { idle: 0, busy: 0 } }),
-  getAllAgentStatuses: vi.fn().mockResolvedValue({}),
-  refreshAgentStatus: vi.fn().mockResolvedValue(undefined),
-  setupReady: vi.fn().mockResolvedValue(undefined),
-  setupRetry: vi.fn().mockResolvedValue(undefined),
-  setupQuit: vi.fn().mockResolvedValue(undefined),
-  onProjectOpened: vi.fn(() => vi.fn()),
-  onProjectClosed: vi.fn(() => vi.fn()),
-  onWorkspaceCreated: vi.fn(() => vi.fn()),
-  onWorkspaceRemoved: vi.fn(() => vi.fn()),
-  onWorkspaceSwitched: vi.fn(() => vi.fn()),
-  onShortcutEnable: vi.fn(() => vi.fn()),
-  onShortcutDisable: vi.fn(() => vi.fn()),
-  onAgentStatusChanged: vi.fn(() => vi.fn()),
-  onSetupProgress: vi.fn(() => vi.fn()),
-  onSetupComplete: vi.fn(() => vi.fn()),
-  onSetupError: vi.fn(() => vi.fn()),
-};
+// Create mock API (flat structure)
+const mockApi: Api = createMockApi();
 
 // Set up window.api
 window.api = mockApi;
 
 // Import after mock setup
 import Sidebar from "./Sidebar.svelte";
-import { createMockProject, createMockWorkspace } from "$lib/test-fixtures";
+import { createMockProjectWithId, createMockWorkspace } from "$lib/test-fixtures";
 import type { ProjectPath } from "@shared/ipc";
 import * as agentStatusStore from "$lib/stores/agent-status.svelte.js";
 
@@ -80,7 +51,7 @@ describe("Sidebar component", () => {
 
     it("active workspace has aria-current='true'", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -126,7 +97,7 @@ describe("Sidebar component", () => {
 
   describe("list structure", () => {
     it("renders project list with ul/li structure", () => {
-      const project = createMockProject();
+      const project = createMockProjectWithId();
       render(Sidebar, { props: { ...defaultProps, projects: [project] } });
 
       const lists = screen.getAllByRole("list");
@@ -145,7 +116,7 @@ describe("Sidebar component", () => {
         name: "workspace-2",
         path: "/test/.worktrees/workspace-2",
       });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         workspaces: [ws1, ws2],
       });
 
@@ -157,9 +128,9 @@ describe("Sidebar component", () => {
   });
 
   describe("interactions", () => {
-    it("[+] button opens create dialog with projectPath", async () => {
+    it("[+] button opens create dialog with projectId", async () => {
       const onOpenCreateDialog = vi.fn();
-      const project = createMockProject({ path: "/test/project" as ProjectPath });
+      const project = createMockProjectWithId({ path: "/test/project" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onOpenCreateDialog },
@@ -168,12 +139,13 @@ describe("Sidebar component", () => {
       const addButton = screen.getByLabelText(/add workspace/i);
       await fireEvent.click(addButton);
 
-      expect(onOpenCreateDialog).toHaveBeenCalledWith("/test/project");
+      // Now passes projectId instead of path
+      expect(onOpenCreateDialog).toHaveBeenCalledWith(project.id);
     });
 
     it("[x] on project calls closeProject", async () => {
       const onCloseProject = vi.fn();
-      const project = createMockProject({ path: "/test/project" as ProjectPath });
+      const project = createMockProjectWithId({ path: "/test/project" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onCloseProject },
@@ -182,13 +154,14 @@ describe("Sidebar component", () => {
       const closeButton = screen.getByLabelText(/close project/i);
       await fireEvent.click(closeButton);
 
-      expect(onCloseProject).toHaveBeenCalledWith("/test/project");
+      // Now passes projectId instead of path
+      expect(onCloseProject).toHaveBeenCalledWith(project.id);
     });
 
-    it("[x] on workspace opens remove dialog with workspacePath", async () => {
+    it("[x] on workspace opens remove dialog with WorkspaceRef", async () => {
       const onOpenRemoveDialog = vi.fn();
-      const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({ workspaces: [ws] });
+      const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
+      const project = createMockProjectWithId({ workspaces: [ws] });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onOpenRemoveDialog },
@@ -197,13 +170,18 @@ describe("Sidebar component", () => {
       const removeButton = screen.getByLabelText(/remove workspace/i);
       await fireEvent.click(removeButton);
 
-      expect(onOpenRemoveDialog).toHaveBeenCalledWith("/test/.worktrees/ws1");
+      // Now passes WorkspaceRef object instead of just path
+      expect(onOpenRemoveDialog).toHaveBeenCalledWith({
+        projectId: project.id,
+        workspaceName: ws.name,
+        path: ws.path,
+      });
     });
 
     it("clicking workspace calls switchWorkspace", async () => {
       const onSwitchWorkspace = vi.fn();
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({ workspaces: [ws] });
+      const project = createMockProjectWithId({ workspaces: [ws] });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onSwitchWorkspace },
@@ -212,7 +190,12 @@ describe("Sidebar component", () => {
       const workspaceButton = screen.getByRole("button", { name: ws.name });
       await fireEvent.click(workspaceButton);
 
-      expect(onSwitchWorkspace).toHaveBeenCalledWith("/test/.worktrees/ws1");
+      // Now passes WorkspaceRef object instead of just path
+      expect(onSwitchWorkspace).toHaveBeenCalledWith({
+        projectId: project.id,
+        workspaceName: ws.name,
+        path: ws.path,
+      });
     });
 
     it("Open Project button triggers onOpenProject", async () => {
@@ -233,7 +216,7 @@ describe("Sidebar component", () => {
     it("should-show-index-numbers-when-shortcut-mode-active", () => {
       const ws1 = createMockWorkspace({ name: "ws1", path: "/p1/ws1" });
       const ws2 = createMockWorkspace({ name: "ws2", path: "/p1/ws2" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -248,7 +231,7 @@ describe("Sidebar component", () => {
 
     it("should-hide-index-numbers-when-shortcut-mode-inactive", () => {
       const ws1 = createMockWorkspace({ name: "ws1", path: "/p1/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces: [ws1],
       });
@@ -264,7 +247,7 @@ describe("Sidebar component", () => {
       const workspaces = Array.from({ length: 10 }, (_, i) =>
         createMockWorkspace({ name: `ws${i + 1}`, path: `/p1/ws${i + 1}` })
       );
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces,
       });
@@ -286,11 +269,11 @@ describe("Sidebar component", () => {
       const ws2 = createMockWorkspace({ name: "ws2", path: "/p1/ws2" });
       const ws3 = createMockWorkspace({ name: "ws3", path: "/p2/ws3" });
 
-      const project1 = createMockProject({
+      const project1 = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces: [ws1, ws2],
       });
-      const project2 = createMockProject({
+      const project2 = createMockProjectWithId({
         path: "/p2" as ProjectPath,
         workspaces: [ws3],
       });
@@ -313,7 +296,7 @@ describe("Sidebar component", () => {
       const workspaces = Array.from({ length: 11 }, (_, i) =>
         createMockWorkspace({ name: `ws${i + 1}`, path: `/p1/ws${i + 1}` })
       );
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces,
       });
@@ -331,7 +314,7 @@ describe("Sidebar component", () => {
 
     it("should-have-aria-hidden-on-index-spans", () => {
       const ws = createMockWorkspace({ name: "ws1", path: "/p1/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces: [ws],
       });
@@ -346,7 +329,7 @@ describe("Sidebar component", () => {
 
     it("should-include-shortcut-hint-in-workspace-button-aria-label", () => {
       const ws = createMockWorkspace({ name: "my-workspace", path: "/p1/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/p1" as ProjectPath,
         workspaces: [ws],
       });
@@ -364,7 +347,7 @@ describe("Sidebar component", () => {
 
   describe("shortcut mode Open Project hint", () => {
     it("should-show-O-on-open-project-button-when-shortcut-mode-active", () => {
-      const project = createMockProject({ path: "/p1" as ProjectPath });
+      const project = createMockProjectWithId({ path: "/p1" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], shortcutModeActive: true },
@@ -375,7 +358,7 @@ describe("Sidebar component", () => {
     });
 
     it("should-hide-O-on-open-project-button-when-shortcut-mode-inactive", () => {
-      const project = createMockProject({ path: "/p1" as ProjectPath });
+      const project = createMockProjectWithId({ path: "/p1" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], shortcutModeActive: false },
@@ -403,7 +386,7 @@ describe("Sidebar component", () => {
 
     it("renders agent status indicator for each workspace", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -419,7 +402,7 @@ describe("Sidebar component", () => {
 
     it("shows 'none' status when no agent status is set", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -435,7 +418,7 @@ describe("Sidebar component", () => {
 
     it("shows idle status when agent status store has idle agents", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -456,7 +439,7 @@ describe("Sidebar component", () => {
 
     it("shows busy status when agent status store has busy agents", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -477,7 +460,7 @@ describe("Sidebar component", () => {
 
     it("shows mixed status when agent status store has both idle and busy agents", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -499,7 +482,7 @@ describe("Sidebar component", () => {
     it("renders separate indicators for multiple workspaces", () => {
       const ws1 = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
       const ws2 = createMockWorkspace({ path: "/test/.worktrees/ws2", name: "ws2" });
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -535,22 +518,22 @@ describe("Sidebar component", () => {
 
     it("renders projects in the order provided", () => {
       // Projects are pre-sorted by the store - Sidebar renders them in that order
-      const projectAlphaUpper = createMockProject({
+      const projectAlphaUpper = createMockProjectWithId({
         path: "/Alpha" as ProjectPath,
         name: "Alpha",
         workspaces: [createMockWorkspace({ name: "ws", path: "/Alpha/ws" })],
       });
-      const projectAlphaLower = createMockProject({
+      const projectAlphaLower = createMockProjectWithId({
         path: "/alpha" as ProjectPath,
         name: "alpha",
         workspaces: [createMockWorkspace({ name: "ws", path: "/alpha/ws" })],
       });
-      const projectBeta = createMockProject({
+      const projectBeta = createMockProjectWithId({
         path: "/beta" as ProjectPath,
         name: "beta",
         workspaces: [createMockWorkspace({ name: "ws", path: "/beta/ws" })],
       });
-      const projectCharlie = createMockProject({
+      const projectCharlie = createMockProjectWithId({
         path: "/charlie" as ProjectPath,
         name: "charlie",
         workspaces: [createMockWorkspace({ name: "ws", path: "/charlie/ws" })],
@@ -573,7 +556,7 @@ describe("Sidebar component", () => {
 
     it("renders workspaces in the order provided", () => {
       // Workspaces are pre-sorted by the store - Sidebar renders them in that order
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [
           createMockWorkspace({ name: "Alpha", path: "/test/Alpha" }),
@@ -599,7 +582,7 @@ describe("Sidebar component", () => {
 
     it("shortcut indices match rendered order", () => {
       // Workspaces are pre-sorted by the store
-      const project = createMockProject({
+      const project = createMockProjectWithId({
         path: "/test" as ProjectPath,
         workspaces: [
           createMockWorkspace({ name: "alpha", path: "/test/alpha" }),

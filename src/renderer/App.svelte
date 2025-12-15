@@ -56,8 +56,8 @@
 
   // Subscribe to shortcut events from main process (global - work in both modes)
   $effect(() => {
-    const unsubEnable = api.onShortcutEnable(handleShortcutEnable);
-    const unsubDisable = api.onShortcutDisable(handleShortcutDisable);
+    const unsubEnable = api.on("shortcut:enable", handleShortcutEnable);
+    const unsubDisable = api.on("shortcut:disable", handleShortcutDisable);
     return () => {
       unsubEnable();
       unsubDisable();

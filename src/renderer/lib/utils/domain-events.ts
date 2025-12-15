@@ -3,73 +3,53 @@
  *
  * Extracts event subscriptions from MainView.svelte into a reusable helper.
  * This makes testing easier and centralizes the subscription logic.
+ *
+ * Uses the API types (ProjectId, WorkspaceRef) for type safety.
  */
 
-import type {
-  Project,
-  ProjectPath,
-  Workspace,
-  AggregatedAgentStatus,
-  ProjectOpenedEvent,
-  ProjectClosedEvent,
-  WorkspaceCreatedEvent,
-  WorkspaceRemovedEvent,
-  WorkspaceSwitchedEvent,
-  AgentStatusChangedEvent,
-} from "@shared/ipc";
 import type { Unsubscribe } from "@shared/electron-api";
+import type { WorkspaceRef, WorkspaceStatus } from "@shared/api/types";
+import type { ApiEvents as IApiEvents } from "@shared/api/interfaces";
 import { AgentNotificationService } from "$lib/services/agent-notifications";
 
-/**
- * Optional hooks for domain events.
- * These are called after the store update for additional side effects.
- */
-export interface DomainEventHooks {
-  /** Called after a project is added to the store */
-  onProjectOpenedHook?: (project: Project) => void;
-}
+// =============================================================================
+// API Event Types (WorkspaceRef-based)
+// =============================================================================
 
 /**
- * Function type for unsubscribing from events.
+ * API event types - re-export from shared/api for convenience.
+ * Uses the full ApiEvents interface which includes all domain events.
  */
-type CleanupFunction = () => void;
+export type ApiEvents = IApiEvents;
 
 /**
- * API functions needed for domain event subscriptions.
+ * API interface for event subscriptions.
+ * Supports all events from the ICodeHydraApi interface.
  */
 export interface DomainEventApi {
-  onProjectOpened: (callback: (event: ProjectOpenedEvent) => void) => Unsubscribe;
-  onProjectClosed: (callback: (event: ProjectClosedEvent) => void) => Unsubscribe;
-  onWorkspaceCreated: (callback: (event: WorkspaceCreatedEvent) => void) => Unsubscribe;
-  onWorkspaceRemoved: (callback: (event: WorkspaceRemovedEvent) => void) => Unsubscribe;
-  onWorkspaceSwitched: (callback: (event: WorkspaceSwitchedEvent) => void) => Unsubscribe;
-  onAgentStatusChanged: (callback: (event: AgentStatusChangedEvent) => void) => Unsubscribe;
+  on<E extends keyof ApiEvents>(event: E, handler: ApiEvents[E]): Unsubscribe;
 }
 
 /**
  * Store functions for handling domain events.
- *
- * Note: Uses branded types where the store functions use them (ProjectPath),
- * and plain strings where stores use strings. The event payloads have branded
- * types which are compatible with plain strings (branded types are subtypes).
+ * Uses API types (WorkspaceRef, ApiProject, etc.) instead of paths.
  */
 export interface DomainStores {
-  /** Add a project to the store */
-  addProject: (project: Project) => void;
-  /** Remove a project from the store by path */
-  removeProject: (path: ProjectPath) => void;
-  /** Add a workspace to a project, optionally updating the project's defaultBaseBranch */
+  /** Add a project to the store (format with ID) */
+  addProject: (project: Parameters<IApiEvents["project:opened"]>[0]["project"]) => void;
+  /** Remove a project from the store by ID */
+  removeProject: (projectId: Parameters<IApiEvents["project:closed"]>[0]["projectId"]) => void;
+  /** Add a workspace to a project */
   addWorkspace: (
-    projectPath: ProjectPath,
-    workspace: Workspace,
-    defaultBaseBranch?: string
+    projectId: Parameters<IApiEvents["workspace:created"]>[0]["projectId"],
+    workspace: Parameters<IApiEvents["workspace:created"]>[0]["workspace"]
   ) => void;
-  /** Remove a workspace from a project - projectPath is branded, workspacePath is plain string */
-  removeWorkspace: (projectPath: ProjectPath, workspacePath: string) => void;
-  /** Set the active workspace - uses plain string to match store */
-  setActiveWorkspace: (path: string | null) => void;
-  /** Update agent status for a workspace - uses plain string to match store */
-  updateAgentStatus: (workspacePath: string, status: AggregatedAgentStatus) => void;
+  /** Remove a workspace by WorkspaceRef */
+  removeWorkspace: (ref: WorkspaceRef) => void;
+  /** Set active workspace by WorkspaceRef */
+  setActiveWorkspace: (ref: WorkspaceRef | null) => void;
+  /** Update agent status by WorkspaceRef */
+  updateAgentStatus: (ref: WorkspaceRef, status: WorkspaceStatus) => void;
 }
 
 /**
@@ -81,92 +61,116 @@ export interface DomainEventOptions {
 }
 
 /**
- * Sets up all domain event subscriptions.
+ * Optional hooks for domain events.
+ * These are called after the store update for additional side effects.
+ */
+export interface DomainEventHooks {
+  /** Called after a project is added to the store */
+  onProjectOpenedHook?: (project: Parameters<IApiEvents["project:opened"]>[0]["project"]) => void;
+}
+
+/**
+ * Sets up API domain event subscriptions using WorkspaceRef-based events.
  *
- * This helper centralizes the wiring between IPC events and store updates.
- * It returns a cleanup function that unsubscribes from all events.
+ * This is the primary event setup function.
+ * Uses the API `on()` method which subscribes to `api:*` prefixed channels.
  *
- * @param api - The API object with event subscription methods
- * @param stores - The store update functions
- * @param hooks - Optional hooks for additional side effects after store updates
- * @param options - Optional configuration including DI dependencies
+ * @param api - The API object with the `on()` method
+ * @param stores - The store functions
+ * @param hooks - Optional hooks for additional side effects
+ * @param options - Optional configuration
  * @returns A cleanup function to unsubscribe from all events
- *
- * @example
- * ```typescript
- * const cleanup = setupDomainEvents(api, {
- *   addProject: (p) => projectsStore.addProject(p),
- *   removeProject: (path) => projectsStore.removeProject(path),
- *   // ... more store functions
- * }, {
- *   onProjectOpenedHook: (project) => {
- *     // Additional side effects after project added
- *   }
- * });
- *
- * // On unmount:
- * cleanup();
- * ```
  */
 export function setupDomainEvents(
   api: DomainEventApi,
   stores: DomainStores,
   hooks?: DomainEventHooks,
   options?: DomainEventOptions
-): CleanupFunction {
-  const unsubscribes: CleanupFunction[] = [];
+): () => void {
+  const unsubscribes: (() => void)[] = [];
 
-  // Create notification service if not provided (DI pattern)
+  // Create notification service if not provided
   const notificationService = options?.notificationService ?? new AgentNotificationService();
 
-  // Project events
+  // Project opened event
   unsubscribes.push(
-    api.onProjectOpened((event) => {
+    api.on("project:opened", (event) => {
       stores.addProject(event.project);
       hooks?.onProjectOpenedHook?.(event.project);
     })
   );
 
+  // Project closed event
   unsubscribes.push(
-    api.onProjectClosed((event) => {
-      stores.removeProject(event.path);
+    api.on("project:closed", (event) => {
+      stores.removeProject(event.projectId);
     })
   );
 
-  // Workspace events
+  // Workspace created event
   unsubscribes.push(
-    api.onWorkspaceCreated((event) => {
-      stores.addWorkspace(event.projectPath, event.workspace, event.defaultBaseBranch);
+    api.on("workspace:created", (event) => {
+      stores.addWorkspace(event.projectId, event.workspace);
       // UI decides: newly created workspace should be selected
-      stores.setActiveWorkspace(event.workspace.path);
+      stores.setActiveWorkspace({
+        projectId: event.projectId,
+        workspaceName: event.workspace.name,
+        path: event.workspace.path,
+      });
     })
   );
 
+  // Workspace removed event (uses WorkspaceRef)
   unsubscribes.push(
-    api.onWorkspaceRemoved((event) => {
-      stores.removeWorkspace(event.projectPath, event.workspacePath);
-      // Clean up notification service tracking to prevent memory leaks
-      notificationService.removeWorkspace(event.workspacePath);
+    api.on("workspace:removed", (event) => {
+      stores.removeWorkspace(event);
+      // Clean up notification service tracking
+      notificationService.removeWorkspace(event.path);
     })
   );
 
+  // Workspace switched event (uses WorkspaceRef | null)
   unsubscribes.push(
-    api.onWorkspaceSwitched((event) => {
-      stores.setActiveWorkspace(event.workspacePath);
+    api.on("workspace:switched", (event) => {
+      stores.setActiveWorkspace(event);
     })
   );
 
-  // Agent status events
+  // Workspace status changed event (uses WorkspaceRef + WorkspaceStatus)
   unsubscribes.push(
-    api.onAgentStatusChanged((event) => {
-      stores.updateAgentStatus(event.workspacePath, event.status);
+    api.on("workspace:status-changed", (event) => {
+      stores.updateAgentStatus(event, event.status);
       // Play chime when idle count increases (agent finished work)
-      notificationService.handleStatusChange(event.workspacePath, event.status.counts);
+      // Note: status uses AgentStatus type which has counts in the busy/idle/mixed variants
+      if (event.status.agent.type !== "none" && "counts" in event.status.agent) {
+        notificationService.handleStatusChange(event.path, event.status.agent.counts);
+      }
     })
   );
 
-  // Return cleanup function
   return () => {
     unsubscribes.forEach((unsub) => unsub());
   };
 }
+
+// =============================================================================
+// Legacy exports for backward compatibility (will be removed in future)
+// =============================================================================
+
+/** @deprecated Use ApiEvents instead */
+export type ApiEventsV2 = ApiEvents;
+
+/** @deprecated Use DomainEventApi instead */
+export type DomainEventApiV2 = DomainEventApi;
+
+/** @deprecated Use DomainStores instead */
+export type DomainStoresV2 = DomainStores;
+
+/** @deprecated Use DomainEventOptions instead */
+export type DomainEventOptionsV2 = DomainEventOptions;
+
+/** @deprecated Use DomainEventHooks instead */
+export type DomainEventHooksV2 = DomainEventHooks;
+
+/** @deprecated Use setupDomainEvents instead */
+export const setupDomainEventsV2 = setupDomainEvents;

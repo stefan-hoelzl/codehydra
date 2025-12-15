@@ -190,6 +190,113 @@ This pattern is used when:
 2. Immediate UI response is more important than confirmation
 3. The renderer should not block on the main process
 
+### API Layer Pattern
+
+IPC handlers are thin adapters over `ICodeHydraApi`. All business logic lives in the API implementation:
+
+```typescript
+// IPC handler (thin adapter) - src/main/ipc/api-handlers.ts
+ipcMain.handle("api:project:open", async (_event, { path }: { path: string }) => {
+  // 1. Validate input
+  if (!path || typeof path !== "string") {
+    throw new ValidationError([{ path: ["path"], message: "Path required" }]);
+  }
+  if (!pathModule.isAbsolute(path)) {
+    throw new ValidationError([{ path: ["path"], message: "Path must be absolute" }]);
+  }
+  // 2. Delegate to API
+  return await api.projects.open(path);
+});
+```
+
+The API implementation (`CodeHydraApiImpl`) wraps services and handles event emission:
+
+```typescript
+// API implementation - src/main/api/codehydra-api.ts
+class CodeHydraApiImpl implements ICodeHydraApi {
+  async open(absolutePath: string): Promise<Project> {
+    // Delegate to service
+    const project = await this.appState.openProject(absolutePath);
+
+    // Generate ID for external consumers
+    const projectId = generateProjectId(absolutePath);
+
+    // Emit event
+    this.emit("project:opened", { project: { ...project, id: projectId } });
+
+    return { ...project, id: projectId };
+  }
+}
+```
+
+### ID Generation Pattern
+
+Projects and workspaces use branded types (`ProjectId`, `WorkspaceName`) with deterministic ID generation:
+
+```typescript
+// Generate project ID from path
+function generateProjectId(absolutePath: string): ProjectId {
+  const normalizedPath = path.normalize(absolutePath);
+  const basename = path.basename(normalizedPath);
+  const safeName = basename.replace(/[^a-zA-Z0-9]/g, "-") || "root";
+  const hash = crypto.createHash("sha256").update(normalizedPath).digest("hex").slice(0, 8);
+  return `${safeName}-${hash}` as ProjectId;
+}
+```
+
+**ID Format**: `<name>-<8-char-hash>` (e.g., `my-app-a1b2c3d4`)
+
+**Test Vectors**:
+
+| Input Path                    | Generated ID            |
+| ----------------------------- | ----------------------- |
+| `/home/user/projects/my-app`  | `my-app-<hash8>`        |
+| `/home/user/projects/my-app/` | `my-app-<hash8>` (same) |
+| `/home/user/Projects/My App`  | `My-App-<hash8>`        |
+
+### ID Resolution Pattern
+
+Resolution is done by simple iteration (sufficient for <10 projects):
+
+```typescript
+function resolveProject(projectId: ProjectId): string | undefined {
+  const projects = appState.getAllProjects();
+  for (const project of projects) {
+    if (generateProjectId(project.path) === projectId) {
+      return project.path;
+    }
+  }
+  return undefined;
+}
+```
+
+**Why iteration, not a Map?**
+
+- CodeHydra is designed for <10 concurrent projects
+- Iteration over 10 items is ~microseconds
+- Map would require keeping ID↔path in sync (complexity not worth it)
+
+### v2 API Usage
+
+The renderer uses `api.v2.*` for all operations after setup:
+
+```typescript
+// Open project
+const project = await api.v2.projects.open("/path/to/repo");
+console.log(project.id); // "my-repo-a1b2c3d4"
+
+// Create workspace
+const workspace = await api.v2.workspaces.create(project.id, "feature-x", "main");
+
+// Switch workspace
+await api.v2.ui.switchWorkspace(project.id, workspace.name);
+
+// Subscribe to events
+const unsubscribe = api.v2.on("workspace:switched", (event) => {
+  console.log(`Switched to ${event.workspaceName} in ${event.projectId}`);
+});
+```
+
 ## VSCode Elements Patterns
 
 ### Component Usage

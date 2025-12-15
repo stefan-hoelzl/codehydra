@@ -7,7 +7,7 @@
  */
 
 import type { WebContents, Event as ElectronEvent, Input, BaseWindow } from "electron";
-import { IpcChannels } from "../shared/ipc";
+import { ApiIpcChannels } from "../shared/ipc";
 
 type ShortcutActivationState = "NORMAL" | "ALT_WAITING";
 
@@ -171,7 +171,7 @@ export class ShortcutController {
       // Silently fail if UI not ready - this is a transient state
       return;
     }
-    uiWebContents.send(IpcChannels.SHORTCUT_ENABLE);
+    uiWebContents.send(ApiIpcChannels.SHORTCUT_ENABLE);
   }
 
   private emitDisable(): void {
@@ -180,7 +180,7 @@ export class ShortcutController {
       // Silently fail if UI not ready - this is a transient state
       return;
     }
-    uiWebContents.send(IpcChannels.SHORTCUT_DISABLE);
+    uiWebContents.send(ApiIpcChannels.SHORTCUT_DISABLE);
   }
 
   /**

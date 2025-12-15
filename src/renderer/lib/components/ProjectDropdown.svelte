@@ -1,10 +1,11 @@
 <script lang="ts">
   import FilterableDropdown, { type DropdownOption } from "./FilterableDropdown.svelte";
   import { projects } from "$lib/stores/projects.svelte.js";
+  import type { ProjectId } from "$lib/api";
 
   interface ProjectDropdownProps {
-    value: string;
-    onSelect: (projectPath: string) => void;
+    value: ProjectId;
+    onSelect: (projectId: ProjectId) => void;
     disabled?: boolean;
   }
 
@@ -13,20 +14,21 @@
   /**
    * Transform projects to DropdownOption[].
    * All projects are selectable options (no headers).
+   * Uses project.id as value for v2 API compatibility.
    */
   const dropdownOptions = $derived.by((): DropdownOption[] => {
     return projects.value.map((project) => ({
       type: "option" as const,
       label: project.name,
-      value: project.path,
+      value: project.id, // Use project ID, not path
     }));
   });
 
   /**
-   * Get the display value (project name) from the project path.
+   * Get the display value (project name) from the project ID.
    */
   const displayValue = $derived.by(() => {
-    const project = projects.value.find((p) => p.path === value);
+    const project = projects.value.find((p) => p.id === value);
     return project?.name ?? "";
   });
 
@@ -36,13 +38,20 @@
   function filterProject(option: DropdownOption, filterLowercase: string): boolean {
     return option.label.toLowerCase().includes(filterLowercase);
   }
+
+  /**
+   * Handle selection - cast to ProjectId for type safety.
+   */
+  function handleSelect(selectedValue: string): void {
+    onSelect(selectedValue as ProjectId);
+  }
 </script>
 
 <div class="project-dropdown">
   <FilterableDropdown
     options={dropdownOptions}
     value={displayValue}
-    {onSelect}
+    onSelect={handleSelect}
     {disabled}
     placeholder="Select project..."
     filterOption={filterProject}

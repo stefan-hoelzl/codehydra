@@ -3,17 +3,15 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { IpcChannels, type SetupReadyResponse } from "./ipc";
+import { IpcChannels, ApiIpcChannels, type SetupReadyResponse } from "./ipc";
 
-describe("IpcChannels", () => {
-  describe("SHORTCUT_ENABLE", () => {
-    it("exists with correct channel name", () => {
+describe("IpcChannels (legacy)", () => {
+  describe("Shortcut channels", () => {
+    it("has SHORTCUT_ENABLE channel", () => {
       expect(IpcChannels.SHORTCUT_ENABLE).toBe("shortcut:enable");
     });
-  });
 
-  describe("SHORTCUT_DISABLE", () => {
-    it("exists with correct channel name", () => {
+    it("has SHORTCUT_DISABLE channel", () => {
       expect(IpcChannels.SHORTCUT_DISABLE).toBe("shortcut:disable");
     });
   });
@@ -23,7 +21,27 @@ describe("IpcChannels", () => {
       expect(IpcChannels.SETUP_READY).toBe("setup:ready");
     });
 
-    it("has SetupReadyResponse type with ready boolean", () => {
+    it("has SETUP_RETRY channel", () => {
+      expect(IpcChannels.SETUP_RETRY).toBe("setup:retry");
+    });
+
+    it("has SETUP_QUIT channel", () => {
+      expect(IpcChannels.SETUP_QUIT).toBe("setup:quit");
+    });
+
+    it("has SETUP_PROGRESS channel", () => {
+      expect(IpcChannels.SETUP_PROGRESS).toBe("setup:progress");
+    });
+
+    it("has SETUP_COMPLETE channel", () => {
+      expect(IpcChannels.SETUP_COMPLETE).toBe("setup:complete");
+    });
+
+    it("has SETUP_ERROR channel", () => {
+      expect(IpcChannels.SETUP_ERROR).toBe("setup:error");
+    });
+
+    it("SetupReadyResponse type has ready boolean", () => {
       // Type-level test: verify SetupReadyResponse has the expected shape
       const response: SetupReadyResponse = { ready: true };
       expect(response.ready).toBe(true);
@@ -32,22 +50,46 @@ describe("IpcChannels", () => {
       expect(response2.ready).toBe(false);
     });
   });
+});
 
-  describe("Agent status channels", () => {
-    it("has AGENT_GET_STATUS channel", () => {
-      expect(IpcChannels.AGENT_GET_STATUS).toBe("agent:get-status");
+describe("ApiIpcChannels (v2 API)", () => {
+  describe("Project commands", () => {
+    it("has PROJECT_OPEN channel", () => {
+      expect(ApiIpcChannels.PROJECT_OPEN).toBe("api:project:open");
     });
 
-    it("has AGENT_GET_ALL_STATUSES channel", () => {
-      expect(IpcChannels.AGENT_GET_ALL_STATUSES).toBe("agent:get-all-statuses");
+    it("has PROJECT_LIST channel", () => {
+      expect(ApiIpcChannels.PROJECT_LIST).toBe("api:project:list");
+    });
+  });
+
+  describe("Workspace commands", () => {
+    it("has WORKSPACE_CREATE channel", () => {
+      expect(ApiIpcChannels.WORKSPACE_CREATE).toBe("api:workspace:create");
     });
 
-    it("has AGENT_REFRESH channel", () => {
-      expect(IpcChannels.AGENT_REFRESH).toBe("agent:refresh");
+    it("has WORKSPACE_GET_STATUS channel", () => {
+      expect(ApiIpcChannels.WORKSPACE_GET_STATUS).toBe("api:workspace:get-status");
+    });
+  });
+
+  describe("UI commands", () => {
+    it("has UI_SELECT_FOLDER channel", () => {
+      expect(ApiIpcChannels.UI_SELECT_FOLDER).toBe("api:ui:select-folder");
+    });
+  });
+
+  describe("Events", () => {
+    it("has PROJECT_OPENED event channel", () => {
+      expect(ApiIpcChannels.PROJECT_OPENED).toBe("api:project:opened");
     });
 
-    it("has AGENT_STATUS_CHANGED event channel", () => {
-      expect(IpcChannels.AGENT_STATUS_CHANGED).toBe("agent:status-changed");
+    it("has WORKSPACE_STATUS_CHANGED event channel", () => {
+      expect(ApiIpcChannels.WORKSPACE_STATUS_CHANGED).toBe("api:workspace:status-changed");
+    });
+
+    it("has SHORTCUT_ENABLE event channel", () => {
+      expect(ApiIpcChannels.SHORTCUT_ENABLE).toBe("api:shortcut:enable");
     });
   });
 });

@@ -2,25 +2,25 @@
   import Dialog from "./Dialog.svelte";
   import BranchDropdown from "./BranchDropdown.svelte";
   import ProjectDropdown from "./ProjectDropdown.svelte";
-  import { createWorkspace, type Workspace } from "$lib/api";
+  import { workspaces, ui, type Workspace, type ProjectId } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
-  import { projects } from "$lib/stores/projects.svelte.js";
+  import { getProjectById } from "$lib/stores/projects.svelte.js";
 
   interface CreateWorkspaceDialogProps {
     open: boolean;
-    projectPath: string;
+    projectId: ProjectId;
   }
 
-  let { open, projectPath }: CreateWorkspaceDialogProps = $props();
+  let { open, projectId }: CreateWorkspaceDialogProps = $props();
 
   // Get project default base branch
-  const project = $derived(projects.value.find((p) => p.path === projectPath));
+  const project = $derived(getProjectById(projectId));
 
   // Form state
   // Track user's project selection, null means use the prop value
-  let userSelectedProject = $state<string | null>(null);
+  let userSelectedProject = $state<ProjectId | null>(null);
   // Effective selected project: user selection or fall back to prop
-  const selectedProject = $derived(userSelectedProject ?? projectPath);
+  const selectedProjectId = $derived(userSelectedProject ?? projectId);
 
   let name = $state("");
   // Initialize selectedBranch from project's default base branch.
@@ -44,9 +44,9 @@
     }
   });
 
-  // Get existing workspace names for duplicate validation (uses selectedProject)
+  // Get existing workspace names for duplicate validation (uses selectedProjectId)
   const existingNames = $derived.by(() => {
-    const project = projects.value.find((p) => p.path === selectedProject);
+    const project = getProjectById(selectedProjectId);
     return project?.workspaces.map((w: Workspace) => w.name.toLowerCase()) ?? [];
   });
 
@@ -70,8 +70,8 @@
   );
 
   // Handle project selection - clears branch and re-validates name
-  function handleProjectSelect(path: string): void {
-    userSelectedProject = path;
+  function handleProjectSelect(newProjectId: ProjectId): void {
+    userSelectedProject = newProjectId;
     // Clear branch selection since we're switching projects
     selectedBranch = "";
     // Re-validate name when project changes if user has already interacted
@@ -118,7 +118,9 @@
     isSubmitting = true;
 
     try {
-      await createWorkspace(selectedProject, name, selectedBranch);
+      const workspace = await workspaces.create(selectedProjectId, name, selectedBranch);
+      // Switch to the newly created workspace to load its view
+      await ui.switchWorkspace(selectedProjectId, workspace.name);
       closeDialog();
     } catch (error) {
       submitError = error instanceof Error ? error.message : "Failed to create workspace";
@@ -146,7 +148,7 @@
     <div class="form-field">
       <label for="project-select">Project</label>
       <ProjectDropdown
-        value={selectedProject}
+        value={selectedProjectId}
         onSelect={handleProjectSelect}
         disabled={isSubmitting}
       />
@@ -177,7 +179,7 @@
     <div class="form-field">
       <label for="branch-select">Base Branch</label>
       <BranchDropdown
-        projectPath={selectedProject}
+        projectId={selectedProjectId}
         value={selectedBranch}
         onSelect={handleBranchSelect}
         disabled={isSubmitting}

@@ -1,12 +1,12 @@
 <script lang="ts" module>
-  import type { Project } from "$lib/api";
+  import type { ProjectWithId } from "$lib/stores/projects.svelte.js";
 
   /**
    * Calculate the global index of a workspace across all projects.
    * Returns the sum of all workspaces in previous projects plus the workspace index.
    */
   export function getWorkspaceGlobalIndex(
-    projects: readonly Project[],
+    projects: readonly ProjectWithId[],
     projectIndex: number,
     workspaceIndex: number
   ): number {
@@ -37,22 +37,22 @@
 </script>
 
 <script lang="ts">
-  import type { ProjectPath } from "$lib/api";
+  import type { ProjectId, WorkspaceRef, WorkspaceName } from "$lib/api";
   import EmptyState from "./EmptyState.svelte";
   import AgentStatusIndicator from "./AgentStatusIndicator.svelte";
   import { getStatus } from "$lib/stores/agent-status.svelte.js";
 
   interface SidebarProps {
-    projects: readonly Project[];
+    projects: readonly ProjectWithId[];
     activeWorkspacePath: string | null;
     loadingState: "loading" | "loaded" | "error";
     loadingError: string | null;
     shortcutModeActive?: boolean;
     onOpenProject: () => void;
-    onCloseProject: (path: ProjectPath) => void;
-    onSwitchWorkspace: (path: string) => void;
-    onOpenCreateDialog: (projectPath: string) => void;
-    onOpenRemoveDialog: (workspacePath: string) => void;
+    onCloseProject: (projectId: ProjectId) => void;
+    onSwitchWorkspace: (workspaceRef: WorkspaceRef) => void;
+    onOpenCreateDialog: (projectId: ProjectId) => void;
+    onOpenRemoveDialog: (workspaceRef: WorkspaceRef) => void;
   }
 
   let {
@@ -68,12 +68,12 @@
     onOpenRemoveDialog,
   }: SidebarProps = $props();
 
-  function handleAddWorkspace(projectPath: ProjectPath): void {
-    onOpenCreateDialog(projectPath);
+  function handleAddWorkspace(projectId: ProjectId): void {
+    onOpenCreateDialog(projectId);
   }
 
-  function handleRemoveWorkspace(workspacePath: string): void {
-    onOpenRemoveDialog(workspacePath);
+  function handleRemoveWorkspace(workspaceRef: WorkspaceRef): void {
+    onOpenRemoveDialog(workspaceRef);
   }
 </script>
 
@@ -107,18 +107,18 @@
                 <button
                   type="button"
                   class="action-btn"
-                  id={`add-ws-${project.path}`}
+                  id={`add-ws-${project.id}`}
                   aria-label="Add workspace"
-                  onclick={() => handleAddWorkspace(project.path)}
+                  onclick={() => handleAddWorkspace(project.id)}
                 >
                   +
                 </button>
                 <button
                   type="button"
                   class="action-btn"
-                  id={`close-project-${project.path}`}
+                  id={`close-project-${project.id}`}
                   aria-label="Close project"
-                  onclick={() => onCloseProject(project.path)}
+                  onclick={() => onCloseProject(project.id)}
                 >
                   &times;
                 </button>
@@ -143,7 +143,12 @@
                     type="button"
                     class="workspace-btn"
                     aria-label={workspace.name + (shortcutModeActive ? shortcutHint : "")}
-                    onclick={() => onSwitchWorkspace(workspace.path)}
+                    onclick={() =>
+                      onSwitchWorkspace({
+                        projectId: project.id,
+                        workspaceName: workspace.name as WorkspaceName,
+                        path: workspace.path,
+                      })}
                   >
                     {#if shortcutModeActive}
                       <vscode-badge
@@ -161,7 +166,12 @@
                     class="action-btn remove-btn"
                     id={`remove-ws-${workspace.path}`}
                     aria-label="Remove workspace"
-                    onclick={() => handleRemoveWorkspace(workspace.path)}
+                    onclick={() =>
+                      handleRemoveWorkspace({
+                        projectId: project.id,
+                        workspaceName: workspace.name as WorkspaceName,
+                        path: workspace.path,
+                      })}
                   >
                     &times;
                   </button>

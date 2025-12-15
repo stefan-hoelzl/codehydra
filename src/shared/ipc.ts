@@ -123,13 +123,6 @@ export interface AgentStatusChangedEvent {
   readonly status: AggregatedAgentStatus;
 }
 
-/**
- * Payload for getting status of a specific workspace.
- */
-export interface AgentGetStatusPayload {
-  readonly workspacePath: string;
-}
-
 // ============ Setup Types ============
 
 /**
@@ -164,64 +157,12 @@ export interface SetupReadyResponse {
   readonly ready: boolean;
 }
 
-// ============ Payload Types ============
-
-export interface ProjectOpenPayload {
-  readonly path: string;
-}
-
-export interface ProjectClosePayload {
-  readonly path: string;
-}
-
-export interface WorkspaceCreatePayload {
-  readonly projectPath: string;
-  readonly name: string;
-  readonly baseBranch: string;
-}
-
-export interface WorkspaceRemovePayload {
-  readonly workspacePath: string;
-  readonly deleteBranch: boolean;
-}
-
-export interface WorkspaceSwitchPayload {
-  readonly workspacePath: string;
-  /** Whether to focus the workspace view after switching (default: true) */
-  readonly focusWorkspace?: boolean;
-}
-
-export interface WorkspaceListBasesPayload {
-  readonly projectPath: string;
-}
-
-export interface WorkspaceUpdateBasesPayload {
-  readonly projectPath: string;
-}
-
-export interface WorkspaceIsDirtyPayload {
-  readonly workspacePath: string;
-}
-
-export interface UISetDialogModePayload {
-  readonly isOpen: boolean;
-}
-
-// No payload needed for focus-active-workspace
-
-// ============ Event Payload Types ============
+// ============ Legacy Event Payload Types ============
+// NOTE: These legacy event types are used by v1 domain event handlers (setupDomainEvents).
+// They're kept for backward compatibility but new code should use v2 API types from @shared/api/types.
 
 export interface ProjectOpenedEvent {
   readonly project: Project;
-}
-
-/**
- * Response from project:list command.
- * Returns all open projects and the currently active workspace path.
- */
-export interface ProjectListResponse {
-  readonly projects: Project[];
-  readonly activeWorkspacePath: string | null;
 }
 
 export interface ProjectClosedEvent {
@@ -244,80 +185,20 @@ export interface WorkspaceSwitchedEvent {
   readonly workspacePath: WorkspacePath | null;
 }
 
-// ============ Type-Safe IPC Contract ============
-
-export interface IpcCommands {
-  "project:open": { payload: ProjectOpenPayload; response: Project };
-  "project:close": { payload: ProjectClosePayload; response: void };
-  "project:list": { payload: void; response: ProjectListResponse };
-  "project:select-folder": { payload: void; response: string | null };
-  "workspace:create": { payload: WorkspaceCreatePayload; response: Workspace };
-  "workspace:remove": { payload: WorkspaceRemovePayload; response: RemovalResult };
-  "workspace:switch": { payload: WorkspaceSwitchPayload; response: void };
-  "workspace:list-bases": { payload: WorkspaceListBasesPayload; response: BaseInfo[] };
-  "workspace:update-bases": {
-    payload: WorkspaceUpdateBasesPayload;
-    response: UpdateBasesResult;
-  };
-  "workspace:is-dirty": { payload: WorkspaceIsDirtyPayload; response: boolean };
-  "ui:set-dialog-mode": { payload: UISetDialogModePayload; response: void };
-  "ui:focus-active-workspace": { payload: void; response: void };
-  "agent:get-status": { payload: AgentGetStatusPayload; response: AggregatedAgentStatus };
-  "agent:get-all-statuses": {
-    payload: void;
-    response: Record<string, AggregatedAgentStatus>;
-  };
-  "agent:refresh": { payload: void; response: void };
-  // Setup commands (renderer → main)
-  /** Check if VS Code setup is complete. Returns ready=true if setup done, ready=false if setup needed. */
-  "setup:ready": { payload: void; response: SetupReadyResponse };
-  "setup:retry": { payload: void; response: void };
-  "setup:quit": { payload: void; response: void };
-}
-
-export interface IpcEvents {
-  "project:opened": ProjectOpenedEvent;
-  "project:closed": ProjectClosedEvent;
-  "workspace:created": WorkspaceCreatedEvent;
-  "workspace:removed": WorkspaceRemovedEvent;
-  "workspace:switched": WorkspaceSwitchedEvent;
-  "agent:status-changed": AgentStatusChangedEvent;
-  // Setup events (main → renderer)
-  "setup:progress": SetupProgress;
-  "setup:complete": void;
-  "setup:error": SetupErrorPayload;
-}
-
-// ============ IPC Channel Names ============
+// ============ Legacy IPC Channels ============
+//
+// NOTE: Most IPC communication now uses the v2 API (ApiIpcChannels below).
+// These legacy channels remain for:
+// - Setup: Setup handlers are registered during bootstrap BEFORE startServices() runs.
+//   The v2 lifecycle handlers are registered in startServices(), so setup must use legacy channels.
+// - Shortcuts: ShortcutController directly sends to these channels. TODO: Wire through API.
 
 export const IpcChannels = {
-  // Commands
-  PROJECT_OPEN: "project:open",
-  PROJECT_CLOSE: "project:close",
-  PROJECT_LIST: "project:list",
-  PROJECT_SELECT_FOLDER: "project:select-folder",
-  WORKSPACE_CREATE: "workspace:create",
-  WORKSPACE_REMOVE: "workspace:remove",
-  WORKSPACE_SWITCH: "workspace:switch",
-  WORKSPACE_LIST_BASES: "workspace:list-bases",
-  WORKSPACE_UPDATE_BASES: "workspace:update-bases",
-  WORKSPACE_IS_DIRTY: "workspace:is-dirty",
-  UI_SET_DIALOG_MODE: "ui:set-dialog-mode",
-  UI_FOCUS_ACTIVE_WORKSPACE: "ui:focus-active-workspace",
-  AGENT_GET_STATUS: "agent:get-status",
-  AGENT_GET_ALL_STATUSES: "agent:get-all-statuses",
-  AGENT_REFRESH: "agent:refresh",
-  // Events
-  PROJECT_OPENED: "project:opened",
-  PROJECT_CLOSED: "project:closed",
-  WORKSPACE_CREATED: "workspace:created",
-  WORKSPACE_REMOVED: "workspace:removed",
-  WORKSPACE_SWITCHED: "workspace:switched",
-  AGENT_STATUS_CHANGED: "agent:status-changed",
   // Shortcut events (main → renderer)
+  // NOTE: ShortcutController directly sends to these channels (not through v2 API yet)
   SHORTCUT_ENABLE: "shortcut:enable",
   SHORTCUT_DISABLE: "shortcut:disable",
-  // Setup channels
+  // Setup channels (must be registered early, before v2 API handlers)
   SETUP_READY: "setup:ready",
   SETUP_RETRY: "setup:retry",
   SETUP_QUIT: "setup:quit",
@@ -325,3 +206,126 @@ export const IpcChannels = {
   SETUP_COMPLETE: "setup:complete",
   SETUP_ERROR: "setup:error",
 } as const satisfies Record<string, string>;
+
+// ============ API Layer IPC Channels (New) ============
+// These channels use the api: prefix and work with the new ICodeHydraApi interface.
+// During migration, both old and new channels coexist.
+
+/**
+ * New API-based IPC channel names.
+ * Uses branded types (ProjectId, WorkspaceName) instead of paths.
+ */
+export const ApiIpcChannels = {
+  // Project commands
+  PROJECT_OPEN: "api:project:open",
+  PROJECT_CLOSE: "api:project:close",
+  PROJECT_LIST: "api:project:list",
+  PROJECT_GET: "api:project:get",
+  PROJECT_FETCH_BASES: "api:project:fetch-bases",
+  // Workspace commands
+  WORKSPACE_CREATE: "api:workspace:create",
+  WORKSPACE_REMOVE: "api:workspace:remove",
+  WORKSPACE_GET: "api:workspace:get",
+  WORKSPACE_GET_STATUS: "api:workspace:get-status",
+  // UI commands
+  UI_SELECT_FOLDER: "api:ui:select-folder",
+  UI_GET_ACTIVE_WORKSPACE: "api:ui:get-active-workspace",
+  UI_SWITCH_WORKSPACE: "api:ui:switch-workspace",
+  UI_SET_DIALOG_MODE: "api:ui:set-dialog-mode",
+  UI_FOCUS_ACTIVE_WORKSPACE: "api:ui:focus-active-workspace",
+  // Lifecycle commands
+  LIFECYCLE_GET_STATE: "api:lifecycle:get-state",
+  LIFECYCLE_SETUP: "api:lifecycle:setup",
+  LIFECYCLE_QUIT: "api:lifecycle:quit",
+  // Events (main → renderer)
+  PROJECT_OPENED: "api:project:opened",
+  PROJECT_CLOSED: "api:project:closed",
+  PROJECT_BASES_UPDATED: "api:project:bases-updated",
+  WORKSPACE_CREATED: "api:workspace:created",
+  WORKSPACE_REMOVED: "api:workspace:removed",
+  WORKSPACE_SWITCHED: "api:workspace:switched",
+  WORKSPACE_STATUS_CHANGED: "api:workspace:status-changed",
+  SHORTCUT_ENABLE: "api:shortcut:enable",
+  SHORTCUT_DISABLE: "api:shortcut:disable",
+  SETUP_PROGRESS: "api:setup:progress",
+} as const satisfies Record<string, string>;
+
+// ============ API Layer Payload Types ============
+
+/**
+ * Payload for api:project:open command.
+ */
+export interface ApiProjectOpenPayload {
+  readonly path: string;
+}
+
+/**
+ * Payload for api:project:close command.
+ */
+export interface ApiProjectClosePayload {
+  readonly projectId: string;
+}
+
+/**
+ * Payload for api:project:get command.
+ */
+export interface ApiProjectGetPayload {
+  readonly projectId: string;
+}
+
+/**
+ * Payload for api:project:fetch-bases command.
+ */
+export interface ApiProjectFetchBasesPayload {
+  readonly projectId: string;
+}
+
+/**
+ * Payload for api:workspace:create command.
+ */
+export interface ApiWorkspaceCreatePayload {
+  readonly projectId: string;
+  readonly name: string;
+  readonly base: string;
+}
+
+/**
+ * Payload for api:workspace:remove command.
+ */
+export interface ApiWorkspaceRemovePayload {
+  readonly projectId: string;
+  readonly workspaceName: string;
+  readonly keepBranch?: boolean;
+}
+
+/**
+ * Payload for api:workspace:get command.
+ */
+export interface ApiWorkspaceGetPayload {
+  readonly projectId: string;
+  readonly workspaceName: string;
+}
+
+/**
+ * Payload for api:workspace:get-status command.
+ */
+export interface ApiWorkspaceGetStatusPayload {
+  readonly projectId: string;
+  readonly workspaceName: string;
+}
+
+/**
+ * Payload for api:ui:switch-workspace command.
+ */
+export interface ApiUiSwitchWorkspacePayload {
+  readonly projectId: string;
+  readonly workspaceName: string;
+  readonly focus?: boolean;
+}
+
+/**
+ * Payload for api:ui:set-dialog-mode command.
+ */
+export interface ApiUiSetDialogModePayload {
+  readonly isOpen: boolean;
+}

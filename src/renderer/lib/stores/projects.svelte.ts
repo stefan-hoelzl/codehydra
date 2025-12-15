@@ -1,9 +1,12 @@
 /**
  * Projects store using Svelte 5 runes.
  * Manages the state of open projects and workspaces.
+ *
+ * Uses v2 API types where projects and workspaces include IDs from the main process.
+ * IDs are NOT generated client-side - they come from API responses.
  */
 
-import type { Project, ProjectPath, Workspace } from "@shared/ipc";
+import type { Project, Workspace, ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
 
 // ============ State ============
 
@@ -29,8 +32,17 @@ const _sortedProjects = $derived(
     }))
 );
 
-const _activeProject = $derived<Project | undefined>(
-  _sortedProjects.find((p) => p.workspaces.some((w) => w.path === _activeWorkspacePath))
+/**
+ * Projects with IDs (v2 API projects already include IDs).
+ * This is an alias for sorted projects since they already have IDs from the API.
+ */
+const _projectsWithIds = $derived(_sortedProjects);
+
+/**
+ * Active project with ID.
+ */
+const _activeProject = $derived<ProjectWithId | undefined>(
+  _projectsWithIds.find((p) => p.workspaces.some((w) => w.path === _activeWorkspacePath))
 );
 
 const _flatWorkspaceList = $derived(
@@ -42,11 +54,32 @@ const _flatWorkspaceList = $derived(
   )
 );
 
+/**
+ * Active workspace as WorkspaceRef (includes projectId).
+ * Returns null if no active workspace.
+ */
+const _activeWorkspace = $derived.by((): WorkspaceRef | null => {
+  if (!_activeWorkspacePath) return null;
+
+  // Find the project and workspace
+  for (const project of _projectsWithIds) {
+    const workspace = project.workspaces.find((w) => w.path === _activeWorkspacePath);
+    if (workspace) {
+      return {
+        projectId: project.id,
+        workspaceName: workspace.name as WorkspaceName,
+        path: workspace.path,
+      };
+    }
+  }
+  return null;
+});
+
 // ============ Getters (for reactive access) ============
 
 export const projects = {
   get value() {
-    return _sortedProjects;
+    return _projectsWithIds;
   },
 };
 
@@ -80,6 +113,15 @@ export const flatWorkspaceList = {
   },
 };
 
+/**
+ * Active workspace as WorkspaceRef (v2 API).
+ */
+export const activeWorkspace = {
+  get value() {
+    return _activeWorkspace;
+  },
+};
+
 // ============ Actions ============
 
 export function setProjects(newProjects: Project[]): void {
@@ -90,7 +132,7 @@ export function addProject(project: Project): void {
   _projects = [..._projects, project];
 }
 
-export function removeProject(path: ProjectPath): void {
+export function removeProject(path: string): void {
   const removedProject = _projects.find((p) => p.path === path);
   _projects = _projects.filter((p) => p.path !== path);
 
@@ -114,7 +156,7 @@ export function setError(message: string): void {
 }
 
 export function addWorkspace(
-  projectPath: ProjectPath,
+  projectPath: string,
   workspace: Workspace,
   defaultBaseBranch?: string
 ): void {
@@ -130,7 +172,7 @@ export function addWorkspace(
   );
 }
 
-export function removeWorkspace(projectPath: ProjectPath, workspacePath: string): void {
+export function removeWorkspace(projectPath: string, workspacePath: string): void {
   _projects = _projects.map((p) =>
     p.path === projectPath
       ? { ...p, workspaces: p.workspaces.filter((w) => w.path !== workspacePath) }
@@ -167,6 +209,48 @@ export function getWorkspaceByIndex(index: number): Workspace | undefined {
 }
 
 /**
+ * Get WorkspaceRef by global index (0-based).
+ * Includes projectId and workspaceName for v2 API calls.
+ * @returns WorkspaceRef at index, or undefined if out of range.
+ */
+export function getWorkspaceRefByIndex(index: number): WorkspaceRef | undefined {
+  let currentIndex = 0;
+  for (const project of projects.value) {
+    for (const workspace of project.workspaces) {
+      if (currentIndex === index) {
+        return {
+          projectId: project.id,
+          workspaceName: workspace.name as WorkspaceName,
+          path: workspace.path,
+        };
+      }
+      currentIndex++;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Find WorkspaceRef by workspace path.
+ * @returns WorkspaceRef for the workspace, or undefined if not found.
+ */
+export function findWorkspaceRefByPath(path: string | null): WorkspaceRef | undefined {
+  if (!path) return undefined;
+  for (const project of projects.value) {
+    for (const workspace of project.workspaces) {
+      if (workspace.path === path) {
+        return {
+          projectId: project.id,
+          workspaceName: workspace.name as WorkspaceName,
+          path: workspace.path,
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Find the index of a workspace by its path.
  * @returns 0-based index, or -1 if not found.
  */
@@ -180,4 +264,52 @@ export function findWorkspaceIndex(path: string | null): number {
  */
 export function wrapIndex(index: number, length: number): number {
   return ((index % length) + length) % length;
+}
+
+// =============================================================================
+// v2 API Functions
+// =============================================================================
+
+/**
+ * Project type alias for compatibility.
+ * v2 API projects already include IDs, so this is just an alias.
+ */
+export type ProjectWithId = Project;
+
+/**
+ * Get all projects (v2 projects include IDs from the API).
+ */
+export function getProjectsWithIds(): readonly Project[] {
+  return _sortedProjects;
+}
+
+/**
+ * Get a project by its ID.
+ * @param id - The project ID to look up
+ * @returns The project if found, undefined otherwise
+ */
+export function getProjectById(id: ProjectId): ProjectWithId | undefined {
+  return _projectsWithIds.find((p) => p.id === id);
+}
+
+/**
+ * Get a workspace by WorkspaceRef.
+ * @param ref - The workspace reference (projectId + workspaceName)
+ * @returns The workspace if found, undefined otherwise
+ */
+export function getWorkspaceByRef(ref: {
+  projectId: ProjectId;
+  workspaceName: WorkspaceName;
+}): Workspace | undefined {
+  const project = _projectsWithIds.find((p) => p.id === ref.projectId);
+  if (!project) return undefined;
+  return project.workspaces.find((w) => w.name === ref.workspaceName);
+}
+
+/**
+ * Set the active workspace using a WorkspaceRef.
+ * @param ref - The workspace reference (projectId + workspaceName + path), or null to clear
+ */
+export function setActiveWorkspaceByRef(ref: WorkspaceRef | null): void {
+  _activeWorkspacePath = ref?.path ?? null;
 }

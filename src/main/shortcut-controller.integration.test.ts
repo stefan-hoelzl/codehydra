@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { WebContents, Event as ElectronEvent, Input, BaseWindow } from "electron";
-import { IpcChannels } from "../shared/ipc";
+import { ApiIpcChannels } from "../shared/ipc";
 import { ShortcutController } from "./shortcut-controller";
 
 /**
@@ -147,7 +147,7 @@ describe("ShortcutController Integration", () => {
       // - IPC message was sent to UI WebContents
       expect(mockDeps.getUIWebContents).toHaveBeenCalled();
       expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledTimes(1);
-      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(IpcChannels.SHORTCUT_ENABLE);
+      expect(mockDeps.mockUIWebContents.send).toHaveBeenCalledWith(ApiIpcChannels.SHORTCUT_ENABLE);
     });
 
     it("verifies execution order: setDialogMode before focusUI before IPC", () => {

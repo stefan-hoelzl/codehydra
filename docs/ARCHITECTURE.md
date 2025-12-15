@@ -406,6 +406,144 @@ All methods throw `FileSystemError` (extends `ServiceError`) with mapped error c
 | SetupError            | Error display with Retry and Quit buttons            |
 | Stores                | projects, dialogs, shortcuts, setup (Svelte 5 runes) |
 
+## API Layer Architecture
+
+The application uses a unified API layer (`ICodeHydraApi`) that abstracts all CodeHydra operations. This enables multiple consumers (UI, future MCP Server, CLI) without duplicating business logic.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            Consumers                                     │
+├─────────────────────┬─────────────────────┬─────────────────────────────┤
+│   UI (Renderer)     │   MCP Server        │   Future CLI                │
+│   FULL API          │   CORE API          │   CORE API                  │
+└──────────┬──────────┴──────────┬──────────┴──────────┬──────────────────┘
+           │                     │                     │
+           ▼                     ▼                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         IPC Adapter Layer                                │
+│  (Thin adapters: validate input → call API → serialize response)        │
+└─────────────────────────────────┬───────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         ICodeHydraApi                                    │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        │
+│  │ IProjectApi │ │IWorkspaceApi│ │   IUiApi    │ │ILifecycleApi│        │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘        │
+│                           + on(event, handler)                           │
+└─────────────────────────────────┬───────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                 CodeHydraApiImpl (src/main/api/)                         │
+│  - Lives in main process (requires Electron for IUiApi)                 │
+│  - Wraps services (AppState, WorkspaceProvider, ViewManager, etc.)      │
+│  - Resolves IDs by iterating open projects (<10, no map needed)         │
+│  - Emits events via callback subscriptions (no intermediate EventEmitter)│
+│  - Implements IDisposable for cleanup                                   │
+└─────────────────────────────────┬───────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Services                                       │
+│  AppState, GitWorktreeProvider, AgentStatusManager, ViewManager, etc.   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Layer Ownership
+
+| Component          | Owns                                             | Does NOT Own                           |
+| ------------------ | ------------------------------------------------ | -------------------------------------- |
+| `AppState`         | Project/workspace state, provider registry       | Event emission, ID generation          |
+| `CodeHydraApiImpl` | ID↔path resolution, event emission, API contract | Business logic (delegates to services) |
+| `IPC Handlers`     | Input validation, IPC serialization              | Business logic, state                  |
+
+### API Interfaces
+
+The API is split into focused sub-interfaces following Interface Segregation Principle:
+
+| Interface       | Methods                                            | Purpose                |
+| --------------- | -------------------------------------------------- | ---------------------- |
+| `IProjectApi`   | `open`, `close`, `list`, `get`, `fetchBases`       | Project management     |
+| `IWorkspaceApi` | `create`, `remove`, `get`, `getStatus`             | Workspace operations   |
+| `IUiApi`        | `selectFolder`, `switchWorkspace`, `setDialogMode` | UI-specific operations |
+| `ILifecycleApi` | `getState`, `setup`, `quit`                        | Application lifecycle  |
+
+Non-UI consumers (MCP Server, CLI) use `ICoreApi` which excludes `IUiApi` and `ILifecycleApi`.
+
+### Branded ID Types
+
+The API uses branded types (`ProjectId`, `WorkspaceName`) for type safety:
+
+```typescript
+// Branded type prevents accidental string/ID confusion
+declare const ProjectIdBrand: unique symbol;
+export type ProjectId = string & { readonly [ProjectIdBrand]: true };
+
+// Generated from path using deterministic algorithm
+function generateProjectId(absolutePath: string): ProjectId {
+  const normalizedPath = path.normalize(absolutePath);
+  const basename = path.basename(normalizedPath);
+  const safeName = basename.replace(/[^a-zA-Z0-9]/g, "-") || "root";
+  const hash = crypto.createHash("sha256").update(normalizedPath).digest("hex").slice(0, 8);
+  return `${safeName}-${hash}` as ProjectId;
+}
+```
+
+**ID Format**: `<name>-<8-char-hash>` (e.g., `my-app-a1b2c3d4`)
+
+**Test Vectors**:
+
+| Input Path                    | Generated ID            |
+| ----------------------------- | ----------------------- |
+| `/home/user/projects/my-app`  | `my-app-<hash8>`        |
+| `/home/user/projects/my-app/` | `my-app-<hash8>` (same) |
+| `/home/user/Projects/My App`  | `My-App-<hash8>`        |
+
+### Event Flow
+
+IPC handlers subscribe to API events and emit to the renderer:
+
+```
+API event emission                    IPC handler subscription
+      │                                      │
+      │  api.on('workspace:switched')        │
+      ├─────────────────────────────────────►│
+      │                                      │  webContents.send('api:workspace:switched')
+      │                                      ├─────────────────────────────────────────────►
+      │                                      │                                            UI
+```
+
+### API Events
+
+| Event                      | Payload                     | Description                |
+| -------------------------- | --------------------------- | -------------------------- |
+| `project:opened`           | `{ project: Project }`      | Project was opened         |
+| `project:closed`           | `{ projectId: ProjectId }`  | Project was closed         |
+| `project:bases-updated`    | `{ projectId, bases }`      | Branch list refreshed      |
+| `workspace:created`        | `{ projectId, workspace }`  | Workspace was created      |
+| `workspace:removed`        | `WorkspaceRef`              | Workspace was removed      |
+| `workspace:switched`       | `WorkspaceRef \| null`      | Active workspace changed   |
+| `workspace:status-changed` | `WorkspaceRef & { status }` | Dirty/agent status changed |
+| `shortcut:enable`          | `void`                      | Shortcut mode activated    |
+| `shortcut:disable`         | `void`                      | Shortcut mode deactivated  |
+| `setup:progress`           | `{ step, message }`         | Setup progress update      |
+
+### IPC Channel Naming
+
+The v2 API uses `api:` prefixed IPC channels:
+
+| API Method                | IPC Channel            |
+| ------------------------- | ---------------------- |
+| `v2.projects.open(path)`  | `api:project:open`     |
+| `v2.projects.close(id)`   | `api:project:close`    |
+| `v2.projects.list()`      | `api:project:list`     |
+| `v2.workspaces.create()`  | `api:workspace:create` |
+| `v2.ui.switchWorkspace()` | `api:workspace:switch` |
+| Event subscription        | `api:<event-name>`     |
+
 ### Renderer Startup Flow
 
 The renderer uses a two-phase initialization to handle the setup/normal app mode split:
@@ -877,6 +1015,8 @@ User: Click [×] on project row
 ## IPC Contract
 
 All IPC channels are defined in `src/shared/ipc.ts` with TypeScript types for compile-time safety.
+
+**Architecture Note**: IPC handlers are thin adapters over `ICodeHydraApi`. They only perform input validation and serialization - all business logic lives in the API implementation. See [API Layer Architecture](#api-layer-architecture) for details.
 
 ### Commands (renderer → main)
 

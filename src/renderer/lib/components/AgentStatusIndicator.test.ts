@@ -8,43 +8,14 @@ import type { Api } from "@shared/electron-api";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { createMockApi } from "../test-utils";
 
 // Get the current directory for reading component files
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Create mock API
-const mockApi: Api = {
-  selectFolder: vi.fn().mockResolvedValue(null),
-  openProject: vi.fn().mockResolvedValue(undefined),
-  closeProject: vi.fn().mockResolvedValue(undefined),
-  listProjects: vi.fn().mockResolvedValue({ projects: [], activeWorkspacePath: null }),
-  createWorkspace: vi.fn().mockResolvedValue(undefined),
-  removeWorkspace: vi.fn().mockResolvedValue(undefined),
-  switchWorkspace: vi.fn().mockResolvedValue(undefined),
-  listBases: vi.fn().mockResolvedValue([]),
-  updateBases: vi.fn().mockResolvedValue(undefined),
-  isWorkspaceDirty: vi.fn().mockResolvedValue(false),
-  setDialogMode: vi.fn().mockResolvedValue(undefined),
-  focusActiveWorkspace: vi.fn().mockResolvedValue(undefined),
-  getAgentStatus: vi.fn().mockResolvedValue({ status: "none", counts: { idle: 0, busy: 0 } }),
-  getAllAgentStatuses: vi.fn().mockResolvedValue({}),
-  refreshAgentStatus: vi.fn().mockResolvedValue(undefined),
-  setupReady: vi.fn().mockResolvedValue(undefined),
-  setupRetry: vi.fn().mockResolvedValue(undefined),
-  setupQuit: vi.fn().mockResolvedValue(undefined),
-  onProjectOpened: vi.fn(() => vi.fn()),
-  onProjectClosed: vi.fn(() => vi.fn()),
-  onWorkspaceCreated: vi.fn(() => vi.fn()),
-  onWorkspaceRemoved: vi.fn(() => vi.fn()),
-  onWorkspaceSwitched: vi.fn(() => vi.fn()),
-  onShortcutEnable: vi.fn(() => vi.fn()),
-  onShortcutDisable: vi.fn(() => vi.fn()),
-  onAgentStatusChanged: vi.fn(() => vi.fn()),
-  onSetupProgress: vi.fn(() => vi.fn()),
-  onSetupComplete: vi.fn(() => vi.fn()),
-  onSetupError: vi.fn(() => vi.fn()),
-};
+// Create mock API (flat structure)
+const mockApi: Api = createMockApi();
 
 // Set up window.api
 window.api = mockApi;
