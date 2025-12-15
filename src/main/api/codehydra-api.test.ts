@@ -1090,6 +1090,48 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
     api = new CodeHydraApiImpl(appState, viewManager, dialog, app, vscodeSetup);
   });
 
+  describe("lifecycle reuse", () => {
+    it("should reuse provided lifecycleApi instance", async () => {
+      const mockLifecycleApi = {
+        getState: vi.fn().mockResolvedValue("setup"),
+        setup: vi.fn().mockResolvedValue({ success: true }),
+        quit: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const apiWithExisting = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        vscodeSetup,
+        mockLifecycleApi
+      );
+
+      // Should use the provided lifecycle instance
+      const state = await apiWithExisting.lifecycle.getState();
+      expect(mockLifecycleApi.getState).toHaveBeenCalled();
+      expect(state).toBe("setup");
+    });
+
+    it("should create internal lifecycle when none provided", async () => {
+      // Default behavior - no lifecycle passed
+      const apiWithInternal = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        vscodeSetup
+        // No lifecycleApi passed
+      );
+
+      // Should use internal lifecycle (backed by vscodeSetup)
+      vi.mocked(vscodeSetup.isSetupComplete).mockResolvedValue(false);
+      const state = await apiWithInternal.lifecycle.getState();
+      expect(vscodeSetup.isSetupComplete).toHaveBeenCalled();
+      expect(state).toBe("setup");
+    });
+  });
+
   describe("getState()", () => {
     it("should return 'ready' when setup is complete", async () => {
       vi.mocked(vscodeSetup.isSetupComplete).mockResolvedValue(true);

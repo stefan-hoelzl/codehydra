@@ -208,18 +208,10 @@ export function registerApiHandlers(api: ICodeHydraApi): void {
   // ---------------------------------------------------------------------------
   // Lifecycle API
   // ---------------------------------------------------------------------------
-
-  ipcMain.handle(ApiIpcChannels.LIFECYCLE_GET_STATE, async () => {
-    return await api.lifecycle.getState();
-  });
-
-  ipcMain.handle(ApiIpcChannels.LIFECYCLE_SETUP, async () => {
-    return await api.lifecycle.setup();
-  });
-
-  ipcMain.handle(ApiIpcChannels.LIFECYCLE_QUIT, async () => {
-    return await api.lifecycle.quit();
-  });
+  // NOTE: Lifecycle handlers are registered separately via registerLifecycleHandlers()
+  // in bootstrap(), BEFORE startServices() runs. This ensures they're available
+  // immediately when the renderer loads (for lifecycle.getState() in onMount).
+  // Do NOT register lifecycle handlers here - it would cause duplicate registration.
 }
 
 // =============================================================================

@@ -85,52 +85,61 @@
     };
   });
 
-  // Subscribe to setup events from main process
+  // Subscribe to setup progress events from main process
   $effect(() => {
-    const unsubProgress = api.onSetupProgress((event) => {
+    const unsubProgress = api.on<{ step: string; message: string }>("setup:progress", (event) => {
       updateProgress(event.message);
-    });
-
-    const unsubComplete = api.onSetupComplete(() => {
-      completeSetup();
-    });
-
-    const unsubError = api.onSetupError((event) => {
-      errorSetup(event.message);
     });
 
     return () => {
       unsubProgress();
-      unsubComplete();
-      unsubError();
     };
   });
 
   // Check setup status on mount
   onMount(async () => {
     try {
-      const { ready } = await api.setupReady();
-      if (ready) {
+      const state = await api.lifecycle.getState();
+      if (state === "ready") {
         appMode = { type: "ready" };
       } else {
+        // Setup needed - start setup automatically
         appMode = { type: "setup" };
+        void runSetup();
       }
     } catch (error) {
-      // If setupReady fails, fall back to ready mode
-      console.error("Setup ready check failed:", error);
+      // If lifecycle.getState() fails, fall back to ready mode
+      console.error("Setup state check failed:", error);
       appMode = { type: "ready" };
     }
   });
 
+  /**
+   * Run the setup process via lifecycle API.
+   * Handles success/error states and transitions.
+   */
+  async function runSetup(): Promise<void> {
+    try {
+      const result = await api.lifecycle.setup();
+      if (result.success) {
+        completeSetup();
+      } else {
+        errorSetup(result.message);
+      }
+    } catch (error) {
+      errorSetup(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   // Handle setup retry
   function handleSetupRetry(): void {
     resetSetup();
-    void api.setupRetry();
+    void runSetup();
   }
 
   // Handle setup quit
   function handleSetupQuit(): void {
-    void api.setupQuit();
+    void api.lifecycle.quit();
   }
 
   // Handle setup complete transition (after success screen timer)

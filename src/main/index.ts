@@ -3,7 +3,7 @@
  * Initializes all components and manages the application lifecycle.
  */
 
-import { app, Menu, dialog, ipcMain } from "electron";
+import { app, Menu, dialog } from "electron";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import nodePath from "node:path";
@@ -28,17 +28,13 @@ import {
 import { WindowManager } from "./managers/window-manager";
 import { ViewManager } from "./managers/view-manager";
 import { AppState } from "./app-state";
-import {
-  createSetupRetryHandler,
-  createSetupQuitHandler,
-  registerApiHandlers,
-  wireApiEvents,
-} from "./ipc";
+import { registerApiHandlers, wireApiEvents, registerLifecycleHandlers } from "./ipc";
 import { CodeHydraApiImpl } from "./api/codehydra-api";
+import { LifecycleApi } from "./api/lifecycle-api";
 import { generateProjectId } from "./api/id-utils";
-import type { ICodeHydraApi, Unsubscribe } from "../shared/api/interfaces";
+import type { ICodeHydraApi, ILifecycleApi, Unsubscribe } from "../shared/api/interfaces";
 import type { WorkspaceName, WorkspaceStatus } from "../shared/api/types";
-import { IpcChannels, type SetupProgress, type SetupErrorPayload } from "../shared/ipc";
+import { ApiIpcChannels } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
 
@@ -168,10 +164,10 @@ let processRunner: ExecaProcessRunner | null = null;
 let vscodeSetupService: VscodeSetupService | null = null;
 
 /**
- * Guard flag to prevent multiple concurrent setup processes.
- * Used by runSetupProcess() to ensure only one setup runs at a time.
+ * LifecycleApi instance created in bootstrap(), reused by CodeHydraApiImpl.
+ * Created early to make lifecycle handlers available before startServices() runs.
  */
-let setupInProgress = false;
+let lifecycleApi: ILifecycleApi | null = null;
 
 /**
  * Flag to track if services have been started.
@@ -180,39 +176,13 @@ let setupInProgress = false;
 let servicesStarted = false;
 
 /**
- * Emits setup progress event to renderer.
- */
-function emitSetupProgress(progress: SetupProgress): void {
-  if (viewManager) {
-    viewManager.getUIView().webContents.send(IpcChannels.SETUP_PROGRESS, progress);
-  }
-}
-
-/**
- * Emits setup complete event to renderer.
- */
-function emitSetupComplete(): void {
-  if (viewManager) {
-    viewManager.getUIView().webContents.send(IpcChannels.SETUP_COMPLETE);
-  }
-}
-
-/**
- * Emits setup error event to renderer.
- */
-function emitSetupError(error: SetupErrorPayload): void {
-  if (viewManager) {
-    viewManager.getUIView().webContents.send(IpcChannels.SETUP_ERROR, error);
-  }
-}
-
-/**
  * Starts all application services after setup completes.
  * This is the second phase of the two-phase startup:
  * bootstrap() → startServices()
  *
- * CRITICAL: Must be called BEFORE emitting setup:complete to renderer.
- * This ensures IPC handlers are registered before MainView mounts.
+ * CRITICAL: Called by LifecycleApi's onSetupComplete callback BEFORE
+ * returning the setup result to the renderer. This ensures IPC handlers
+ * are registered before MainView mounts.
  */
 async function startServices(): Promise<void> {
   // Guard against double initialization
@@ -304,12 +274,14 @@ async function startServices(): Promise<void> {
   }, 1000);
 
   // Create and register API-based handlers
+  // Reuse the existing lifecycleApi from bootstrap() if available
   codeHydraApi = new CodeHydraApiImpl(
     appState,
     viewManager,
     dialog,
     app,
-    vscodeSetupService ?? undefined
+    vscodeSetupService ?? undefined,
+    lifecycleApi ?? undefined
   );
 
   // Register API handlers
@@ -375,124 +347,9 @@ async function startServices(): Promise<void> {
   }
 }
 
-/**
- * Creates setup event emitters for the setup process.
- *
- * CRITICAL: emitComplete is async and waits for startServices() to complete
- * before emitting setup:complete to the renderer. This ensures that all
- * IPC handlers are registered before MainView mounts and calls them.
- */
-function createSetupEmitters(): {
-  emitProgress: (progress: SetupProgress) => void;
-  emitComplete: () => Promise<void>;
-  emitError: (error: SetupErrorPayload) => void;
-} {
-  return {
-    emitProgress: emitSetupProgress,
-    emitComplete: async () => {
-      // CRITICAL: Start services FIRST, so IPC handlers are registered
-      await startServices();
-      // THEN emit setup:complete to renderer - MainView can now safely call IPC
-      emitSetupComplete();
-    },
-    emitError: emitSetupError,
-  };
-}
-
-/**
- * Runs the setup process: clean, setup, emit events.
- * Called after setup:ready returns { ready: false }.
- *
- * Uses setupInProgress guard to prevent multiple concurrent setup processes
- * if setupReady() is called rapidly multiple times.
- */
-async function runSetupProcess(): Promise<void> {
-  if (!vscodeSetupService) return;
-
-  // Guard: prevent multiple concurrent setup processes
-  if (setupInProgress) {
-    return; // Already running, ignore duplicate calls
-  }
-  setupInProgress = true;
-
-  const emitters = createSetupEmitters();
-
-  try {
-    // Clean any partial setup state first
-    await vscodeSetupService.cleanVscodeDir();
-
-    // Run setup with progress callbacks
-    const result = await vscodeSetupService.setup((progress) => {
-      emitters.emitProgress(progress);
-    });
-
-    if (result.success) {
-      await emitters.emitComplete();
-    } else {
-      emitters.emitError({
-        message: result.error.message,
-        code: result.error.code ?? result.error.type,
-      });
-    }
-  } catch (error) {
-    emitters.emitError({
-      message: error instanceof Error ? error.message : String(error),
-      code: "unknown",
-    });
-  } finally {
-    setupInProgress = false;
-  }
-}
-
-/**
- * Registers the setup:ready handler that checks status and triggers setup if needed.
- * This handler is registered EARLY, before any mode branching.
- *
- * IMPORTANT: If setup is complete, this handler ensures startServices() has run
- * before returning. This handles edge cases where the setup marker appeared
- * between bootstrap()'s check and this handler's check.
- */
-function registerSetupReadyHandler(): void {
-  if (!vscodeSetupService) return;
-
-  const setupService = vscodeSetupService;
-
-  // Handler that checks status and triggers setup if needed
-  ipcMain.handle(IpcChannels.SETUP_READY, async () => {
-    const isComplete = await setupService.isSetupComplete();
-
-    if (!isComplete) {
-      // Trigger setup asynchronously after returning response
-      // This allows renderer to display SetupScreen before setup events arrive
-      setImmediate(() => {
-        void runSetupProcess();
-      });
-      return { ready: false };
-    }
-
-    // Setup is complete - ensure services are started before returning.
-    // This handles edge cases where setupComplete was false in bootstrap()
-    // but the marker appeared before this handler was called.
-    await startServices();
-    return { ready: true };
-  });
-}
-
-/**
- * Registers setup retry and quit handlers.
- * These handlers are registered along with setup:ready.
- */
-function registerSetupRetryAndQuitHandlers(): void {
-  if (!vscodeSetupService) return;
-
-  const emitters = createSetupEmitters();
-
-  ipcMain.handle(IpcChannels.SETUP_RETRY, createSetupRetryHandler(vscodeSetupService, emitters));
-  ipcMain.handle(
-    IpcChannels.SETUP_QUIT,
-    createSetupQuitHandler(() => app.quit())
-  );
-}
+// NOTE: Legacy setup handlers (registerSetupReadyHandler, registerSetupRetryAndQuitHandlers,
+// runSetupProcess, createSetupEmitters) have been removed. Setup is now handled entirely
+// through the LifecycleApi and registerLifecycleHandlers().
 
 /**
  * Bootstraps the application.
@@ -501,20 +358,19 @@ function registerSetupRetryAndQuitHandlers(): void {
  * bootstrap() → startServices()
  *
  * The initialization flow is:
- * 1. Create VscodeSetupService (needed for setup:ready handler)
+ * 1. Create VscodeSetupService (needed for LifecycleApi)
  * 2. Create WindowManager and ViewManager
- * 3. Register setup:ready handler (ALWAYS - this is the entry point for renderer)
- * 4. Register setup:retry and setup:quit handlers
- * 5. Load UI (renderer will call setupReady() in onMount)
- * 6. Handler returns { ready: true/false }
- *    - If ready: renderer shows MainView, main registers normal handlers
- *    - If not ready: renderer shows SetupScreen, main runs setup asynchronously
+ * 3. Create LifecycleApi and register lifecycle handlers (available immediately)
+ * 4. Load UI (renderer will call lifecycle.getState() in onMount)
+ * 5. Handler returns "ready" or "setup"
+ *    - If "ready": renderer shows MainView
+ *    - If "setup": renderer shows SetupScreen, calls lifecycle.setup()
  */
 async function bootstrap(): Promise<void> {
   // 1. Disable application menu
   Menu.setApplicationMenu(null);
 
-  // 2. Create VscodeSetupService early (needed for setup:ready handler)
+  // 2. Create VscodeSetupService early (needed for LifecycleApi)
   // Store processRunner in module-level variable for reuse by CodeServerManager
   processRunner = new ExecaProcessRunner();
   vscodeSetupService = new VscodeSetupService(
@@ -546,12 +402,27 @@ async function bootstrap(): Promise<void> {
   // On Linux, maximize() is async - wait for it to complete before loading UI
   await windowManager.maximizeAsync();
 
-  // 7. Register setup:ready handler EARLY (before loading UI)
-  // This handler is ALWAYS registered and returns { ready: boolean }
-  registerSetupReadyHandler();
+  // Capture viewManager for closure (TypeScript narrow refinement doesn't persist)
+  const viewManagerRef = viewManager;
 
-  // 8. Register setup:retry and setup:quit handlers
-  registerSetupRetryAndQuitHandlers();
+  // 7. Create LifecycleApi - this must happen BEFORE loading UI
+  // The LifecycleApi handles setup flow and is reused by CodeHydraApiImpl
+  lifecycleApi = new LifecycleApi(
+    vscodeSetupService,
+    app,
+    // onSetupComplete callback - starts services when setup completes
+    async () => {
+      await startServices();
+    },
+    // emitProgress callback - sends progress events to renderer
+    (progress) => {
+      viewManagerRef.getUIView().webContents.send(ApiIpcChannels.SETUP_PROGRESS, progress);
+    }
+  );
+
+  // 8. Register lifecycle handlers EARLY (before loading UI)
+  // These handlers delegate to LifecycleApi
+  registerLifecycleHandlers(lifecycleApi);
 
   // 9. If setup is complete, start services immediately
   // This is done BEFORE loading UI so handlers are ready when MainView mounts
@@ -560,7 +431,7 @@ async function bootstrap(): Promise<void> {
   }
 
   // 10. Load UI layer HTML
-  // Renderer will call setupReady() in onMount and route based on response
+  // Renderer will call lifecycle.getState() in onMount and route based on response
   const uiView = viewManager.getUIView();
   await uiView.webContents.loadFile(nodePath.join(__dirname, "../renderer/index.html"));
 

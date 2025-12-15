@@ -2,9 +2,11 @@
  * Renderer API layer.
  * Re-exports window.api for mockability in tests.
  *
- * The API has two layers:
- * 1. Setup API - registered early, available during setup
- * 2. Normal API - registered after setup, primary API for normal operation
+ * Setup operations use lifecycle API:
+ * - lifecycle.getState() returns "ready" | "setup"
+ * - lifecycle.setup() runs setup and returns success/failure
+ * - lifecycle.quit() quits the app
+ * - on("setup:progress", handler) receives progress events
  */
 
 // Check that window.api is available
@@ -14,18 +16,12 @@ if (typeof window === "undefined" || !window.api) {
 
 // Re-export window.api functions for mockability
 export const {
-  // Setup API methods (needed during setup before normal handlers are registered)
-  setupReady,
-  setupRetry,
-  setupQuit,
-  onSetupProgress,
-  onSetupComplete,
-  onSetupError,
-  // Normal API
+  // Domain APIs
   projects,
   workspaces,
   ui,
   lifecycle,
+  // Event subscriptions
   on,
   // UI mode change event
   onModeChange,

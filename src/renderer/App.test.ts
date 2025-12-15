@@ -5,7 +5,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
-import type { Unsubscribe } from "@shared/electron-api";
 import type { ProjectPath } from "@shared/ipc";
 import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
 
@@ -35,13 +34,6 @@ const { mockApi, eventCallbacks } = vi.hoisted(() => {
   return {
     eventCallbacks: callbacks,
     mockApi: {
-      // Setup API methods
-      setupReady: vi.fn().mockResolvedValue({ ready: true }),
-      setupRetry: vi.fn().mockResolvedValue(undefined),
-      setupQuit: vi.fn().mockResolvedValue(undefined),
-      onSetupProgress: vi.fn(() => vi.fn()),
-      onSetupComplete: vi.fn(() => vi.fn()),
-      onSetupError: vi.fn(() => vi.fn()),
       // Normal API (flat structure)
       workspaces: {
         create: vi.fn().mockResolvedValue({}),
@@ -114,7 +106,6 @@ import * as dialogsStore from "$lib/stores/dialogs.svelte.js";
 import * as shortcutsStore from "$lib/stores/shortcuts.svelte.js";
 import * as agentStatusStore from "$lib/stores/agent-status.svelte.js";
 import * as setupStore from "$lib/stores/setup.svelte.js";
-import type { SetupProgress, SetupErrorPayload } from "@shared/ipc";
 
 describe("App component", () => {
   beforeEach(() => {
@@ -145,7 +136,8 @@ describe("App component", () => {
     // Default to returning empty projects
     mockApi.projects.list.mockResolvedValue([]);
     // Default to setup complete (ready mode)
-    mockApi.setupReady.mockResolvedValue({ ready: true });
+    mockApi.lifecycle.getState.mockResolvedValue("ready");
+    mockApi.lifecycle.setup.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -1045,135 +1037,104 @@ describe("App component", () => {
   });
 
   describe("setup flow handling", () => {
-    it("calls setupReady on mount", async () => {
+    it("calls lifecycle.getState on mount", async () => {
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.setupReady).toHaveBeenCalledTimes(1);
+        expect(mockApi.lifecycle.getState).toHaveBeenCalledTimes(1);
       });
     });
 
-    it("subscribes to setup events on mount", async () => {
+    it("subscribes to setup:progress events via on() on mount", async () => {
       render(App);
 
       await waitFor(() => {
-        expect(mockApi.onSetupProgress).toHaveBeenCalledTimes(1);
-        expect(mockApi.onSetupComplete).toHaveBeenCalledTimes(1);
-        expect(mockApi.onSetupError).toHaveBeenCalledTimes(1);
+        expect(mockApi.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
       });
     });
 
-    it("unsubscribes from setup events on unmount", async () => {
-      const unsubProgress = vi.fn();
-      const unsubComplete = vi.fn();
-      const unsubError = vi.fn();
-      mockApi.onSetupProgress.mockReturnValue(unsubProgress);
-      mockApi.onSetupComplete.mockReturnValue(unsubComplete);
-      mockApi.onSetupError.mockReturnValue(unsubError);
+    it("unsubscribes from setup:progress on unmount", async () => {
+      // Track unsubscribe functions per event
+      const unsubFunctions = new Map<string, ReturnType<typeof vi.fn>>();
+      mockApi.on.mockImplementation((event: string) => {
+        const unsub = vi.fn();
+        unsubFunctions.set(event, unsub);
+        return unsub;
+      });
 
       const { unmount } = render(App);
 
       await waitFor(() => {
-        expect(mockApi.onSetupProgress).toHaveBeenCalled();
+        expect(mockApi.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
       });
 
       unmount();
 
-      expect(unsubProgress).toHaveBeenCalledTimes(1);
-      expect(unsubComplete).toHaveBeenCalledTimes(1);
-      expect(unsubError).toHaveBeenCalledTimes(1);
+      expect(unsubFunctions.get("setup:progress")).toHaveBeenCalledTimes(1);
     });
 
-    it("shows SetupScreen when in loading state", async () => {
-      // Keep loading state by never resolving projects.list
-      mockApi.projects.list.mockReturnValue(new Promise(() => {}));
+    it("shows SetupScreen when state is 'setup'", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Keep setup running indefinitely
+      mockApi.lifecycle.setup.mockReturnValue(new Promise(() => {}));
 
       render(App);
 
-      // Should show setup screen with loading indicator
+      // Should show setup screen
       await waitFor(() => {
         expect(screen.getByText("Setting up VSCode...")).toBeInTheDocument();
       });
     });
 
-    it("updates setup screen on progress event", async () => {
-      // Setup mode - setupReady returns { ready: false }
-      mockApi.setupReady.mockResolvedValue({ ready: false });
-
-      let progressCallback: ((event: SetupProgress) => void) | null = null;
-      (
-        mockApi.onSetupProgress as unknown as {
-          mockImplementation: (fn: (cb: (event: SetupProgress) => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        progressCallback = cb;
-        return vi.fn();
-      });
+    it("updates setup screen on progress event via on('setup:progress')", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Keep setup running indefinitely to see progress
+      mockApi.lifecycle.setup.mockReturnValue(new Promise(() => {}));
 
       render(App);
 
       await waitFor(() => {
-        expect(progressCallback).not.toBeNull();
+        expect(getEventCallback("setup:progress")).toBeDefined();
       });
 
-      // Simulate progress event
-      progressCallback!({ step: "extensions", message: "Installing OpenCode extension..." });
+      // Simulate progress event via api.on("setup:progress", ...)
+      fireEvent("setup:progress", {
+        step: "extensions",
+        message: "Installing OpenCode extension...",
+      });
 
       await waitFor(() => {
         expect(screen.getByText("Installing OpenCode extension...")).toBeInTheDocument();
       });
     });
 
-    it("shows SetupComplete on complete event", async () => {
-      // Setup mode - setupReady returns { ready: false }
-      mockApi.setupReady.mockResolvedValue({ ready: false });
-
-      let completeCallback: (() => void) | null = null;
-      (
-        mockApi.onSetupComplete as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        completeCallback = cb;
-        return vi.fn();
-      });
+    it("shows SetupComplete when lifecycle.setup() returns success", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Setup completes successfully
+      mockApi.lifecycle.setup.mockResolvedValue({ success: true });
 
       render(App);
 
-      await waitFor(() => {
-        expect(completeCallback).not.toBeNull();
-      });
-
-      // Simulate complete event
-      completeCallback!();
-
+      // Should show setup complete after setup() resolves
       await waitFor(() => {
         expect(screen.getByText("Setup complete!")).toBeInTheDocument();
       });
     });
 
-    it("shows SetupError on error event", async () => {
-      // Setup mode - setupReady returns { ready: false }
-      mockApi.setupReady.mockResolvedValue({ ready: false });
-
-      let errorCallback: ((event: SetupErrorPayload) => void) | null = null;
-      (
-        mockApi.onSetupError as unknown as {
-          mockImplementation: (fn: (cb: (event: SetupErrorPayload) => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        errorCallback = cb;
-        return vi.fn();
+    it("shows SetupError when lifecycle.setup() returns failure", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Setup fails
+      mockApi.lifecycle.setup.mockResolvedValue({
+        success: false,
+        message: "Network error",
+        code: "NETWORK_ERROR",
       });
 
       render(App);
-
-      await waitFor(() => {
-        expect(errorCallback).not.toBeNull();
-      });
-
-      // Simulate error event
-      errorCallback!({ message: "Network error", code: "network" });
 
       await waitFor(() => {
         expect(screen.getByText("Setup Failed")).toBeInTheDocument();
@@ -1181,63 +1142,51 @@ describe("App component", () => {
       });
     });
 
-    it("calls setupRetry when Retry button clicked on error screen", async () => {
-      // Setup mode - setupReady returns { ready: false }
-      mockApi.setupReady.mockResolvedValue({ ready: false });
-
-      let errorCallback: ((event: SetupErrorPayload) => void) | null = null;
-      (
-        mockApi.onSetupError as unknown as {
-          mockImplementation: (fn: (cb: (event: SetupErrorPayload) => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        errorCallback = cb;
-        return vi.fn();
-      });
+    it("calls lifecycle.setup() when Retry button clicked on error screen", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // First setup fails, second succeeds
+      mockApi.lifecycle.setup
+        .mockResolvedValueOnce({
+          success: false,
+          message: "Failed",
+          code: "NETWORK_ERROR",
+        })
+        .mockResolvedValueOnce({ success: true });
 
       render(App);
 
-      await waitFor(() => {
-        expect(errorCallback).not.toBeNull();
-      });
-
-      // Trigger error state
-      errorCallback!({ message: "Failed", code: "network" });
-
+      // Wait for error screen
       await waitFor(() => {
         expect(screen.getByText("Setup Failed")).toBeInTheDocument();
       });
+
+      // Clear mock to track retry call
+      mockApi.lifecycle.setup.mockClear();
+      mockApi.lifecycle.setup.mockResolvedValue({ success: true });
 
       // Click retry button
       const retryButton = screen.getByRole("button", { name: "Retry" });
       retryButton.click();
 
-      expect(mockApi.setupRetry).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(mockApi.lifecycle.setup).toHaveBeenCalledTimes(1);
+      });
     });
 
-    it("calls setupQuit when Quit button clicked on error screen", async () => {
-      // Setup mode - setupReady returns { ready: false }
-      mockApi.setupReady.mockResolvedValue({ ready: false });
-
-      let errorCallback: ((event: SetupErrorPayload) => void) | null = null;
-      (
-        mockApi.onSetupError as unknown as {
-          mockImplementation: (fn: (cb: (event: SetupErrorPayload) => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        errorCallback = cb;
-        return vi.fn();
+    it("calls lifecycle.quit() when Quit button clicked on error screen", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Setup fails
+      mockApi.lifecycle.setup.mockResolvedValue({
+        success: false,
+        message: "Failed",
+        code: "NETWORK_ERROR",
       });
 
       render(App);
 
-      await waitFor(() => {
-        expect(errorCallback).not.toBeNull();
-      });
-
-      // Trigger error state
-      errorCallback!({ message: "Failed", code: "network" });
-
+      // Wait for error screen
       await waitFor(() => {
         expect(screen.getByText("Setup Failed")).toBeInTheDocument();
       });
@@ -1246,11 +1195,12 @@ describe("App component", () => {
       const quitButton = screen.getByRole("button", { name: "Quit" });
       quitButton.click();
 
-      expect(mockApi.setupQuit).toHaveBeenCalledTimes(1);
+      expect(mockApi.lifecycle.quit).toHaveBeenCalledTimes(1);
     });
 
-    it("transitions to normal app after projects.list succeeds", async () => {
-      // Normal mode - projects.list returns immediately
+    it("transitions to normal app when state is 'ready'", async () => {
+      // Normal mode - lifecycle.getState returns "ready"
+      mockApi.lifecycle.getState.mockResolvedValue("ready");
       mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
@@ -1262,6 +1212,45 @@ describe("App component", () => {
 
       // Should NOT show setup screen
       expect(screen.queryByText("Setting up VSCode...")).not.toBeInTheDocument();
+    });
+
+    it("handles setup progress events during active setup", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Keep setup running to receive progress events
+      let resolveSetup: (value: { success: boolean }) => void;
+      mockApi.lifecycle.setup.mockReturnValue(
+        new Promise((resolve) => {
+          resolveSetup = resolve;
+        })
+      );
+
+      render(App);
+
+      // Wait for setup to start and progress subscription
+      await waitFor(() => {
+        expect(getEventCallback("setup:progress")).toBeDefined();
+      });
+
+      // Simulate multiple progress events
+      fireEvent("setup:progress", { step: "extensions", message: "Installing extensions..." });
+
+      await waitFor(() => {
+        expect(screen.getByText("Installing extensions...")).toBeInTheDocument();
+      });
+
+      fireEvent("setup:progress", { step: "settings", message: "Configuring settings..." });
+
+      await waitFor(() => {
+        expect(screen.getByText("Configuring settings...")).toBeInTheDocument();
+      });
+
+      // Complete setup
+      resolveSetup!({ success: true });
+
+      await waitFor(() => {
+        expect(screen.getByText("Setup complete!")).toBeInTheDocument();
+      });
     });
   });
 });

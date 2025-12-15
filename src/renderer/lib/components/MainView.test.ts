@@ -28,13 +28,6 @@ const eventCallbacks = new Map<string, EventCallback>();
 
 // Create mock API functions with vi.hoisted for proper hoisting
 const mockApi = vi.hoisted(() => ({
-  // Setup API methods (top-level)
-  setupReady: vi.fn().mockResolvedValue({ ready: true }),
-  setupRetry: vi.fn().mockResolvedValue(undefined),
-  setupQuit: vi.fn().mockResolvedValue(undefined),
-  onSetupProgress: vi.fn(() => vi.fn()),
-  onSetupComplete: vi.fn(() => vi.fn()),
-  onSetupError: vi.fn(() => vi.fn()),
   // Flat API structure - projects namespace
   projects: {
     list: vi.fn().mockResolvedValue([]),

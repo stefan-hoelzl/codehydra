@@ -13,7 +13,6 @@ import type {
   WorkspaceName,
   SetupProgress,
 } from "@shared/api/types";
-import type { SetupErrorPayload, SetupReadyResponse } from "@shared/ipc";
 
 /**
  * Default project ID used in test fixtures.
@@ -108,14 +107,6 @@ export function createMockBaseInfo(overrides: Partial<BaseInfo> = {}): BaseInfo 
 }
 
 /**
- * Creates a mock SetupReadyResponse.
- * @param ready - Whether setup is complete (default: true)
- */
-export function createMockSetupReadyResponse(ready = true): SetupReadyResponse {
-  return { ready };
-}
-
-/**
  * Creates a mock SetupProgress event.
  * @param step - The setup step name
  * @param message - The progress message
@@ -125,13 +116,4 @@ export function createMockSetupProgress(
   message: string
 ): SetupProgress {
   return { step, message };
-}
-
-/**
- * Creates a mock SetupErrorPayload.
- * @param message - The error message
- * @param code - The error code (default: "unknown")
- */
-export function createMockSetupErrorPayload(message: string, code = "unknown"): SetupErrorPayload {
-  return { message, code };
 }

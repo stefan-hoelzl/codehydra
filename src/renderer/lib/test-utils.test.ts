@@ -7,45 +7,26 @@ import { createMockApi } from "./test-utils";
 import { createMockProject, createMockWorkspace, createMockBaseInfo } from "./test-fixtures";
 
 describe("createMockApi", () => {
-  it("returns object with setup and normal API functions", () => {
+  it("returns object with domain API namespaces", () => {
     const api = createMockApi();
 
-    // Setup commands
-    expect(api.setupReady).toBeInstanceOf(Function);
-    expect(api.setupRetry).toBeInstanceOf(Function);
-    expect(api.setupQuit).toBeInstanceOf(Function);
-
-    // Setup events
-    expect(api.onSetupProgress).toBeInstanceOf(Function);
-    expect(api.onSetupComplete).toBeInstanceOf(Function);
-    expect(api.onSetupError).toBeInstanceOf(Function);
-
-    // Normal API (flat structure, not nested under v2)
+    // Domain APIs
     expect(api.projects).toBeDefined();
     expect(api.workspaces).toBeDefined();
     expect(api.ui).toBeDefined();
     expect(api.lifecycle).toBeDefined();
+
+    // Event subscription
     expect(api.on).toBeInstanceOf(Function);
+    expect(api.onModeChange).toBeInstanceOf(Function);
+    expect(api.onShortcut).toBeInstanceOf(Function);
   });
 
-  it("setup event subscriptions return unsubscribe functions", () => {
+  it("on() returns unsubscribe function", () => {
     const api = createMockApi();
 
-    const unsubProgress = api.onSetupProgress(vi.fn());
-    const unsubComplete = api.onSetupComplete(vi.fn());
-    const unsubError = api.onSetupError(vi.fn());
-
-    expect(unsubProgress).toBeInstanceOf(Function);
-    expect(unsubComplete).toBeInstanceOf(Function);
-    expect(unsubError).toBeInstanceOf(Function);
-  });
-
-  it("setup command mocks return expected default values", async () => {
-    const api = createMockApi();
-
-    expect(await api.setupReady()).toEqual({ ready: true });
-    expect(await api.setupRetry()).toBeUndefined();
-    expect(await api.setupQuit()).toBeUndefined();
+    const unsub = api.on("setup:progress", vi.fn());
+    expect(unsub).toBeInstanceOf(Function);
   });
 
   it("projects methods return expected default values", async () => {

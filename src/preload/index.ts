@@ -4,13 +4,8 @@
  */
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { IpcChannels, ApiIpcChannels } from "../shared/ipc";
-import type {
-  SetupProgress,
-  SetupErrorPayload,
-  SetupReadyResponse,
-  UIModeChangedEvent,
-} from "../shared/ipc";
+import { ApiIpcChannels } from "../shared/ipc";
+import type { UIModeChangedEvent } from "../shared/ipc";
 import type { ShortcutKey } from "../shared/shortcuts";
 
 /**
@@ -31,55 +26,9 @@ function createEventSubscription<T>(channel: string) {
 
 // Expose the API to the renderer process
 contextBridge.exposeInMainWorld("api", {
-  // ============ Setup Commands (registered early in bootstrap) ============
-  // These use old IPC channels because they must be available before startServices() runs.
-  // The lifecycle handlers are registered inside startServices(), so they're not
-  // available during the setup flow.
-
-  /**
-   * Check if VS Code setup is complete.
-   * Returns { ready: true } if setup done, { ready: false } if setup needed.
-   * If setup is needed, main process will start setup asynchronously.
-   */
-  setupReady: (): Promise<SetupReadyResponse> => ipcRenderer.invoke(IpcChannels.SETUP_READY),
-
-  /**
-   * Retry setup after a failure.
-   * Cleans vscode directory and re-runs setup.
-   */
-  setupRetry: (): Promise<void> => ipcRenderer.invoke(IpcChannels.SETUP_RETRY),
-
-  /**
-   * Quit the application (from setup error screen).
-   */
-  setupQuit: (): Promise<void> => ipcRenderer.invoke(IpcChannels.SETUP_QUIT),
-
-  // ============ Setup Events ============
-
-  /**
-   * Subscribe to setup progress events.
-   * @param callback - Called when setup progress updates
-   * @returns Unsubscribe function to remove the listener
-   */
-  onSetupProgress: createEventSubscription<SetupProgress>(IpcChannels.SETUP_PROGRESS),
-
-  /**
-   * Subscribe to setup complete event.
-   * @param callback - Called when setup completes successfully
-   * @returns Unsubscribe function to remove the listener
-   */
-  onSetupComplete: createEventSubscription<void>(IpcChannels.SETUP_COMPLETE),
-
-  /**
-   * Subscribe to setup error events.
-   * @param callback - Called when setup fails
-   * @returns Unsubscribe function to remove the listener
-   */
-  onSetupError: createEventSubscription<SetupErrorPayload>(IpcChannels.SETUP_ERROR),
-
-  // ============ Normal API (api: prefixed channels) ============
+  // ============ API (api: prefixed channels) ============
   // Primary API using ICodeHydraApi-based backend.
-  // Registered in startServices() after setup completes.
+  // Lifecycle handlers are registered in bootstrap(), others in startServices().
 
   projects: {
     open: (path: string) => ipcRenderer.invoke(ApiIpcChannels.PROJECT_OPEN, { path }),

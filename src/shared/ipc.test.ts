@@ -3,50 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  IpcChannels,
-  ApiIpcChannels,
-  type SetupReadyResponse,
-  type UIMode,
-  type UIModeChangedEvent,
-} from "./ipc";
-
-describe("IpcChannels (legacy)", () => {
-  describe("Setup channels", () => {
-    it("has SETUP_READY channel", () => {
-      expect(IpcChannels.SETUP_READY).toBe("setup:ready");
-    });
-
-    it("has SETUP_RETRY channel", () => {
-      expect(IpcChannels.SETUP_RETRY).toBe("setup:retry");
-    });
-
-    it("has SETUP_QUIT channel", () => {
-      expect(IpcChannels.SETUP_QUIT).toBe("setup:quit");
-    });
-
-    it("has SETUP_PROGRESS channel", () => {
-      expect(IpcChannels.SETUP_PROGRESS).toBe("setup:progress");
-    });
-
-    it("has SETUP_COMPLETE channel", () => {
-      expect(IpcChannels.SETUP_COMPLETE).toBe("setup:complete");
-    });
-
-    it("has SETUP_ERROR channel", () => {
-      expect(IpcChannels.SETUP_ERROR).toBe("setup:error");
-    });
-
-    it("SetupReadyResponse type has ready boolean", () => {
-      // Type-level test: verify SetupReadyResponse has the expected shape
-      const response: SetupReadyResponse = { ready: true };
-      expect(response.ready).toBe(true);
-
-      const response2: SetupReadyResponse = { ready: false };
-      expect(response2.ready).toBe(false);
-    });
-  });
-});
+import { ApiIpcChannels, type UIMode, type UIModeChangedEvent } from "./ipc";
 
 describe("UIMode types", () => {
   it("UIMode type accepts 'workspace' value", () => {

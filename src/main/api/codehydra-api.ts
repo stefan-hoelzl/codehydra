@@ -61,7 +61,8 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     viewManager: IViewManager,
     dialog: typeof Electron.dialog,
     app: typeof Electron.app,
-    vscodeSetup?: IVscodeSetup
+    vscodeSetup?: IVscodeSetup,
+    existingLifecycleApi?: ILifecycleApi
   ) {
     this.viewManager = viewManager;
     this.dialog = dialog;
@@ -72,7 +73,8 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     this.projects = this.createProjectApi();
     this.workspaces = this.createWorkspaceApi();
     this.ui = this.createUiApi();
-    this.lifecycle = this.createLifecycleApi();
+    // Reuse existing LifecycleApi if provided (from bootstrap), otherwise create internal one
+    this.lifecycle = existingLifecycleApi ?? this.createLifecycleApi();
 
     // Wire ViewManager mode changes to API events
     // This ensures mode changes from any source (ShortcutController, renderer)

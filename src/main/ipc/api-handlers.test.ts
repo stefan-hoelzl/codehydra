@@ -109,9 +109,8 @@ describe("registerApiHandlers", () => {
     expect(registeredChannels).toContain("api:ui:get-active-workspace");
     expect(registeredChannels).toContain("api:ui:switch-workspace");
     expect(registeredChannels).toContain("api:ui:set-mode");
-    expect(registeredChannels).toContain("api:lifecycle:get-state");
-    expect(registeredChannels).toContain("api:lifecycle:setup");
-    expect(registeredChannels).toContain("api:lifecycle:quit");
+    // NOTE: Lifecycle handlers are registered separately via registerLifecycleHandlers()
+    // in bootstrap(), NOT in registerApiHandlers(). See lifecycle-handlers.ts.
   });
 });
 
@@ -428,54 +427,8 @@ describe("UI API handlers", () => {
   });
 });
 
-describe("Lifecycle API handlers", () => {
-  let mockApi: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    mockApi = createMockApi();
-    registerApiHandlers(mockApi);
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  describe("api:lifecycle:get-state", () => {
-    it("delegates to api.lifecycle.getState", async () => {
-      vi.mocked(mockApi.lifecycle.getState).mockResolvedValue("setup");
-
-      const handler = getHandler("api:lifecycle:get-state");
-      const result = await handler({}, undefined);
-
-      expect(mockApi.lifecycle.getState).toHaveBeenCalled();
-      expect(result).toBe("setup");
-    });
-  });
-
-  describe("api:lifecycle:setup", () => {
-    it("delegates to api.lifecycle.setup", async () => {
-      vi.mocked(mockApi.lifecycle.setup).mockResolvedValue({ success: true });
-
-      const handler = getHandler("api:lifecycle:setup");
-      const result = await handler({}, undefined);
-
-      expect(mockApi.lifecycle.setup).toHaveBeenCalled();
-      expect(result).toEqual({ success: true });
-    });
-  });
-
-  describe("api:lifecycle:quit", () => {
-    it("delegates to api.lifecycle.quit", async () => {
-      const handler = getHandler("api:lifecycle:quit");
-      await handler({}, undefined);
-
-      expect(mockApi.lifecycle.quit).toHaveBeenCalled();
-    });
-  });
-});
+// NOTE: Lifecycle API handlers tests are in lifecycle-handlers.test.ts.
+// Lifecycle handlers are registered separately via registerLifecycleHandlers() in bootstrap().
 
 describe("Error serialization", () => {
   let mockApi: ICodeHydraApi;

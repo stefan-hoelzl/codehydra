@@ -141,40 +141,6 @@ export interface UIModeChangedEvent {
   readonly previousMode: UIMode;
 }
 
-// ============ Setup Types ============
-
-/**
- * Setup steps for progress tracking.
- * NOTE: Mirrors services/vscode-setup/types.ts SetupStep.
- */
-export type SetupStep = "extensions" | "config" | "finalize";
-
-/**
- * Progress information for setup UI updates.
- * NOTE: Mirrors services/vscode-setup/types.ts SetupProgress.
- */
-export interface SetupProgress {
-  readonly step: SetupStep;
-  readonly message: string;
-}
-
-/**
- * Error information for setup failures.
- */
-export interface SetupErrorPayload {
-  readonly message: string;
-  readonly code: string;
-}
-
-/**
- * Response from setup:ready command.
- * Check if VS Code setup is complete.
- * Returns ready=true if setup done, ready=false if setup needed.
- */
-export interface SetupReadyResponse {
-  readonly ready: boolean;
-}
-
 // ============ Legacy Event Payload Types ============
 // NOTE: These legacy event types are used by v1 domain event handlers (setupDomainEvents).
 // They're kept for backward compatibility but new code should use v2 API types from @shared/api/types.
@@ -203,24 +169,7 @@ export interface WorkspaceSwitchedEvent {
   readonly workspacePath: WorkspacePath | null;
 }
 
-// ============ Legacy IPC Channels ============
-//
-// NOTE: Most IPC communication now uses the v2 API (ApiIpcChannels below).
-// These legacy channels remain for:
-// - Setup: Setup handlers are registered during bootstrap BEFORE startServices() runs.
-//   The v2 lifecycle handlers are registered in startServices(), so setup must use legacy channels.
-
-export const IpcChannels = {
-  // Setup channels (must be registered early, before v2 API handlers)
-  SETUP_READY: "setup:ready",
-  SETUP_RETRY: "setup:retry",
-  SETUP_QUIT: "setup:quit",
-  SETUP_PROGRESS: "setup:progress",
-  SETUP_COMPLETE: "setup:complete",
-  SETUP_ERROR: "setup:error",
-} as const satisfies Record<string, string>;
-
-// ============ API Layer IPC Channels (New) ============
+// ============ API Layer IPC Channels ============
 // These channels use the api: prefix and work with the new ICodeHydraApi interface.
 // During migration, both old and new channels coexist.
 

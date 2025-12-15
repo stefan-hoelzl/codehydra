@@ -44,88 +44,11 @@ describe("preload API", () => {
   });
 
   // ============================================================================
-  // Setup Commands (OLD API - registered early in bootstrap)
+  // NOTE: Legacy setup commands (setupReady, setupRetry, setupQuit) and event
+  // subscriptions (onSetupProgress, onSetupComplete, onSetupError) have been
+  // removed. Setup is now handled via the v2 lifecycle API (lifecycle.getState,
+  // lifecycle.setup, lifecycle.quit) and on("setup:progress", ...) events.
   // ============================================================================
-
-  describe("setup commands", () => {
-    it("setupReady calls ipcRenderer.invoke with setup:ready", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue({ ready: true });
-
-      const setupReady = exposedApi.setupReady as () => Promise<{ ready: boolean }>;
-      const result = await setupReady();
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("setup:ready");
-      expect(result).toEqual({ ready: true });
-    });
-
-    it("setupRetry calls ipcRenderer.invoke with setup:retry", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
-
-      const setupRetry = exposedApi.setupRetry as () => Promise<void>;
-      await setupRetry();
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("setup:retry");
-    });
-
-    it("setupQuit calls ipcRenderer.invoke with setup:quit", async () => {
-      mockIpcRenderer.invoke.mockResolvedValue(undefined);
-
-      const setupQuit = exposedApi.setupQuit as () => Promise<void>;
-      await setupQuit();
-
-      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("setup:quit");
-    });
-  });
-
-  describe("setup event subscriptions", () => {
-    it("onSetupProgress subscribes to setup:progress and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onSetupProgress = exposedApi.onSetupProgress as (cb: () => void) => () => void;
-      const unsubscribe = onSetupProgress(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "setup:progress",
-        expect.any(Function)
-      );
-    });
-
-    it("onSetupComplete subscribes to setup:complete and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onSetupComplete = exposedApi.onSetupComplete as (cb: () => void) => () => void;
-      const unsubscribe = onSetupComplete(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("setup:complete", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "setup:complete",
-        expect.any(Function)
-      );
-    });
-
-    it("onSetupError subscribes to setup:error and returns unsubscribe", () => {
-      const callback = vi.fn();
-
-      const onSetupError = exposedApi.onSetupError as (cb: () => void) => () => void;
-      const unsubscribe = onSetupError(callback);
-
-      expect(mockIpcRenderer.on).toHaveBeenCalledWith("setup:error", expect.any(Function));
-      expect(unsubscribe).toBeInstanceOf(Function);
-
-      unsubscribe();
-      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(
-        "setup:error",
-        expect.any(Function)
-      );
-    });
-  });
 
   // ============================================================================
   // Flat API (api: prefixed channels)

@@ -551,29 +551,32 @@ The renderer uses a two-phase initialization to handle the setup/normal app mode
 ```
 App.svelte (mode router)
 │
-├── onMount: await api.setupReady()
-│   └── Returns { ready: boolean }
+├── onMount: const state = await api.lifecycle.getState()
+│   └── Returns "ready" | "setup"
 │
-├── ready: false (setup needed)
-│   ├── SetupScreen.svelte (progress bar, subscribes to setup:progress)
+├── state === "setup" (setup needed)
+│   ├── Calls api.lifecycle.setup() → returns Promise<SetupResult>
+│   ├── Subscribes to api.on("setup:progress") for progress updates
+│   ├── SetupScreen.svelte (progress bar, shows progress messages)
 │   ├── SetupComplete.svelte (brief success, emits oncomplete after 1.5s)
-│   └── SetupError.svelte (Retry/Quit buttons)
+│   └── SetupError.svelte (Retry calls lifecycle.setup(), Quit calls lifecycle.quit())
 │
-└── ready: true (setup complete)
+└── state === "ready" (setup complete)
     └── MainView.svelte
         │
         └── onMount:
             ├── listProjects()
-            ├── getAllAgentStatuses()
+            ├── Workspace status fetches
             └── Domain event subscriptions (project/workspace/agent)
 ```
 
 **Key Design Decisions:**
 
-1. **App.svelte owns global events**: Shortcut events and setup events work across modes
+1. **App.svelte owns global events**: Shortcut events and setup progress events work across modes
 2. **MainView.svelte owns domain events**: IPC calls only happen when setup is complete
-3. **Two-phase handler registration**: Main process registers `setup:ready` early; normal handlers after setup
-4. **IPC initialization timing**: `listProjects()` and `getAllAgentStatuses()` are called in MainView.onMount, not App.onMount
+3. **Two-phase handler registration**: Main process registers lifecycle handlers (`api:lifecycle:*`) in `bootstrap()`, normal handlers in `startServices()`
+4. **Promise-based setup**: `lifecycle.setup()` returns success/failure via Promise, no separate complete/error events
+5. **IPC initialization timing**: `listProjects()` and workspace status fetches are called in MainView.onMount, not App.onMount
 
 See [VS Code Setup](#vs-code-setup) for the main process side of this flow.
 

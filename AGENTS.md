@@ -141,10 +141,12 @@ The renderer has a two-component architecture for startup:
 
 **IPC Initialization Timing Rules:**
 
-1. `setupReady()` is called in App.svelte's `onMount` - determines which mode to show
-2. `listProjects()`, `getAllAgentStatuses()` are called in MainView.svelte's `onMount` - only when setup is complete
-3. Domain event subscriptions (project/workspace/agent) happen in MainView.svelte
-4. Global event subscriptions (shortcuts, setup events) stay in App.svelte
+1. `lifecycle.getState()` is called in App.svelte's `onMount` - determines which mode to show ("ready" or "setup")
+2. If "setup": `lifecycle.setup()` is called, which returns success/failure via Promise
+3. Setup progress events are received via `on("setup:progress", handler)`
+4. `listProjects()`, workspace status fetches are called in MainView.svelte's `onMount` - only when setup is complete
+5. Domain event subscriptions (project/workspace/agent) happen in MainView.svelte
+6. Global event subscriptions (shortcuts, setup progress) stay in App.svelte
 
 This prevents "handler not registered" errors during setup mode, when normal IPC handlers aren't available.
 
@@ -152,27 +154,40 @@ This prevents "handler not registered" errors during setup mode, when normal IPC
 
 The main process uses two-phase startup:
 
-| Function          | Responsibility                                                     |
-| ----------------- | ------------------------------------------------------------------ |
-| `bootstrap()`     | Infrastructure only: window, views, setup handlers, load UI        |
-| `startServices()` | All app services: code-server, AppState, OpenCode, normal handlers |
+| Function          | Responsibility                                                      |
+| ----------------- | ------------------------------------------------------------------- |
+| `bootstrap()`     | Infrastructure only: window, views, **lifecycle handlers**, load UI |
+| `startServices()` | All app services: code-server, AppState, OpenCode, normal handlers  |
 
 ```
-bootstrap() -> UI loads -> setupReady() called
-                               |
-               +---------------+---------------+
-               | ready: true                   | ready: false
+bootstrap()
+    ├─ Create vscodeSetupService
+    ├─ Create LifecycleApi (standalone)
+    ├─ Register lifecycle handlers (api:lifecycle:*)
+    └─ Load UI
+              │
+              v
+    UI loads -> lifecycle.getState() called
+                               │
+               ┌───────────────┴───────────────┐
+               │ "ready"                       │ "setup"
                v                               v
-        startServices()                 run setup process
-               |                               |
-               |                         startServices()
-               |                               |
-               |                         emit setup:complete
+        startServices()                 lifecycle.setup()
+               │                               │
+               │                        (runs setup, emits progress)
+               │                               │
+               │                        setup success → startServices()
+               │                               │
                v                               v
         App ready                       App ready
 ```
 
-**Key Timing Guarantee**: The `setup:complete` event is emitted to the renderer only AFTER `startServices()` completes. This ensures that normal IPC handlers are registered before MainView mounts and tries to call them.
+**Key Points:**
+
+- `LifecycleApi` is created in `bootstrap()` and registers `api:lifecycle:*` handlers immediately
+- `CodeHydraApiImpl` (created in `startServices()`) receives and reuses the same `LifecycleApi` instance
+- `lifecycle.setup()` returns a Promise with success/failure result (no separate complete/error events)
+- Normal API handlers (`api:project:*`, `api:workspace:*`, etc.) are registered in `startServices()`
 
 ## IPC Patterns
 

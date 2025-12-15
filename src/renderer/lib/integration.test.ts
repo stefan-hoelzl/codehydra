@@ -5,7 +5,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
-import type { Unsubscribe } from "@shared/electron-api";
 import type {
   Project,
   ProjectPath,
@@ -62,13 +61,6 @@ function clearV2EventCallbacks(): void {
 }
 
 const mockApi = vi.hoisted(() => ({
-  // Setup API mocks
-  setupReady: vi.fn().mockResolvedValue({ ready: true }),
-  setupRetry: vi.fn().mockResolvedValue(undefined),
-  setupQuit: vi.fn().mockResolvedValue(undefined),
-  onSetupProgress: vi.fn((): Unsubscribe => vi.fn()),
-  onSetupComplete: vi.fn((): Unsubscribe => vi.fn()),
-  onSetupError: vi.fn((): Unsubscribe => vi.fn()),
   // Normal API (flat structure)
   workspaces: {
     create: vi.fn().mockResolvedValue({}),
@@ -1402,8 +1394,8 @@ describe("Integration tests", () => {
   });
 
   describe("setup flow integration", () => {
-    it("routes-to-mainview-when-ready-true: setupReady returns ready, MainView mounts and calls listProjects", async () => {
-      mockApi.setupReady.mockResolvedValue({ ready: true });
+    it("routes-to-mainview-when-ready: lifecycle.getState returns 'ready', MainView mounts and calls listProjects", async () => {
+      mockApi.lifecycle.getState.mockResolvedValue("ready");
       mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
@@ -1419,8 +1411,10 @@ describe("Integration tests", () => {
       });
     });
 
-    it("routes-to-setupscreen-when-ready-false: setupReady returns not ready, SetupScreen shown", async () => {
-      mockApi.setupReady.mockResolvedValue({ ready: false });
+    it("routes-to-setupscreen-when-setup: lifecycle.getState returns 'setup', SetupScreen shown", async () => {
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Keep setup running indefinitely
+      mockApi.lifecycle.setup.mockReturnValue(new Promise(() => {}));
 
       render(App);
 
@@ -1433,11 +1427,13 @@ describe("Integration tests", () => {
       expect(mockApi.projects.list).not.toHaveBeenCalled();
     });
 
-    // Note: setup:complete event transition is tested in App.test.ts with proper mock setup
+    // Note: setup completion transition is tested in App.test.ts with proper mock setup
     // The integration test focuses on the routing behavior verified above
 
     it("does-not-call-listProjects-during-setup: IPC calls deferred until MainView mounts", async () => {
-      mockApi.setupReady.mockResolvedValue({ ready: false });
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Keep setup running indefinitely
+      mockApi.lifecycle.setup.mockReturnValue(new Promise(() => {}));
 
       render(App);
 
@@ -1450,37 +1446,16 @@ describe("Integration tests", () => {
       expect(mockApi.projects.list).not.toHaveBeenCalled();
     });
 
-    it("complete-event-triggers-mainview-mount-and-initialization: setup:complete triggers MainView mount", async () => {
+    it("setup-success-triggers-mainview-mount: lifecycle.setup success triggers MainView mount", async () => {
       // Start in setup mode
-      mockApi.setupReady.mockResolvedValue({ ready: false });
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
       mockApi.projects.list.mockResolvedValue([]);
-
-      // Capture the setup complete callback
-      let setupCompleteCallback: (() => void) | null = null;
-      (
-        mockApi.onSetupComplete as unknown as {
-          mockImplementation: (fn: (cb: () => void) => Unsubscribe) => void;
-        }
-      ).mockImplementation((cb) => {
-        setupCompleteCallback = cb;
-        return vi.fn();
-      });
+      // Setup completes successfully
+      mockApi.lifecycle.setup.mockResolvedValue({ success: true });
 
       render(App);
 
-      // Wait for setup screen to appear
-      await waitFor(() => {
-        expect(screen.getByText("Setting up VSCode...")).toBeInTheDocument();
-        expect(setupCompleteCallback).not.toBeNull();
-      });
-
-      // Verify IPC hasn't been called yet
-      expect(mockApi.projects.list).not.toHaveBeenCalled();
-
-      // Simulate setup complete event
-      setupCompleteCallback!();
-
-      // Wait for SetupComplete screen to show
+      // Wait for SetupComplete screen to show (setup completes quickly)
       await waitFor(() => {
         expect(screen.getByText("Setup complete!")).toBeInTheDocument();
       });
@@ -1495,11 +1470,11 @@ describe("Integration tests", () => {
       ); // Allow time for the 1.5s success screen
     });
 
-    it("handlers-registered-before-setupReady-returns: normal handlers available when setup is complete", async () => {
-      // This test verifies that when setupReady returns { ready: true },
+    it("handlers-registered-before-lifecycle-getState-returns: normal handlers available when setup is complete", async () => {
+      // This test verifies that when lifecycle.getState returns "ready",
       // the IPC handlers that MainView needs are already registered.
       // We can verify this by checking that v2.projects.list succeeds.
-      mockApi.setupReady.mockResolvedValue({ ready: true });
+      mockApi.lifecycle.getState.mockResolvedValue("ready");
       const mockProjects = [createProject("my-project", [])];
       mockApi.projects.list.mockResolvedValue(mockProjects);
 

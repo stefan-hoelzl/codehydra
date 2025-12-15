@@ -9,23 +9,15 @@ import type { Api } from "@shared/electron-api";
 /**
  * Creates a mock API object with all functions mocked.
  *
- * The API has two layers:
- * 1. Setup commands/events - available during setup
- * 2. Normal API (projects, workspaces, ui, lifecycle, on) - primary API for normal operation
+ * Setup operations use lifecycle API:
+ * - lifecycle.getState() returns "ready" | "setup"
+ * - lifecycle.setup() runs setup and returns success/failure
+ * - lifecycle.quit() quits the app
+ * - on("setup:progress", handler) receives progress events
  */
 export function createMockApi(): Api {
   return {
-    // Setup commands (needed during setup before normal handlers are registered)
-    setupReady: vi.fn().mockResolvedValue({ ready: true }),
-    setupRetry: vi.fn().mockResolvedValue(undefined),
-    setupQuit: vi.fn().mockResolvedValue(undefined),
-
-    // Setup event subscriptions
-    onSetupProgress: vi.fn(() => vi.fn()),
-    onSetupComplete: vi.fn(() => vi.fn()),
-    onSetupError: vi.fn(() => vi.fn()),
-
-    // Normal API
+    // Domain APIs
     projects: {
       open: vi.fn().mockResolvedValue({
         id: "test-12345678",

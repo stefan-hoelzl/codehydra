@@ -1,9 +1,11 @@
 /**
  * Tests for the renderer API layer.
  *
- * The API has two layers:
- * 1. Setup API - registered early, available during setup
- * 2. Normal API (projects, workspaces, ui, lifecycle, on) - primary API for normal operation
+ * Setup operations use lifecycle API:
+ * - lifecycle.getState() returns "ready" | "setup"
+ * - lifecycle.setup() runs setup and returns success/failure
+ * - lifecycle.quit() quits the app
+ * - on("setup:progress", handler) receives progress events
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -34,18 +36,7 @@ describe("renderer API layer", () => {
       window.api = mockApi;
     });
 
-    it("exports setup API functions from window.api", async () => {
-      const api = await import("$lib/api");
-
-      expect(api.setupReady).toBe(mockApi.setupReady);
-      expect(api.setupRetry).toBe(mockApi.setupRetry);
-      expect(api.setupQuit).toBe(mockApi.setupQuit);
-      expect(api.onSetupProgress).toBe(mockApi.onSetupProgress);
-      expect(api.onSetupComplete).toBe(mockApi.onSetupComplete);
-      expect(api.onSetupError).toBe(mockApi.onSetupError);
-    });
-
-    it("exports normal API functions from window.api", async () => {
+    it("exports domain API namespaces from window.api", async () => {
       const api = await import("$lib/api");
 
       expect(api.projects).toBe(mockApi.projects);
@@ -53,6 +44,8 @@ describe("renderer API layer", () => {
       expect(api.ui).toBe(mockApi.ui);
       expect(api.lifecycle).toBe(mockApi.lifecycle);
       expect(api.on).toBe(mockApi.on);
+      expect(api.onModeChange).toBe(mockApi.onModeChange);
+      expect(api.onShortcut).toBe(mockApi.onShortcut);
     });
   });
 
@@ -79,12 +72,6 @@ describe("renderer API layer", () => {
 
     beforeEach(() => {
       mockApi = {
-        setupReady: vi.fn().mockResolvedValue({ ready: true }),
-        setupRetry: vi.fn().mockResolvedValue(undefined),
-        setupQuit: vi.fn().mockResolvedValue(undefined),
-        onSetupProgress: vi.fn(() => vi.fn()),
-        onSetupComplete: vi.fn(() => vi.fn()),
-        onSetupError: vi.fn(() => vi.fn()),
         projects: {
           open: vi.fn().mockResolvedValue({
             id: "test-12345678",
@@ -182,19 +169,17 @@ describe("renderer API layer", () => {
   // =============================================================================
 
   describe("type-level tests", () => {
-    it("setup API methods have correct types", async () => {
+    it("lifecycle API methods have correct types", async () => {
       const mockApi = createMockApi();
       window.api = mockApi;
 
       const api = await import("$lib/api");
 
-      // Verify setup methods exist and are functions
-      expect(typeof api.setupReady).toBe("function");
-      expect(typeof api.setupRetry).toBe("function");
-      expect(typeof api.setupQuit).toBe("function");
-      expect(typeof api.onSetupProgress).toBe("function");
-      expect(typeof api.onSetupComplete).toBe("function");
-      expect(typeof api.onSetupError).toBe("function");
+      // Verify lifecycle namespace exists with v2 API methods
+      expect(api.lifecycle).toBeDefined();
+      expect(typeof api.lifecycle.getState).toBe("function");
+      expect(typeof api.lifecycle.setup).toBe("function");
+      expect(typeof api.lifecycle.quit).toBe("function");
     });
 
     it("API has all namespaces", async () => {
@@ -210,12 +195,12 @@ describe("renderer API layer", () => {
       expect(api).toHaveProperty("on");
     });
 
-    it("onSetupProgress returns Unsubscribe function", async () => {
+    it("on() for setup:progress returns Unsubscribe function", async () => {
       const mockApi = createMockApi();
       window.api = mockApi;
 
       const api = await import("$lib/api");
-      const unsubscribe: Unsubscribe = api.onSetupProgress(() => {});
+      const unsubscribe: Unsubscribe = api.on("setup:progress", () => {});
 
       expect(typeof unsubscribe).toBe("function");
     });
