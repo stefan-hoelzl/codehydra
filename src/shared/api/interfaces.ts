@@ -47,6 +47,32 @@ export interface IWorkspaceApi {
   ): Promise<WorkspaceRemovalResult>;
   get(projectId: ProjectId, workspaceName: WorkspaceName): Promise<Workspace | undefined>;
   getStatus(projectId: ProjectId, workspaceName: WorkspaceName): Promise<WorkspaceStatus>;
+  /**
+   * Set a metadata value for a workspace.
+   * @param projectId Project containing the workspace
+   * @param workspaceName Name of the workspace
+   * @param key Metadata key (must match /^[A-Za-z][A-Za-z0-9-]*$/)
+   * @param value Value to set, or null to delete the key
+   * @throws Error if project or workspace not found, or key format invalid
+   */
+  setMetadata(
+    projectId: ProjectId,
+    workspaceName: WorkspaceName,
+    key: string,
+    value: string | null
+  ): Promise<void>;
+  /**
+   * Get all metadata for a workspace.
+   * Always includes `base` key (with fallback if not in config).
+   * @param projectId Project containing the workspace
+   * @param workspaceName Name of the workspace
+   * @returns Metadata record with at least `base` key
+   * @throws Error if project or workspace not found
+   */
+  getMetadata(
+    projectId: ProjectId,
+    workspaceName: WorkspaceName
+  ): Promise<Readonly<Record<string, string>>>;
 }
 
 export interface IUiApi {
@@ -94,6 +120,12 @@ export interface ApiEvents {
   "workspace:removed": (event: WorkspaceRef) => void;
   "workspace:switched": (event: WorkspaceRef | null) => void;
   "workspace:status-changed": (event: WorkspaceRef & { readonly status: WorkspaceStatus }) => void;
+  "workspace:metadata-changed": (event: {
+    readonly projectId: ProjectId;
+    readonly workspaceName: WorkspaceName;
+    readonly key: string;
+    readonly value: string | null; // null means deleted
+  }) => void;
   "ui:mode-changed": (event: UIModeChangedEvent) => void;
   "setup:progress": (event: SetupProgress) => void;
 }

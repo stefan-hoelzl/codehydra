@@ -191,13 +191,15 @@ The Git Worktree Provider includes resilient deletion and orphaned workspace cle
 - Re-checks worktree registration before each deletion (TOCTOU protection)
 - Concurrency guard prevents multiple cleanups running simultaneously
 
-### Git Configuration Storage
+### Git Configuration Storage (Workspace Metadata)
 
-CodeHydra stores workspace metadata in git config using the `branch.<name>.<key>` pattern:
+CodeHydra stores workspace metadata in git config using the `branch.<name>.codehydra.<key>` pattern:
 
-| Config Key                     | Purpose                                | Example                                  |
-| ------------------------------ | -------------------------------------- | ---------------------------------------- |
-| `branch.<name>.codehydra.base` | Base branch workspace was created from | `branch.feature-x.codehydra.base = main` |
+| Config Key                      | Purpose                                | Example                                   |
+| ------------------------------- | -------------------------------------- | ----------------------------------------- |
+| `branch.<name>.codehydra.base`  | Base branch workspace was created from | `branch.feature-x.codehydra.base = main`  |
+| `branch.<name>.codehydra.note`  | User notes for the workspace           | `branch.feature-x.codehydra.note = WIP`   |
+| `branch.<name>.codehydra.model` | AI model preference                    | `branch.feature-x.codehydra.model = gpt4` |
 
 **Storage location**: Repository's `.git/config` file
 
@@ -212,15 +214,29 @@ CodeHydra stores workspace metadata in git config using the `branch.<name>.<key>
 - Lost if branch is renamed (same as `branch.<name>.remote`)
 - Not a standard git key, but git allows arbitrary branch config
 
-**Fallback logic** (for backwards compatibility):
+#### Metadata Key Restrictions
+
+Metadata keys are validated with `/^[A-Za-z][A-Za-z0-9-]*$/` and:
+
+- Maximum length: 64 characters
+- Cannot end with a hyphen
+
+**Valid keys**: `base`, `note`, `model-name`, `AI-model`
+**Invalid keys**: `_private` (leading underscore), `my_key` (underscore), `123note` (starts with digit), `note-` (trailing hyphen)
+
+#### Base Branch Fallback Logic
+
+The `base` key has special fallback logic for backwards compatibility. This fallback is applied ONLY to the `base` key, not other metadata:
 
 ```
-baseBranch = config ?? branch ?? name
+metadata.base = config.base ?? branch ?? name
 ```
 
-- First: git config value (if set)
+- First: git config value `codehydra.base` (if set)
 - Second: current branch name (if not detached HEAD)
 - Third: workspace directory name (fallback for detached HEAD)
+
+Other metadata keys return their exact config value or `undefined` if not set.
 
 ### Platform Abstractions Overview
 
@@ -550,18 +566,19 @@ API event emission                    IPC handler subscription
 
 ### API Events
 
-| Event                      | Payload                     | Description                                 |
-| -------------------------- | --------------------------- | ------------------------------------------- |
-| `project:opened`           | `{ project: Project }`      | Project was opened                          |
-| `project:closed`           | `{ projectId: ProjectId }`  | Project was closed                          |
-| `project:bases-updated`    | `{ projectId, bases }`      | Branch list refreshed                       |
-| `workspace:created`        | `{ projectId, workspace }`  | Workspace was created                       |
-| `workspace:removed`        | `WorkspaceRef`              | Workspace was removed                       |
-| `workspace:switched`       | `WorkspaceRef \| null`      | Active workspace changed                    |
-| `workspace:status-changed` | `WorkspaceRef & { status }` | Dirty/agent status changed                  |
-| `ui:mode-changed`          | `{ mode, previousMode }`    | UI mode changed (shortcut/dialog/workspace) |
-| `shortcut:key`             | `ShortcutKey`               | Shortcut action key pressed                 |
-| `setup:progress`           | `{ step, message }`         | Setup progress update                       |
+| Event                        | Payload                                                    | Description                                 |
+| ---------------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| `project:opened`             | `{ project: Project }`                                     | Project was opened                          |
+| `project:closed`             | `{ projectId: ProjectId }`                                 | Project was closed                          |
+| `project:bases-updated`      | `{ projectId, bases }`                                     | Branch list refreshed                       |
+| `workspace:created`          | `{ projectId, workspace }`                                 | Workspace was created                       |
+| `workspace:removed`          | `WorkspaceRef`                                             | Workspace was removed                       |
+| `workspace:switched`         | `WorkspaceRef \| null`                                     | Active workspace changed                    |
+| `workspace:status-changed`   | `WorkspaceRef & { status }`                                | Dirty/agent status changed                  |
+| `workspace:metadata-changed` | `{ projectId, workspaceName, key, value: string \| null }` | Metadata key set or deleted                 |
+| `ui:mode-changed`            | `{ mode, previousMode }`                                   | UI mode changed (shortcut/dialog/workspace) |
+| `shortcut:key`               | `ShortcutKey`                                              | Shortcut action key pressed                 |
+| `setup:progress`             | `{ step, message }`                                        | Setup progress update                       |
 
 ### IPC Channel Naming
 

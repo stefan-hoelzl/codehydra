@@ -23,10 +23,11 @@ const DEFAULT_PROJECT_ID = "test-project-12345678" as ProjectId;
  * Partial workspace override that accepts plain strings for convenience in tests.
  * branch can be explicitly set to null (detached HEAD state).
  */
-type WorkspaceOverrides = Partial<Omit<Workspace, "name" | "projectId" | "branch">> & {
+type WorkspaceOverrides = Partial<Omit<Workspace, "name" | "projectId" | "branch" | "metadata">> & {
   name?: string;
   projectId?: ProjectId;
   branch?: string | null;
+  metadata?: Record<string, string>;
 };
 
 /**
@@ -42,7 +43,7 @@ export function createMockWorkspace(overrides: WorkspaceOverrides = {}): Workspa
     name: (overrides.name ?? "feature-1") as WorkspaceName,
     // Use "in" check to allow explicit null for branch (detached HEAD)
     branch,
-    baseBranch: overrides.baseBranch ?? branch ?? "main",
+    metadata: { base: branch ?? "main", ...overrides.metadata },
   };
 }
 

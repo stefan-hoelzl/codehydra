@@ -32,7 +32,7 @@ const TEST_WORKSPACE: Workspace = {
   projectId: TEST_PROJECT_ID,
   name: TEST_WORKSPACE_NAME,
   branch: "feature-branch",
-  baseBranch: "main",
+  metadata: { base: "main" },
   path: TEST_WORKSPACE_PATH,
 };
 

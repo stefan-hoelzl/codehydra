@@ -13,7 +13,7 @@ import { ipcMain, type WebContents } from "electron";
 import * as path from "path";
 import type { ICodeHydraApi, Unsubscribe } from "../../shared/api/interfaces";
 import type { ProjectId, WorkspaceName } from "../../shared/api/types";
-import { isProjectId, isWorkspaceName } from "../../shared/api/types";
+import { isProjectId, isWorkspaceName, isValidMetadataKey } from "../../shared/api/types";
 import { ApiIpcChannels, type UIMode } from "../../shared/ipc";
 
 // =============================================================================
@@ -103,6 +103,28 @@ function validateUIMode(value: unknown, field: string): UIMode {
   return str as UIMode;
 }
 
+/**
+ * Validate that a value is a valid metadata key.
+ */
+function validateMetadataKey(value: unknown, field: string): string {
+  const str = validateString(value, field);
+  if (!isValidMetadataKey(str)) {
+    throw new ApiValidationError(
+      field,
+      "must be a valid metadata key (start with letter, contain only letters/digits/hyphens, no trailing hyphen)"
+    );
+  }
+  return str;
+}
+
+/**
+ * Validate that a value is a string or null.
+ */
+function validateStringOrNull(value: unknown, field: string): string | null {
+  if (value === null) return null;
+  return validateString(value, field);
+}
+
 // =============================================================================
 // Handler Registration
 // =============================================================================
@@ -177,6 +199,22 @@ export function registerApiHandlers(api: ICodeHydraApi): void {
     const projectId = validateProjectId(p?.projectId, "projectId");
     const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
     return await api.workspaces.getStatus(projectId, workspaceName);
+  });
+
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_SET_METADATA, async (_event, payload: unknown) => {
+    const p = payload as Record<string, unknown>;
+    const projectId = validateProjectId(p?.projectId, "projectId");
+    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+    const key = validateMetadataKey(p?.key, "key");
+    const value = validateStringOrNull(p?.value, "value");
+    return await api.workspaces.setMetadata(projectId, workspaceName, key, value);
+  });
+
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET_METADATA, async (_event, payload: unknown) => {
+    const p = payload as Record<string, unknown>;
+    const projectId = validateProjectId(p?.projectId, "projectId");
+    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+    return await api.workspaces.getMetadata(projectId, workspaceName);
   });
 
   // ---------------------------------------------------------------------------
@@ -282,6 +320,12 @@ export function wireApiEvents(
   unsubscribers.push(
     api.on("workspace:status-changed", (event) => {
       send(ApiIpcChannels.WORKSPACE_STATUS_CHANGED, event);
+    })
+  );
+
+  unsubscribers.push(
+    api.on("workspace:metadata-changed", (event) => {
+      send(ApiIpcChannels.WORKSPACE_METADATA_CHANGED, event);
     })
   );
 

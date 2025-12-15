@@ -269,4 +269,81 @@ export class SimpleGitClient implements IGitClient {
       await git.raw(["config", configKey, value]);
     }, `Failed to set branch config branch.${branch}.${key}`);
   }
+
+  async getBranchConfigsByPrefix(
+    repoPath: string,
+    branch: string,
+    prefix: string
+  ): Promise<Readonly<Record<string, string>>> {
+    // First, verify it's a git repository
+    const isRepo = await this.isGitRepository(repoPath);
+    if (!isRepo) {
+      throw new GitError(`Not a git repository: ${repoPath}`);
+    }
+
+    try {
+      const git = this.getGit(repoPath);
+      // Pattern: branch.<branch>.<prefix>.*
+      const pattern = `^branch\\.${branch}\\.${prefix}\\.`;
+      const output = await git.raw(["config", "--get-regexp", pattern]);
+
+      const result: Record<string, string> = {};
+
+      // Parse output: each line is "key value" where value is everything after first space
+      // Example: "branch.main.codehydra.base develop"
+      for (const line of output.split("\n")) {
+        if (!line.trim()) continue;
+
+        // Find first space - everything before is key, everything after is value
+        const spaceIndex = line.indexOf(" ");
+        if (spaceIndex === -1) continue;
+
+        const fullKey = line.substring(0, spaceIndex);
+        const value = line.substring(spaceIndex + 1);
+
+        // Extract the key after the prefix (branch.<branch>.<prefix>.<key>)
+        const prefixPattern = `branch.${branch}.${prefix}.`;
+        if (fullKey.startsWith(prefixPattern)) {
+          const key = fullKey.substring(prefixPattern.length);
+          result[key] = value;
+        }
+      }
+
+      return result;
+    } catch (error: unknown) {
+      // Exit code 1 means no matching keys - return empty object
+      if (error instanceof Error && error.message.includes("exit code 1")) {
+        return {};
+      }
+      const message =
+        error instanceof Error
+          ? `Failed to get branch configs: ${error.message}`
+          : "Failed to get branch configs";
+      throw new GitError(message);
+    }
+  }
+
+  async unsetBranchConfig(repoPath: string, branch: string, key: string): Promise<void> {
+    // First, verify it's a git repository
+    const isRepo = await this.isGitRepository(repoPath);
+    if (!isRepo) {
+      throw new GitError(`Not a git repository: ${repoPath}`);
+    }
+
+    try {
+      const git = this.getGit(repoPath);
+      const configKey = `branch.${branch}.${key}`;
+      await git.raw(["config", "--unset", configKey]);
+    } catch (error: unknown) {
+      // Exit code 5 means key doesn't exist - that's OK for unset
+      if (error instanceof Error && error.message.includes("exit code 5")) {
+        return;
+      }
+      const message =
+        error instanceof Error
+          ? `Failed to unset branch config: ${error.message}`
+          : "Failed to unset branch config";
+      throw new GitError(message);
+    }
+  }
 }

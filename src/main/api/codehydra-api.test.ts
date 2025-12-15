@@ -1212,3 +1212,207 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
     });
   });
 });
+
+// =============================================================================
+// Tests: Workspace Metadata Methods
+// =============================================================================
+
+describe("CodeHydraApiImpl - Workspace Metadata", () => {
+  let appState: AppState;
+  let viewManager: IViewManager;
+  let dialog: typeof Electron.dialog;
+  let app: typeof Electron.app;
+  let api: CodeHydraApiImpl;
+
+  beforeEach(() => {
+    appState = createMockAppState();
+    viewManager = createMockViewManager();
+    dialog = createMockElectronDialog();
+    app = createMockElectronApp();
+    api = new CodeHydraApiImpl(appState, viewManager, dialog, app);
+  });
+
+  describe("workspaces.setMetadata()", () => {
+    it("should resolve projectId and delegate to provider", async () => {
+      const internalWorkspace: InternalWorkspace = {
+        name: "feature-branch",
+        branch: "feature-branch",
+        path: TEST_WORKSPACE_PATH,
+        metadata: { base: "main" },
+      };
+      const mockProvider = {
+        projectRoot: TEST_PROJECT_PATH,
+        setMetadata: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockResolvedValue([internalWorkspace]),
+        listBases: vi.fn(),
+        updateBases: vi.fn(),
+        createWorkspace: vi.fn(),
+        removeWorkspace: vi.fn(),
+        isDirty: vi.fn(),
+        isMainWorkspace: vi.fn(),
+        defaultBase: vi.fn(),
+        getMetadata: vi.fn(),
+      } as unknown as IWorkspaceProvider;
+
+      const internalProject: InternalProject = {
+        path: TEST_PROJECT_PATH,
+        name: "my-app",
+        workspaces: [
+          {
+            name: "feature-branch",
+            branch: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            metadata: { base: "main" },
+          },
+        ],
+      };
+
+      vi.mocked(appState.getAllProjects).mockResolvedValue([internalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(internalProject);
+      vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+      await api.workspaces.setMetadata(TEST_PROJECT_ID, TEST_WORKSPACE_NAME, "note", "test value");
+
+      expect(mockProvider.setMetadata).toHaveBeenCalledWith(
+        TEST_WORKSPACE_PATH,
+        "note",
+        "test value"
+      );
+    });
+
+    it("should emit workspace:metadata-changed event", async () => {
+      const internalWorkspace: InternalWorkspace = {
+        name: "feature-branch",
+        branch: "feature-branch",
+        path: TEST_WORKSPACE_PATH,
+        metadata: { base: "main" },
+      };
+      const mockProvider = {
+        projectRoot: TEST_PROJECT_PATH,
+        setMetadata: vi.fn().mockResolvedValue(undefined),
+        discover: vi.fn().mockResolvedValue([internalWorkspace]),
+        listBases: vi.fn(),
+        updateBases: vi.fn(),
+        createWorkspace: vi.fn(),
+        removeWorkspace: vi.fn(),
+        isDirty: vi.fn(),
+        isMainWorkspace: vi.fn(),
+        defaultBase: vi.fn(),
+        getMetadata: vi.fn(),
+      } as unknown as IWorkspaceProvider;
+
+      const internalProject: InternalProject = {
+        path: TEST_PROJECT_PATH,
+        name: "my-app",
+        workspaces: [
+          {
+            name: "feature-branch",
+            branch: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            metadata: { base: "main" },
+          },
+        ],
+      };
+
+      vi.mocked(appState.getAllProjects).mockResolvedValue([internalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(internalProject);
+      vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+      const handler = vi.fn();
+      api.on("workspace:metadata-changed", handler);
+
+      await api.workspaces.setMetadata(TEST_PROJECT_ID, TEST_WORKSPACE_NAME, "note", "test value");
+
+      expect(handler).toHaveBeenCalledWith({
+        projectId: TEST_PROJECT_ID,
+        workspaceName: TEST_WORKSPACE_NAME,
+        key: "note",
+        value: "test value",
+      });
+    });
+
+    it("should throw when projectId not found", async () => {
+      vi.mocked(appState.getProject).mockReturnValue(undefined);
+
+      await expect(
+        api.workspaces.setMetadata(TEST_PROJECT_ID, TEST_WORKSPACE_NAME, "note", "test")
+      ).rejects.toThrow(/not found/);
+    });
+  });
+
+  describe("workspaces.getMetadata()", () => {
+    it("should resolve projectId and return provider result", async () => {
+      const internalWorkspace: InternalWorkspace = {
+        name: "feature-branch",
+        branch: "feature-branch",
+        path: TEST_WORKSPACE_PATH,
+        metadata: { base: "main" },
+      };
+      const mockProvider = {
+        projectRoot: TEST_PROJECT_PATH,
+        setMetadata: vi.fn(),
+        discover: vi.fn().mockResolvedValue([internalWorkspace]),
+        listBases: vi.fn(),
+        updateBases: vi.fn(),
+        createWorkspace: vi.fn(),
+        removeWorkspace: vi.fn(),
+        isDirty: vi.fn(),
+        isMainWorkspace: vi.fn(),
+        defaultBase: vi.fn(),
+        getMetadata: vi.fn().mockResolvedValue({ base: "main", note: "WIP" }),
+      } as unknown as IWorkspaceProvider;
+
+      const internalProject: InternalProject = {
+        path: TEST_PROJECT_PATH,
+        name: "my-app",
+        workspaces: [
+          {
+            name: "feature-branch",
+            branch: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            metadata: { base: "main" },
+          },
+        ],
+      };
+
+      vi.mocked(appState.getAllProjects).mockResolvedValue([internalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(internalProject);
+      vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+      const metadata = await api.workspaces.getMetadata(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
+
+      expect(metadata).toEqual({ base: "main", note: "WIP" });
+      expect(mockProvider.getMetadata).toHaveBeenCalledWith(TEST_WORKSPACE_PATH);
+    });
+
+    it("should throw when workspace not found", async () => {
+      const mockProvider = {
+        projectRoot: TEST_PROJECT_PATH,
+        setMetadata: vi.fn(),
+        discover: vi.fn().mockResolvedValue([]),
+        listBases: vi.fn(),
+        updateBases: vi.fn(),
+        createWorkspace: vi.fn(),
+        removeWorkspace: vi.fn(),
+        isDirty: vi.fn(),
+        isMainWorkspace: vi.fn(),
+        defaultBase: vi.fn(),
+        getMetadata: vi.fn(),
+      } as unknown as IWorkspaceProvider;
+
+      const internalProject: InternalProject = {
+        path: TEST_PROJECT_PATH,
+        name: "my-app",
+        workspaces: [], // No workspaces
+      };
+
+      vi.mocked(appState.getAllProjects).mockResolvedValue([internalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(internalProject);
+      vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+      await expect(
+        api.workspaces.getMetadata(TEST_PROJECT_ID, TEST_WORKSPACE_NAME)
+      ).rejects.toThrow(/not found/);
+    });
+  });
+});

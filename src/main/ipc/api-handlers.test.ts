@@ -41,6 +41,8 @@ function createMockApi(): ICodeHydraApi {
       remove: vi.fn().mockResolvedValue({ branchDeleted: false }),
       get: vi.fn(),
       getStatus: vi.fn().mockResolvedValue({ isDirty: false, agent: { type: "none" } }),
+      setMetadata: vi.fn(),
+      getMetadata: vi.fn().mockResolvedValue({ base: "main" }),
     },
     ui: {
       selectFolder: vi.fn().mockResolvedValue(null),
@@ -76,6 +78,7 @@ const TEST_WORKSPACE: Workspace = {
   projectId: TEST_PROJECT_ID,
   name: TEST_WORKSPACE_NAME,
   branch: "feature-branch",
+  metadata: { base: "main" },
   path: "/home/user/.codehydra/workspaces/feature-branch",
 };
 
@@ -554,5 +557,111 @@ describe("wireApiEvents", () => {
 
     // After cleanup, handlers should be removed
     expect(eventHandlers.size).toBe(0);
+  });
+});
+
+// =============================================================================
+// Tests: Workspace Metadata IPC Handlers
+// =============================================================================
+
+describe("Workspace Metadata IPC Handlers", () => {
+  let mockApi: ICodeHydraApi;
+  let registeredHandlers: Map<string, (...args: unknown[]) => Promise<unknown>>;
+
+  beforeEach(() => {
+    mockHandle.mockClear();
+    registeredHandlers = new Map();
+
+    mockHandle.mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+      registeredHandlers.set(channel, handler as (...args: unknown[]) => Promise<unknown>);
+    });
+
+    mockApi = createMockApi();
+    registerApiHandlers(mockApi);
+  });
+
+  describe("api:workspace:set-metadata handler", () => {
+    it("validates projectId format", async () => {
+      const handler = registeredHandlers.get("api:workspace:set-metadata");
+      expect(handler).toBeDefined();
+
+      await expect(
+        handler!(
+          {},
+          { projectId: "invalid", workspaceName: TEST_WORKSPACE_NAME, key: "note", value: "test" }
+        )
+      ).rejects.toThrow(/projectId/);
+    });
+
+    it("validates workspaceName format", async () => {
+      const handler = registeredHandlers.get("api:workspace:set-metadata");
+      expect(handler).toBeDefined();
+
+      await expect(
+        handler!(
+          {},
+          { projectId: TEST_PROJECT_ID, workspaceName: "-invalid", key: "note", value: "test" }
+        )
+      ).rejects.toThrow(/workspaceName/);
+    });
+
+    it("validates key format (rejects underscore)", async () => {
+      const handler = registeredHandlers.get("api:workspace:set-metadata");
+      expect(handler).toBeDefined();
+
+      await expect(
+        handler!(
+          {},
+          {
+            projectId: TEST_PROJECT_ID,
+            workspaceName: TEST_WORKSPACE_NAME,
+            key: "my_key",
+            value: "test",
+          }
+        )
+      ).rejects.toThrow(/key/);
+    });
+
+    it("calls api.workspaces.setMetadata", async () => {
+      const handler = registeredHandlers.get("api:workspace:set-metadata");
+      expect(handler).toBeDefined();
+
+      await handler!(
+        {},
+        {
+          projectId: TEST_PROJECT_ID,
+          workspaceName: TEST_WORKSPACE_NAME,
+          key: "note",
+          value: "test value",
+        }
+      );
+
+      expect(mockApi.workspaces.setMetadata).toHaveBeenCalledWith(
+        TEST_PROJECT_ID,
+        TEST_WORKSPACE_NAME,
+        "note",
+        "test value"
+      );
+    });
+  });
+
+  describe("api:workspace:get-metadata handler", () => {
+    it("calls api.workspaces.getMetadata", async () => {
+      vi.mocked(mockApi.workspaces.getMetadata).mockResolvedValue({ base: "main", note: "WIP" });
+
+      const handler = registeredHandlers.get("api:workspace:get-metadata");
+      expect(handler).toBeDefined();
+
+      const result = await handler!(
+        {},
+        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME }
+      );
+
+      expect(mockApi.workspaces.getMetadata).toHaveBeenCalledWith(
+        TEST_PROJECT_ID,
+        TEST_WORKSPACE_NAME
+      );
+      expect(result).toEqual({ base: "main", note: "WIP" });
+    });
   });
 });

@@ -96,6 +96,25 @@ describe("IWorkspaceApi Interface", () => {
         void workspaceName;
         return { isDirty: false, agent: { type: "none" } };
       },
+      async setMetadata(
+        projectId: ProjectId,
+        workspaceName: WorkspaceName,
+        key: string,
+        value: string | null
+      ): Promise<void> {
+        void projectId;
+        void workspaceName;
+        void key;
+        void value;
+      },
+      async getMetadata(
+        projectId: ProjectId,
+        workspaceName: WorkspaceName
+      ): Promise<Readonly<Record<string, string>>> {
+        void projectId;
+        void workspaceName;
+        return { base: "main" };
+      },
     };
 
     expect(api).toBeDefined();
@@ -103,6 +122,8 @@ describe("IWorkspaceApi Interface", () => {
     expect(typeof api.remove).toBe("function");
     expect(typeof api.get).toBe("function");
     expect(typeof api.getStatus).toBe("function");
+    expect(typeof api.setMetadata).toBe("function");
+    expect(typeof api.getMetadata).toBe("function");
   });
 });
 
@@ -189,6 +210,14 @@ describe("ApiEvents Interface", () => {
       "workspace:status-changed": (event: WorkspaceRef & { readonly status: WorkspaceStatus }) => {
         void event;
       },
+      "workspace:metadata-changed": (event: {
+        readonly projectId: ProjectId;
+        readonly workspaceName: WorkspaceName;
+        readonly key: string;
+        readonly value: string | null;
+      }) => {
+        void event;
+      },
       "ui:mode-changed": (event: UIModeChangedEvent) => {
         void event;
       },
@@ -198,7 +227,7 @@ describe("ApiEvents Interface", () => {
     };
 
     expect(handlers).toBeDefined();
-    expect(Object.keys(handlers)).toHaveLength(9);
+    expect(Object.keys(handlers)).toHaveLength(10);
   });
 });
 

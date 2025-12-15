@@ -50,6 +50,16 @@ export interface Api {
     ): Promise<WorkspaceRemovalResult>;
     get(projectId: string, workspaceName: string): Promise<Workspace | undefined>;
     getStatus(projectId: string, workspaceName: string): Promise<WorkspaceStatus>;
+    setMetadata(
+      projectId: string,
+      workspaceName: string,
+      key: string,
+      value: string | null
+    ): Promise<void>;
+    getMetadata(
+      projectId: string,
+      workspaceName: string
+    ): Promise<Readonly<Record<string, string>>>;
   };
   ui: {
     selectFolder(): Promise<string | null>;

@@ -240,6 +240,7 @@ function createMockWorkspaceApi(options?: MockWorkspaceApiOptions): IWorkspaceAp
     projectId: "test-project-12345678" as ProjectId,
     name: "test-workspace" as WorkspaceName,
     branch: "main",
+    metadata: { base: "main" },
     path: "/test/workspace",
   };
 
@@ -261,6 +262,7 @@ function createMockWorkspaceApi(options?: MockWorkspaceApiOptions): IWorkspaceAp
         projectId,
         name: name as WorkspaceName,
         branch: base,
+        metadata: { base },
         path: `/workspaces/${name}`,
       };
     },
@@ -280,11 +282,18 @@ function createMockWorkspaceApi(options?: MockWorkspaceApiOptions): IWorkspaceAp
         ...defaultWorkspace,
         projectId,
         name: workspaceName,
+        metadata: { base: "main" },
       };
     },
 
     async getStatus(): Promise<WorkspaceStatus> {
       return options?.status ?? defaultStatus;
+    },
+
+    async setMetadata(): Promise<void> {},
+
+    async getMetadata(): Promise<Readonly<Record<string, string>>> {
+      return { base: "main" };
     },
   };
 }
@@ -358,6 +367,7 @@ export function createTestWorkspace(overrides?: Partial<Workspace>): Workspace {
     projectId: "test-project-12345678" as ProjectId,
     name: "test-workspace" as WorkspaceName,
     branch: "main",
+    metadata: { base: "main" },
     path: "/test/workspace",
     ...overrides,
   };

@@ -85,4 +85,21 @@ export interface IWorkspaceProvider {
    * @returns Promise resolving to "main", "master", or undefined
    */
   defaultBase(): Promise<string | undefined>;
+
+  /**
+   * Set a metadata value for a workspace.
+   * @param workspacePath Absolute path to the workspace
+   * @param key Metadata key (must match /^[A-Za-z][A-Za-z0-9-]*$/)
+   * @param value Value to set, or null to delete the key
+   * @throws WorkspaceError with code "INVALID_METADATA_KEY" if key format invalid
+   */
+  setMetadata(workspacePath: string, key: string, value: string | null): Promise<void>;
+
+  /**
+   * Get all metadata for a workspace.
+   * Always includes `base` key (with fallback if not in config).
+   * @param workspacePath Absolute path to the workspace
+   * @returns Metadata record with at least `base` key
+   */
+  getMetadata(workspacePath: string): Promise<Readonly<Record<string, string>>>;
 }

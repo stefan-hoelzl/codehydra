@@ -35,6 +35,8 @@ function createMockGitClient(overrides: Partial<IGitClient> = {}): IGitClient {
     listRemotes: vi.fn().mockResolvedValue([]),
     getBranchConfig: vi.fn().mockResolvedValue(null),
     setBranchConfig: vi.fn().mockResolvedValue(undefined),
+    getBranchConfigsByPrefix: vi.fn().mockResolvedValue({}),
+    unsetBranchConfig: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -260,7 +262,7 @@ describe("GitWorktreeProvider", () => {
       ];
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
-        getBranchConfig: vi.fn().mockResolvedValue("develop"),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({ base: "develop" }),
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
@@ -272,7 +274,7 @@ describe("GitWorktreeProvider", () => {
       const workspaces = await provider.discover();
 
       expect(workspaces).toHaveLength(1);
-      expect(workspaces[0].baseBranch).toBe("develop");
+      expect(workspaces[0].metadata.base).toBe("develop");
     });
 
     it("falls back to branch name when config returns null", async () => {
@@ -287,7 +289,7 @@ describe("GitWorktreeProvider", () => {
       ];
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
-        getBranchConfig: vi.fn().mockResolvedValue(null),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({}), // No base config
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
@@ -299,7 +301,7 @@ describe("GitWorktreeProvider", () => {
       const workspaces = await provider.discover();
 
       expect(workspaces).toHaveLength(1);
-      expect(workspaces[0].baseBranch).toBe("feature-x");
+      expect(workspaces[0].metadata.base).toBe("feature-x");
     });
 
     it("falls back to workspace name when detached HEAD (branch is null)", async () => {
@@ -314,7 +316,7 @@ describe("GitWorktreeProvider", () => {
       ];
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
-        getBranchConfig: vi.fn().mockResolvedValue(null),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({}), // No config
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
@@ -326,10 +328,10 @@ describe("GitWorktreeProvider", () => {
       const workspaces = await provider.discover();
 
       expect(workspaces).toHaveLength(1);
-      expect(workspaces[0].baseBranch).toBe("detached-workspace");
+      expect(workspaces[0].metadata.base).toBe("detached-workspace");
     });
 
-    it("logs warning and uses fallback when getBranchConfig throws", async () => {
+    it("logs warning and uses fallback when getBranchConfigsByPrefix throws", async () => {
       const worktrees: WorktreeInfo[] = [
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         {
@@ -341,7 +343,7 @@ describe("GitWorktreeProvider", () => {
       ];
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
-        getBranchConfig: vi.fn().mockRejectedValue(new Error("Config read failed")),
+        getBranchConfigsByPrefix: vi.fn().mockRejectedValue(new Error("Config read failed")),
       });
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const provider = await GitWorktreeProvider.create(
@@ -355,8 +357,8 @@ describe("GitWorktreeProvider", () => {
 
       expect(workspaces).toHaveLength(1);
       // Should fall back to branch name
-      expect(workspaces[0].baseBranch).toBe("feature-x");
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to get base branch"));
+      expect(workspaces[0].metadata.base).toBe("feature-x");
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to get metadata"));
       warnSpy.mockRestore();
     });
 
@@ -387,12 +389,12 @@ describe("GitWorktreeProvider", () => {
       ];
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
-        getBranchConfig: vi.fn().mockImplementation((_repo, branch) => {
+        getBranchConfigsByPrefix: vi.fn().mockImplementation((_repo, branch) => {
           // Only workspace-a has config set
           if (branch === "branch-a") {
-            return Promise.resolve("configured-base");
+            return Promise.resolve({ base: "configured-base" });
           }
-          return Promise.resolve(null);
+          return Promise.resolve({});
         }),
       });
       const provider = await GitWorktreeProvider.create(
@@ -410,9 +412,9 @@ describe("GitWorktreeProvider", () => {
       const workspaceB = workspaces.find((w) => w.name === "workspace-b");
       const workspaceC = workspaces.find((w) => w.name === "workspace-c");
 
-      expect(workspaceA?.baseBranch).toBe("configured-base"); // Uses config
-      expect(workspaceB?.baseBranch).toBe("branch-b"); // Uses branch
-      expect(workspaceC?.baseBranch).toBe("workspace-c"); // Uses name
+      expect(workspaceA?.metadata.base).toBe("configured-base"); // Uses config
+      expect(workspaceB?.metadata.base).toBe("branch-b"); // Uses branch
+      expect(workspaceC?.metadata.base).toBe("workspace-c"); // Uses name
     });
   });
 
@@ -792,7 +794,7 @@ describe("GitWorktreeProvider", () => {
       warnSpy.mockRestore();
     });
 
-    it("returns workspace with baseBranch set", async () => {
+    it("returns workspace with metadata.base set", async () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi
           .fn()
@@ -809,7 +811,7 @@ describe("GitWorktreeProvider", () => {
 
       const workspace = await provider.createWorkspace("feature-x", "main");
 
-      expect(workspace.baseBranch).toBe("main");
+      expect(workspace.metadata.base).toBe("main");
     });
   });
 
@@ -1720,6 +1722,308 @@ describe("GitWorktreeProvider", () => {
       // Now resolve the first cleanup
       slowResolve!(worktrees);
       await firstCleanup;
+    });
+  });
+
+  describe("discover - metadata property", () => {
+    it("returns metadata with base from config", async () => {
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: "/data/workspaces/feature-x",
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({ base: "develop" }),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const workspaces = await provider.discover();
+
+      expect(workspaces).toHaveLength(1);
+      expect(workspaces[0].metadata.base).toBe("develop");
+    });
+
+    it("returns metadata with base fallback to branch when no config", async () => {
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: "/data/workspaces/feature-x",
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({}), // No base config
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const workspaces = await provider.discover();
+
+      expect(workspaces).toHaveLength(1);
+      expect(workspaces[0].metadata.base).toBe("feature-x"); // Falls back to branch
+    });
+
+    it("returns metadata with base fallback to name when no branch (detached HEAD)", async () => {
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "detached-workspace",
+          path: "/data/workspaces/detached-workspace",
+          branch: null,
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({}),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const workspaces = await provider.discover();
+
+      expect(workspaces).toHaveLength(1);
+      expect(workspaces[0].metadata.base).toBe("detached-workspace"); // Falls back to name
+    });
+
+    it("returns full metadata from config (multiple keys)", async () => {
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: "/data/workspaces/feature-x",
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({
+          base: "main",
+          note: "WIP auth feature",
+          model: "claude-4",
+        }),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const workspaces = await provider.discover();
+
+      expect(workspaces).toHaveLength(1);
+      expect(workspaces[0].metadata).toEqual({
+        base: "main",
+        note: "WIP auth feature",
+        model: "claude-4",
+      });
+    });
+  });
+
+  describe("createWorkspace - metadata property", () => {
+    it("returns workspace with metadata.base set", async () => {
+      const mockClient = createMockGitClient({
+        listWorktrees: vi
+          .fn()
+          .mockResolvedValue([
+            { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+          ]),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const workspace = await provider.createWorkspace("feature-x", "main");
+
+      expect(workspace.metadata).toEqual({ base: "main" });
+    });
+  });
+
+  describe("setMetadata", () => {
+    it("validates key format (rejects invalid)", async () => {
+      const worktreePath = "/data/workspaces/feature-x";
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: worktreePath,
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await expect(provider.setMetadata(worktreePath, "my_key", "value")).rejects.toThrow(
+        WorkspaceError
+      );
+
+      // Verify error code
+      try {
+        await provider.setMetadata(worktreePath, "my_key", "value");
+      } catch (error) {
+        expect(error).toBeInstanceOf(WorkspaceError);
+        expect((error as WorkspaceError).code).toBe("INVALID_METADATA_KEY");
+      }
+    });
+
+    it("calls setBranchConfig correctly", async () => {
+      const worktreePath = "/data/workspaces/feature-x";
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: worktreePath,
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await provider.setMetadata(worktreePath, "note", "WIP feature");
+
+      expect(mockClient.setBranchConfig).toHaveBeenCalledWith(
+        PROJECT_ROOT,
+        "feature-x",
+        "codehydra.note",
+        "WIP feature"
+      );
+    });
+
+    it("calls unsetBranchConfig when value is null", async () => {
+      const worktreePath = "/data/workspaces/feature-x";
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: worktreePath,
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      await provider.setMetadata(worktreePath, "note", null);
+
+      expect(mockClient.unsetBranchConfig).toHaveBeenCalledWith(
+        PROJECT_ROOT,
+        "feature-x",
+        "codehydra.note"
+      );
+    });
+  });
+
+  describe("getMetadata", () => {
+    it("applies base fallback when not in config", async () => {
+      const worktreePath = "/data/workspaces/feature-x";
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: worktreePath,
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({ note: "test note" }), // No base
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const metadata = await provider.getMetadata(worktreePath);
+
+      expect(metadata.base).toBe("feature-x"); // Fallback to branch
+      expect(metadata.note).toBe("test note");
+    });
+
+    it("returns all metadata keys", async () => {
+      const worktreePath = "/data/workspaces/feature-x";
+      const worktrees: WorktreeInfo[] = [
+        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+        {
+          name: "feature-x",
+          path: worktreePath,
+          branch: "feature-x",
+          isMain: false,
+        },
+      ];
+      const mockClient = createMockGitClient({
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        getBranchConfigsByPrefix: vi.fn().mockResolvedValue({
+          base: "develop",
+          note: "WIP",
+          model: "claude-4",
+        }),
+      });
+      const provider = await GitWorktreeProvider.create(
+        PROJECT_ROOT,
+        mockClient,
+        WORKSPACES_DIR,
+        mockFs
+      );
+
+      const metadata = await provider.getMetadata(worktreePath);
+
+      expect(metadata).toEqual({
+        base: "develop",
+        note: "WIP",
+        model: "claude-4",
+      });
     });
   });
 });

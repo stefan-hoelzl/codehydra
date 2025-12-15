@@ -59,6 +59,7 @@ const TEST_WORKSPACE: Workspace = {
   name: TEST_WORKSPACE_NAME,
   branch: "feature-branch",
   path: TEST_WORKSPACE_PATH,
+  metadata: { base: "main" },
 };
 
 const TEST_WORKSPACE_REF: WorkspaceRef = {
@@ -93,6 +94,8 @@ function createMockApiWithEvents(): {
       remove: vi.fn().mockResolvedValue({ branchDeleted: false }),
       get: vi.fn().mockResolvedValue(TEST_WORKSPACE),
       getStatus: vi.fn().mockResolvedValue({ isDirty: false, agent: { type: "none" } }),
+      setMetadata: vi.fn().mockResolvedValue(undefined),
+      getMetadata: vi.fn().mockResolvedValue({ base: "main", note: "test note" }),
     },
     ui: {
       selectFolder: vi.fn().mockResolvedValue(null),
@@ -370,6 +373,43 @@ describe("Handler + API integration", () => {
 
       expect(api.workspaces.getStatus).toHaveBeenCalledWith(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
       expect(result).toEqual(status);
+    });
+
+    it("should call API for setMetadata", async () => {
+      const handler = getHandler("api:workspace:set-metadata");
+      await handler(
+        {},
+        {
+          projectId: TEST_PROJECT_ID,
+          workspaceName: TEST_WORKSPACE_NAME,
+          key: "note",
+          value: "WIP feature",
+        }
+      );
+
+      expect(api.workspaces.setMetadata).toHaveBeenCalledWith(
+        TEST_PROJECT_ID,
+        TEST_WORKSPACE_NAME,
+        "note",
+        "WIP feature"
+      );
+    });
+
+    it("should call API and return result for getMetadata", async () => {
+      const metadata = { base: "main", note: "test note" };
+      vi.mocked(api.workspaces.getMetadata).mockResolvedValue(metadata);
+
+      const handler = getHandler("api:workspace:get-metadata");
+      const result = await handler(
+        {},
+        {
+          projectId: TEST_PROJECT_ID,
+          workspaceName: TEST_WORKSPACE_NAME,
+        }
+      );
+
+      expect(api.workspaces.getMetadata).toHaveBeenCalledWith(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
+      expect(result).toEqual(metadata);
     });
   });
 

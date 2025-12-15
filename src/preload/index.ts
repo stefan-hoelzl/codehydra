@@ -51,6 +51,15 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke(ApiIpcChannels.WORKSPACE_GET, { projectId, workspaceName }),
     getStatus: (projectId: string, workspaceName: string) =>
       ipcRenderer.invoke(ApiIpcChannels.WORKSPACE_GET_STATUS, { projectId, workspaceName }),
+    setMetadata: (projectId: string, workspaceName: string, key: string, value: string | null) =>
+      ipcRenderer.invoke(ApiIpcChannels.WORKSPACE_SET_METADATA, {
+        projectId,
+        workspaceName,
+        key,
+        value,
+      }),
+    getMetadata: (projectId: string, workspaceName: string) =>
+      ipcRenderer.invoke(ApiIpcChannels.WORKSPACE_GET_METADATA, { projectId, workspaceName }),
   },
   ui: {
     selectFolder: () => ipcRenderer.invoke(ApiIpcChannels.UI_SELECT_FOLDER),

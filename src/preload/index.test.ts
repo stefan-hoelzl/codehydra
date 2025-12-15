@@ -241,6 +241,43 @@ describe("preload API", () => {
       });
       expect(result).toEqual(mockStatus);
     });
+
+    it("workspaces.setMetadata calls api:workspace:set-metadata", async () => {
+      mockIpcRenderer.invoke.mockResolvedValue(undefined);
+
+      const workspaces = exposedApi.workspaces as {
+        setMetadata: (
+          projectId: string,
+          workspaceName: string,
+          key: string,
+          value: string | null
+        ) => Promise<void>;
+      };
+      await workspaces.setMetadata("my-app-12345678", "feature", "note", "test value");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:workspace:set-metadata", {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+        key: "note",
+        value: "test value",
+      });
+    });
+
+    it("workspaces.getMetadata calls api:workspace:get-metadata and returns parsed result", async () => {
+      const mockMetadata = { base: "main", note: "WIP" };
+      mockIpcRenderer.invoke.mockResolvedValue(mockMetadata);
+
+      const workspaces = exposedApi.workspaces as {
+        getMetadata: (projectId: string, workspaceName: string) => Promise<Record<string, string>>;
+      };
+      const result = await workspaces.getMetadata("my-app-12345678", "feature");
+
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledWith("api:workspace:get-metadata", {
+        projectId: "my-app-12345678",
+        workspaceName: "feature",
+      });
+      expect(result).toEqual(mockMetadata);
+    });
   });
 
   describe("ui", () => {

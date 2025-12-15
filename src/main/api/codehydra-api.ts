@@ -150,7 +150,11 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     internalProject: {
       path: string;
       name: string;
-      workspaces: ReadonlyArray<{ path: string; branch?: string | null; baseBranch: string }>;
+      workspaces: ReadonlyArray<{
+        path: string;
+        branch?: string | null;
+        metadata: Readonly<Record<string, string>>;
+      }>;
     },
     defaultBaseBranch?: string
   ): Project {
@@ -169,14 +173,18 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
    */
   private toApiWorkspace(
     projectId: ProjectId,
-    internalWorkspace: { path: string; branch?: string | null; baseBranch: string }
+    internalWorkspace: {
+      path: string;
+      branch?: string | null;
+      metadata: Readonly<Record<string, string>>;
+    }
   ): Workspace {
     const name = this.extractWorkspaceName(internalWorkspace.path) as WorkspaceName;
     return {
       projectId,
       name,
       branch: internalWorkspace.branch ?? null,
-      baseBranch: internalWorkspace.baseBranch,
+      metadata: internalWorkspace.metadata,
       path: internalWorkspace.path,
     };
   }
@@ -490,6 +498,82 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
             },
           },
         };
+      },
+
+      setMetadata: async (
+        projectId: ProjectId,
+        workspaceName: WorkspaceName,
+        key: string,
+        value: string | null
+      ): Promise<void> => {
+        // Resolve project ID to path
+        const projectPath = await this.resolveProjectPath(projectId);
+        if (!projectPath) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+
+        // Find workspace path
+        const internalProject = this.appState.getProject(projectPath);
+        if (!internalProject) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+
+        const workspace = internalProject.workspaces.find(
+          (w) => this.extractWorkspaceName(w.path) === workspaceName
+        );
+        if (!workspace) {
+          throw new Error(`Workspace not found: ${workspaceName}`);
+        }
+
+        // Get workspace provider
+        const provider = this.appState.getWorkspaceProvider(projectPath);
+        if (!provider) {
+          throw new Error(`No workspace provider for project: ${projectId}`);
+        }
+
+        // Delegate to provider
+        await provider.setMetadata(workspace.path, key, value);
+
+        // Emit event
+        this.emit("workspace:metadata-changed", {
+          projectId,
+          workspaceName,
+          key,
+          value,
+        });
+      },
+
+      getMetadata: async (
+        projectId: ProjectId,
+        workspaceName: WorkspaceName
+      ): Promise<Readonly<Record<string, string>>> => {
+        // Resolve project ID to path
+        const projectPath = await this.resolveProjectPath(projectId);
+        if (!projectPath) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+
+        // Find workspace path
+        const internalProject = this.appState.getProject(projectPath);
+        if (!internalProject) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+
+        const workspace = internalProject.workspaces.find(
+          (w) => this.extractWorkspaceName(w.path) === workspaceName
+        );
+        if (!workspace) {
+          throw new Error(`Workspace not found: ${workspaceName}`);
+        }
+
+        // Get workspace provider
+        const provider = this.appState.getWorkspaceProvider(projectPath);
+        if (!provider) {
+          throw new Error(`No workspace provider for project: ${projectId}`);
+        }
+
+        // Delegate to provider
+        return provider.getMetadata(workspace.path);
       },
     };
   }

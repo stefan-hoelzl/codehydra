@@ -135,4 +135,39 @@ export interface IGitClient {
    * @throws GitError if not a git repository
    */
   setBranchConfig(repoPath: string, branch: string, key: string, value: string): Promise<void>;
+
+  /**
+   * Get all branch configuration values under a prefix.
+   * Returns config values under `branch.<branch>.<prefix>.*` with the prefix stripped.
+   *
+   * @example
+   * // Git config has:
+   * // branch.main.codehydra.base = develop
+   * // branch.main.codehydra.note = WIP feature
+   * const configs = await client.getBranchConfigsByPrefix(repoPath, "main", "codehydra");
+   * // Returns: { base: "develop", note: "WIP feature" }
+   *
+   * @param repoPath Absolute path to the git repository
+   * @param branch Name of the branch
+   * @param prefix Configuration key prefix (e.g., "codehydra")
+   * @returns Promise resolving to a record of key-value pairs (keys have prefix stripped)
+   * @throws GitError if not a git repository
+   */
+  getBranchConfigsByPrefix(
+    repoPath: string,
+    branch: string,
+    prefix: string
+  ): Promise<Readonly<Record<string, string>>>;
+
+  /**
+   * Remove a branch-specific configuration value.
+   * Does not throw if the key does not exist.
+   *
+   * @param repoPath Absolute path to the git repository
+   * @param branch Name of the branch
+   * @param key Configuration key (without the branch prefix)
+   * @returns Promise resolving when config is unset
+   * @throws GitError if not a git repository
+   */
+  unsetBranchConfig(repoPath: string, branch: string, key: string): Promise<void>;
 }

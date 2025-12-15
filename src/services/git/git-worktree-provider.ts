@@ -8,6 +8,7 @@ import type { IWorkspaceProvider } from "./workspace-provider";
 import type { BaseInfo, CleanupResult, RemovalResult, UpdateBasesResult, Workspace } from "./types";
 import { WorkspaceError } from "../errors";
 import { sanitizeWorkspaceName } from "../platform/paths";
+import { isValidMetadataKey } from "../../shared/api/types";
 import type { FileSystemLayer } from "../platform/filesystem";
 
 /**
@@ -15,14 +16,29 @@ import type { FileSystemLayer } from "../platform/filesystem";
  * Each workspace is a git worktree, allowing parallel work on different branches.
  */
 export class GitWorktreeProvider implements IWorkspaceProvider {
-  /** Git config key for storing the base branch a workspace was created from */
-  private static readonly BASE_CONFIG_KEY = "codehydra.base";
+  /** Git config prefix for workspace metadata */
+  private static readonly METADATA_CONFIG_PREFIX = "codehydra";
 
   readonly projectRoot: string;
   private readonly gitClient: IGitClient;
   private readonly workspacesDir: string;
   private readonly fileSystemLayer: FileSystemLayer;
   private cleanupInProgress = false;
+
+  /**
+   * Apply base fallback to metadata if not present.
+   * Fallback priority: config > branch > name
+   */
+  private applyBaseFallback(
+    metadata: Record<string, string>,
+    branch: string | null,
+    name: string
+  ): Record<string, string> {
+    if (!metadata.base) {
+      return { ...metadata, base: branch ?? name };
+    }
+    return metadata;
+  }
 
   private constructor(
     projectRoot: string,
@@ -108,35 +124,35 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
   async discover(): Promise<readonly Workspace[]> {
     const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
 
-    // Filter out the main worktree and map to Workspace objects with baseBranch
+    // Filter out the main worktree and map to Workspace objects with metadata
     const workspaces: Workspace[] = [];
     for (const wt of worktrees) {
       if (wt.isMain) continue;
 
-      // Try to get baseBranch from git config, with fallback logic
-      let baseBranch: string;
+      // Try to get metadata from git config, with fallback for base key
+      let metadata: Record<string, string>;
       try {
-        const configValue = wt.branch
-          ? await this.gitClient.getBranchConfig(
+        const configs = wt.branch
+          ? await this.gitClient.getBranchConfigsByPrefix(
               this.projectRoot,
               wt.branch,
-              GitWorktreeProvider.BASE_CONFIG_KEY
+              GitWorktreeProvider.METADATA_CONFIG_PREFIX
             )
-          : null;
-        // Fallback: config > branch > name
-        baseBranch = configValue ?? wt.branch ?? wt.name;
+          : {};
+        // Apply base fallback: config > branch > name
+        metadata = this.applyBaseFallback({ ...configs }, wt.branch, wt.name);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        console.warn(`Failed to get base branch config for ${wt.name}: ${message}`);
-        // Use fallback on error
-        baseBranch = wt.branch ?? wt.name;
+        console.warn(`Failed to get metadata config for ${wt.name}: ${message}`);
+        // Use fallback on error - only base key
+        metadata = { base: wt.branch ?? wt.name };
       }
 
       workspaces.push({
         name: wt.name,
         path: wt.path,
         branch: wt.branch,
-        baseBranch,
+        metadata,
       });
     }
     return workspaces;
@@ -232,7 +248,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       await this.gitClient.setBranchConfig(
         this.projectRoot,
         name,
-        GitWorktreeProvider.BASE_CONFIG_KEY,
+        `${GitWorktreeProvider.METADATA_CONFIG_PREFIX}.base`,
         baseBranch
       );
     } catch (error: unknown) {
@@ -244,7 +260,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       name,
       path: worktreePath,
       branch: name,
-      baseBranch,
+      metadata: { base: baseBranch },
     };
   }
 
@@ -453,5 +469,85 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     }
 
     return { removedCount, failedPaths };
+  }
+
+  /**
+   * Get the branch name for a workspace path.
+   * @throws WorkspaceError if workspace not found
+   */
+  private async getBranchForWorkspace(workspacePath: string): Promise<string> {
+    const normalizedPath = this.normalizeWorktreePath(workspacePath);
+    const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
+    const worktree = worktrees.find((wt) => this.normalizeWorktreePath(wt.path) === normalizedPath);
+
+    if (!worktree) {
+      throw new WorkspaceError(`Workspace not found: ${workspacePath}`, "WORKSPACE_NOT_FOUND");
+    }
+
+    if (!worktree.branch) {
+      throw new WorkspaceError(
+        `Cannot manage metadata for detached HEAD workspace: ${workspacePath}`,
+        "DETACHED_HEAD"
+      );
+    }
+
+    return worktree.branch;
+  }
+
+  /**
+   * Set a metadata value for a workspace.
+   * @param workspacePath Absolute path to the workspace
+   * @param key Metadata key (must match /^[A-Za-z][A-Za-z0-9-]*$/)
+   * @param value Value to set, or null to delete the key
+   * @throws WorkspaceError with code "INVALID_METADATA_KEY" if key format invalid
+   */
+  async setMetadata(workspacePath: string, key: string, value: string | null): Promise<void> {
+    // Validate key format
+    if (!isValidMetadataKey(key)) {
+      throw new WorkspaceError(
+        `Invalid metadata key '${key}': must start with a letter, contain only letters, digits, and hyphens, and not end with a hyphen`,
+        "INVALID_METADATA_KEY"
+      );
+    }
+
+    const branch = await this.getBranchForWorkspace(workspacePath);
+    const configKey = `${GitWorktreeProvider.METADATA_CONFIG_PREFIX}.${key}`;
+
+    if (value === null) {
+      await this.gitClient.unsetBranchConfig(this.projectRoot, branch, configKey);
+    } else {
+      await this.gitClient.setBranchConfig(this.projectRoot, branch, configKey, value);
+    }
+  }
+
+  /**
+   * Get all metadata for a workspace.
+   * Always includes `base` key (with fallback if not in config).
+   * @param workspacePath Absolute path to the workspace
+   * @returns Metadata record with at least `base` key
+   */
+  async getMetadata(workspacePath: string): Promise<Readonly<Record<string, string>>> {
+    const normalizedPath = this.normalizeWorktreePath(workspacePath);
+    const worktrees = await this.gitClient.listWorktrees(this.projectRoot);
+    const worktree = worktrees.find((wt) => this.normalizeWorktreePath(wt.path) === normalizedPath);
+
+    if (!worktree) {
+      throw new WorkspaceError(`Workspace not found: ${workspacePath}`, "WORKSPACE_NOT_FOUND");
+    }
+
+    let metadata: Record<string, string>;
+    if (worktree.branch) {
+      const configs = await this.gitClient.getBranchConfigsByPrefix(
+        this.projectRoot,
+        worktree.branch,
+        GitWorktreeProvider.METADATA_CONFIG_PREFIX
+      );
+      metadata = this.applyBaseFallback({ ...configs }, worktree.branch, worktree.name);
+    } else {
+      // Detached HEAD - only fallback base
+      metadata = { base: worktree.name };
+    }
+
+    return metadata;
   }
 }

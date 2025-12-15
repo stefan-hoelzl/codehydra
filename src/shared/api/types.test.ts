@@ -3,7 +3,14 @@
  * Includes compile-time type safety checks and runtime type guard validation.
  */
 import { describe, it, expect } from "vitest";
-import { type ProjectId, type WorkspaceName, isProjectId, isWorkspaceName } from "./types";
+import {
+  type ProjectId,
+  type WorkspaceName,
+  isProjectId,
+  isWorkspaceName,
+  isValidMetadataKey,
+  METADATA_KEY_REGEX,
+} from "./types";
 
 describe("Branded Types - Compile-time Safety", () => {
   describe("ProjectId", () => {
@@ -192,6 +199,85 @@ describe("isWorkspaceName - Type Guard", () => {
         const name: WorkspaceName = value;
         expect(name).toBe(value);
       }
+    });
+  });
+});
+
+describe("METADATA_KEY_REGEX", () => {
+  it("should be exported for external validation", () => {
+    expect(METADATA_KEY_REGEX).toBeDefined();
+    expect(METADATA_KEY_REGEX).toBeInstanceOf(RegExp);
+  });
+});
+
+describe("isValidMetadataKey - Metadata Key Validation", () => {
+  describe("valid keys", () => {
+    it("should accept simple lowercase keys", () => {
+      expect(isValidMetadataKey("base")).toBe(true);
+      expect(isValidMetadataKey("note")).toBe(true);
+    });
+
+    it("should accept keys with hyphens", () => {
+      expect(isValidMetadataKey("model-name")).toBe(true);
+      expect(isValidMetadataKey("last-model-used")).toBe(true);
+    });
+
+    it("should accept uppercase keys", () => {
+      expect(isValidMetadataKey("AI")).toBe(true);
+      expect(isValidMetadataKey("AI-model")).toBe(true);
+    });
+
+    it("should accept keys with numbers (not at start)", () => {
+      expect(isValidMetadataKey("model2")).toBe(true);
+      expect(isValidMetadataKey("version1-beta")).toBe(true);
+    });
+
+    it("should accept single character key", () => {
+      expect(isValidMetadataKey("a")).toBe(true);
+      expect(isValidMetadataKey("Z")).toBe(true);
+    });
+  });
+
+  describe("invalid keys", () => {
+    it("should reject keys with underscores", () => {
+      expect(isValidMetadataKey("my_key")).toBe(false);
+      expect(isValidMetadataKey("_private")).toBe(false);
+      expect(isValidMetadataKey("key_name")).toBe(false);
+    });
+
+    it("should reject keys starting with digits", () => {
+      expect(isValidMetadataKey("123note")).toBe(false);
+      expect(isValidMetadataKey("1key")).toBe(false);
+    });
+
+    it("should reject empty key", () => {
+      expect(isValidMetadataKey("")).toBe(false);
+    });
+
+    it("should reject keys with trailing hyphen", () => {
+      expect(isValidMetadataKey("note-")).toBe(false);
+      expect(isValidMetadataKey("model-name-")).toBe(false);
+    });
+
+    it("should reject keys over 64 characters", () => {
+      const longKey = "a".repeat(65);
+      expect(isValidMetadataKey(longKey)).toBe(false);
+    });
+
+    it("should accept keys at exactly 64 characters", () => {
+      const maxKey = "a".repeat(64);
+      expect(isValidMetadataKey(maxKey)).toBe(true);
+    });
+
+    it("should reject keys with special characters", () => {
+      expect(isValidMetadataKey("key.name")).toBe(false);
+      expect(isValidMetadataKey("key/name")).toBe(false);
+      expect(isValidMetadataKey("key@name")).toBe(false);
+      expect(isValidMetadataKey("key name")).toBe(false);
+    });
+
+    it("should reject keys starting with hyphen", () => {
+      expect(isValidMetadataKey("-key")).toBe(false);
     });
   });
 });

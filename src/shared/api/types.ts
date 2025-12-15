@@ -71,6 +71,45 @@ export function isWorkspaceName(value: string): value is WorkspaceName {
 }
 
 // =============================================================================
+// Metadata Key Validation
+// =============================================================================
+
+/**
+ * Regex for validating metadata key format.
+ * Pattern: starts with letter, followed by letters, digits, or hyphens.
+ * No underscores (git config compatibility), no trailing hyphen.
+ *
+ * Valid: base, note, model-name, AI-model
+ * Invalid: _private (leading underscore), my_key (underscore), 123note (leading digit), note- (trailing hyphen)
+ */
+export const METADATA_KEY_REGEX = /^[A-Za-z][A-Za-z0-9-]*$/;
+
+/**
+ * Maximum length for metadata keys.
+ */
+const METADATA_KEY_MAX_LENGTH = 64;
+
+/**
+ * Validates a metadata key for workspace config storage.
+ * Keys must:
+ * - Start with a letter (a-z, A-Z)
+ * - Contain only letters, digits, and hyphens
+ * - Not end with a hyphen
+ * - Be 1-64 characters long
+ *
+ * @param key The key to validate
+ * @returns True if the key is valid for metadata storage
+ */
+export function isValidMetadataKey(key: string): boolean {
+  return (
+    key.length > 0 &&
+    key.length <= METADATA_KEY_MAX_LENGTH &&
+    METADATA_KEY_REGEX.test(key) &&
+    !key.endsWith("-")
+  );
+}
+
+// =============================================================================
 // Domain Types
 // =============================================================================
 
@@ -93,8 +132,12 @@ export interface Workspace {
   readonly name: WorkspaceName;
   /** Current branch name, or null for detached HEAD state */
   readonly branch: string | null;
-  /** Base branch the workspace was created from (fallback: branch ?? name) */
-  readonly baseBranch: string;
+  /**
+   * Metadata for the workspace stored in git config.
+   * Always contains `base` key (with fallback to branch ?? name if not explicitly set).
+   * Additional keys can be added for custom workspace metadata.
+   */
+  readonly metadata: Readonly<Record<string, string>>;
   readonly path: string;
 }
 

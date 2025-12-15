@@ -343,6 +343,104 @@ describe("SimpleGitClient", () => {
     });
   });
 
+  describe("getBranchConfigsByPrefix", () => {
+    it("returns all codehydra.* configs for a branch", async () => {
+      // Set multiple config values with codehydra prefix
+      await client.setBranchConfig(repoPath, "main", "codehydra.base", "develop");
+      await client.setBranchConfig(repoPath, "main", "codehydra.note", "WIP feature");
+
+      const configs = await client.getBranchConfigsByPrefix(repoPath, "main", "codehydra");
+
+      expect(configs).toEqual({
+        base: "develop",
+        note: "WIP feature",
+      });
+    });
+
+    it("returns empty object when no configs exist", async () => {
+      const configs = await client.getBranchConfigsByPrefix(repoPath, "main", "codehydra");
+
+      expect(configs).toEqual({});
+    });
+
+    it("handles values with spaces", async () => {
+      await client.setBranchConfig(
+        repoPath,
+        "main",
+        "codehydra.note",
+        "Work in progress with spaces"
+      );
+
+      const configs = await client.getBranchConfigsByPrefix(repoPath, "main", "codehydra");
+
+      expect(configs.note).toBe("Work in progress with spaces");
+    });
+
+    it("handles values with equals signs", async () => {
+      await client.setBranchConfig(repoPath, "main", "codehydra.equation", "x=y+z");
+
+      const configs = await client.getBranchConfigsByPrefix(repoPath, "main", "codehydra");
+
+      expect(configs.equation).toBe("x=y+z");
+    });
+
+    it("only returns configs matching the prefix", async () => {
+      // Set configs with different prefixes
+      await client.setBranchConfig(repoPath, "main", "codehydra.base", "develop");
+      await client.setBranchConfig(repoPath, "main", "other.key", "value");
+
+      const configs = await client.getBranchConfigsByPrefix(repoPath, "main", "codehydra");
+
+      expect(configs).toEqual({ base: "develop" });
+      expect(configs).not.toHaveProperty("key");
+    });
+
+    it("throws GitError for non-repo path", async () => {
+      const tempDir = await createTempDir();
+      try {
+        await expect(
+          client.getBranchConfigsByPrefix(tempDir.path, "main", "codehydra")
+        ).rejects.toThrow(GitError);
+      } finally {
+        await tempDir.cleanup();
+      }
+    });
+  });
+
+  describe("unsetBranchConfig", () => {
+    it("removes a config key", async () => {
+      // Set config first
+      await client.setBranchConfig(repoPath, "main", "codehydra.note", "to be removed");
+      const before = await client.getBranchConfig(repoPath, "main", "codehydra.note");
+      expect(before).toBe("to be removed");
+
+      // Unset it
+      await client.unsetBranchConfig(repoPath, "main", "codehydra.note");
+
+      // Verify it's gone
+      const after = await client.getBranchConfig(repoPath, "main", "codehydra.note");
+      expect(after).toBeNull();
+    });
+
+    it("does not throw for non-existent key", async () => {
+      // Should handle gracefully
+      await expect(
+        client.unsetBranchConfig(repoPath, "main", "codehydra.nonexistent")
+      ).resolves.not.toThrow();
+    });
+
+    it("throws GitError for non-repo path", async () => {
+      const tempDir = await createTempDir();
+      try {
+        await expect(
+          client.unsetBranchConfig(tempDir.path, "main", "codehydra.note")
+        ).rejects.toThrow(GitError);
+      } finally {
+        await tempDir.cleanup();
+      }
+    });
+  });
+
   describe("getBranchConfig and setBranchConfig", () => {
     it("getBranchConfig returns null for non-existent config", async () => {
       const value = await client.getBranchConfig(repoPath, "main", "nonexistent");

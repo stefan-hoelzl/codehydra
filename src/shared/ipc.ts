@@ -50,8 +50,12 @@ export interface Workspace {
   readonly path: string;
   /** Branch checked out in workspace, null if detached HEAD */
   readonly branch: string | null;
-  /** Base branch the workspace was created from (fallback: branch ?? name) */
-  readonly baseBranch: string;
+  /**
+   * Metadata for the workspace stored in git config.
+   * Always contains `base` key (with fallback to branch ?? name if not explicitly set).
+   * Additional keys can be added for custom workspace metadata.
+   */
+  readonly metadata: Readonly<Record<string, string>>;
 }
 
 /**
@@ -191,6 +195,8 @@ export const ApiIpcChannels = {
   WORKSPACE_REMOVE: "api:workspace:remove",
   WORKSPACE_GET: "api:workspace:get",
   WORKSPACE_GET_STATUS: "api:workspace:get-status",
+  WORKSPACE_SET_METADATA: "api:workspace:set-metadata",
+  WORKSPACE_GET_METADATA: "api:workspace:get-metadata",
   // UI commands
   UI_SELECT_FOLDER: "api:ui:select-folder",
   UI_GET_ACTIVE_WORKSPACE: "api:ui:get-active-workspace",
@@ -208,6 +214,7 @@ export const ApiIpcChannels = {
   WORKSPACE_REMOVED: "api:workspace:removed",
   WORKSPACE_SWITCHED: "api:workspace:switched",
   WORKSPACE_STATUS_CHANGED: "api:workspace:status-changed",
+  WORKSPACE_METADATA_CHANGED: "api:workspace:metadata-changed",
   UI_MODE_CHANGED: "api:ui:mode-changed",
   SHORTCUT_KEY: "api:shortcut:key",
   SETUP_PROGRESS: "api:setup:progress",

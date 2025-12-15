@@ -51,8 +51,12 @@ export interface Workspace {
   readonly path: string;
   /** Branch checked out in workspace, null if detached HEAD */
   readonly branch: string | null;
-  /** Base branch the workspace was created from (fallback: branch ?? name) */
-  readonly baseBranch: string;
+  /**
+   * Metadata for the workspace stored in git config.
+   * Always contains `base` key (with fallback to branch ?? name if not explicitly set).
+   * Additional keys can be added for custom workspace metadata.
+   */
+  readonly metadata: Readonly<Record<string, string>>;
 }
 
 /**
