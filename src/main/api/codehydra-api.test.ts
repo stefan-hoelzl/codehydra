@@ -769,7 +769,8 @@ describe("CodeHydraApiImpl - IWorkspaceApi", () => {
 
       it("should switch to workspace in another project when active workspace removed and no other in same project", async () => {
         const OTHER_PROJECT_PATH = "/home/user/projects/other-app" as ProjectPath;
-        const OTHER_PROJECT_ID = "other-app-f959d361" as ProjectId;
+        // Compute dynamically for cross-platform compatibility (path normalization differs on Windows)
+        const OTHER_PROJECT_ID = generateProjectId(OTHER_PROJECT_PATH);
         const OTHER_PROJECT_WORKSPACE_PATH =
           "/home/user/.codehydra/projects/other-app/workspaces/main-feature";
         const OTHER_PROJECT_WORKSPACE_NAME = "main-feature" as WorkspaceName;

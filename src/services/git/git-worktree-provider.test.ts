@@ -3,6 +3,7 @@
  * Unit tests for GitWorktreeProvider using mocked IGitClient.
  */
 
+import { join } from "path";
 import { describe, it, expect, vi } from "vitest";
 import { GitWorktreeProvider } from "./git-worktree-provider";
 import type { IGitClient } from "./git-client";
@@ -1434,7 +1435,7 @@ describe("GitWorktreeProvider", () => {
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         {
           name: "feature-x",
-          path: `${WORKSPACES_DIR}/feature-x`,
+          path: join(WORKSPACES_DIR, "feature-x"),
           branch: "feature-x",
           isMain: false,
         },
@@ -1464,7 +1465,7 @@ describe("GitWorktreeProvider", () => {
 
       expect(result.removedCount).toBe(1);
       expect(result.failedPaths).toHaveLength(0);
-      expect(rmFn).toHaveBeenCalledWith(`${WORKSPACES_DIR}/orphan-workspace`, {
+      expect(rmFn).toHaveBeenCalledWith(join(WORKSPACES_DIR, "orphan-workspace"), {
         recursive: true,
         force: true,
       });
@@ -1475,7 +1476,7 @@ describe("GitWorktreeProvider", () => {
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         {
           name: "feature-x",
-          path: `${WORKSPACES_DIR}/feature-x`,
+          path: join(WORKSPACES_DIR, "feature-x"),
           branch: "feature-x",
           isMain: false,
         },
@@ -1593,7 +1594,7 @@ describe("GitWorktreeProvider", () => {
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         {
           name: "orphan-workspace",
-          path: `${WORKSPACES_DIR}/orphan-workspace`,
+          path: join(WORKSPACES_DIR, "orphan-workspace"),
           branch: "orphan-workspace",
           isMain: false,
         },
@@ -1669,7 +1670,7 @@ describe("GitWorktreeProvider", () => {
         rm: {
           error: new FileSystemError(
             "EACCES",
-            `${WORKSPACES_DIR}/orphan-workspace`,
+            join(WORKSPACES_DIR, "orphan-workspace"),
             "Permission denied"
           ),
         },
@@ -1687,7 +1688,7 @@ describe("GitWorktreeProvider", () => {
 
       expect(result.removedCount).toBe(0);
       expect(result.failedPaths).toHaveLength(1);
-      expect(result.failedPaths[0]?.path).toBe(`${WORKSPACES_DIR}/orphan-workspace`);
+      expect(result.failedPaths[0]?.path).toBe(join(WORKSPACES_DIR, "orphan-workspace"));
       warnSpy.mockRestore();
     });
 
@@ -1763,7 +1764,7 @@ describe("GitWorktreeProvider", () => {
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         {
           name: "feature-x",
-          path: `${WORKSPACES_DIR}/feature-x/`,
+          path: join(WORKSPACES_DIR, "feature-x") + "/",
           branch: "feature-x",
           isMain: false,
         },

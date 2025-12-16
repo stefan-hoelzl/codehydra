@@ -194,7 +194,8 @@ export async function createCommitInRemote(remotePath: string, message: string):
 
   try {
     const git = simpleGit(tempClone);
-    await git.clone(remotePath, ".");
+    // Explicitly checkout main branch for cross-platform consistency
+    await git.clone(remotePath, ".", ["--branch", "main"]);
     await git.addConfig("user.email", "test@test.com");
     await git.addConfig("user.name", "Test User");
 

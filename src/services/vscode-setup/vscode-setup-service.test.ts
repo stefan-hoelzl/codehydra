@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { join } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VscodeSetupService } from "./vscode-setup-service";
 import {
@@ -634,10 +635,10 @@ describe("VscodeSetupService", () => {
 
       // Should generate code script (opencode may be skipped if not found)
       // Note: code-server wrapper is not generated - we launch code-server directly
-      expect(writtenFiles.has("/mock/bin/code")).toBe(true);
+      expect(writtenFiles.has(join("/mock/bin", "code"))).toBe(true);
 
       // Scripts should be Unix-style (shebang)
-      const codeScript = writtenFiles.get("/mock/bin/code");
+      const codeScript = writtenFiles.get(join("/mock/bin", "code"));
       expect(codeScript).toMatch(/^#!/);
     });
 
@@ -665,7 +666,7 @@ describe("VscodeSetupService", () => {
 
       // Should call makeExecutable for each Unix script (code, and opencode if found)
       // Note: code-server wrapper is not generated - we launch code-server directly
-      expect(executablePaths).toContain("/mock/bin/code");
+      expect(executablePaths).toContain(join("/mock/bin", "code"));
     });
 
     it("does not call makeExecutable on Windows", async () => {
