@@ -453,40 +453,9 @@ describe("Handler + API integration", () => {
     });
   });
 
-  describe("Lifecycle operations", () => {
-    it("should call API and return result for getState", async () => {
-      const handler = getHandler("api:lifecycle:get-state");
-      const result = await handler({}, undefined);
-
-      expect(api.lifecycle.getState).toHaveBeenCalled();
-      expect(result).toBe("ready");
-    });
-
-    it("should call API and return result for setup", async () => {
-      const handler = getHandler("api:lifecycle:setup");
-      const result = await handler({}, undefined);
-
-      expect(api.lifecycle.setup).toHaveBeenCalled();
-      expect(result).toEqual({ success: true });
-    });
-
-    it("should return setup failure result", async () => {
-      vi.mocked(api.lifecycle.setup).mockResolvedValue({
-        success: false,
-        message: "Extension install failed",
-        code: "EXTENSION_INSTALL_FAILED",
-      });
-
-      const handler = getHandler("api:lifecycle:setup");
-      const result = await handler({}, undefined);
-
-      expect(result).toEqual({
-        success: false,
-        message: "Extension install failed",
-        code: "EXTENSION_INSTALL_FAILED",
-      });
-    });
-  });
+  // NOTE: Lifecycle handlers are tested in lifecycle-handlers.test.ts
+  // They are registered separately via registerLifecycleHandlers() in bootstrap(),
+  // not via registerApiHandlers(), so they are not tested here.
 });
 
 describe("Error handling across IPC boundaries", () => {

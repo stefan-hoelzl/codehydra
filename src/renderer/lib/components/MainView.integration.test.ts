@@ -233,7 +233,6 @@ describe("MainView close project integration", () => {
 
       // Get the dialog and find the "Close Project" button within it
       const dialog = screen.getByRole("dialog");
-      // eslint-disable-next-line testing-library/prefer-screen-queries
       const closeButton = within(dialog).getByRole("button", { name: /close project/i });
       await fireEvent.click(closeButton);
 
@@ -325,7 +324,6 @@ describe("MainView close project integration", () => {
 
       // Get dialog and click "Remove & Close" within it
       const dialog = screen.getByRole("dialog");
-      // eslint-disable-next-line testing-library/prefer-screen-queries
       const removeButton = within(dialog).getByRole("button", { name: /remove & close/i });
       await fireEvent.click(removeButton);
 
