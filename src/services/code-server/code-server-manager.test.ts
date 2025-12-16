@@ -562,7 +562,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     // Restore original values
@@ -602,7 +608,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "C:\\app\\bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     // Restore original values
@@ -646,7 +658,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     // Restore original values
@@ -697,7 +715,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     // Restore original values
@@ -732,7 +756,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     expect(capturedEnv?.PATH).toMatch(/^\/app\/bin/);
@@ -761,7 +791,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     // Restore original PATH
@@ -790,7 +826,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     expect(capturedEnv?.EDITOR).toContain("/app/bin/code");
@@ -815,7 +857,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     expect(capturedEnv?.EDITOR).toContain("--wait");
@@ -840,7 +888,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     expect(capturedEnv?.EDITOR).toContain("--reuse-window");
@@ -865,7 +919,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
       binDir: "/app/bin",
     };
 
-    const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
     await manager.ensureRunning();
 
     expect(capturedEnv?.GIT_SEQUENCE_EDITOR).toBe(capturedEnv?.EDITOR);
