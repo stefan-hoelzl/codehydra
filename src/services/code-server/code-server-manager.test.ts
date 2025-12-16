@@ -582,11 +582,10 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
   it("prepends binDir to PATH correctly", async () => {
     // Store original values
     const originalPath = process.env.PATH;
-    const originalWindowsPath = process.env.Path;
 
     // Use platform-appropriate delimiter in test data
+    // Note: On Windows, env vars are case-insensitive, so we only set PATH (not Path)
     process.env.PATH = `/existing/path${path.delimiter}/another/path`;
-    delete process.env.Path;
 
     let capturedEnv: NodeJS.ProcessEnv | undefined;
     const mockProc = createMockSpawnedProcess({ pid: 12345 });
@@ -617,9 +616,6 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
 
     // Restore original values
     process.env.PATH = originalPath;
-    if (originalWindowsPath !== undefined) {
-      process.env.Path = originalWindowsPath;
-    }
 
     // Verify binDir is prepended correctly
     expect(capturedEnv?.PATH).toContain("/app/bin");
@@ -835,7 +831,13 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
     );
     await manager.ensureRunning();
 
-    expect(capturedEnv?.EDITOR).toContain("/app/bin/code");
+    // On Windows, the path uses backslashes and .cmd extension
+    // On Unix, it uses forward slashes without extension
+    const isWindows = process.platform === "win32";
+    const expectedCodePath = isWindows
+      ? path.join("/app/bin", "code.cmd")
+      : path.join("/app/bin", "code");
+    expect(capturedEnv?.EDITOR).toContain(expectedCodePath);
   });
 
   it("EDITOR includes --wait flag", async () => {

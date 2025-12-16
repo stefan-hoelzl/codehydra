@@ -288,8 +288,8 @@ describe("VscodeSetupService", () => {
 
       // Verify vsix was copied from assets to vscode dir
       expect(copiedFiles).toContainEqual({
-        src: "/mock/assets/codehydra.vscode-0.0.1.vsix",
-        dest: "/mock/vscode/codehydra.vscode-0.0.1.vsix",
+        src: join("/mock/assets", "codehydra.vscode-0.0.1.vsix"),
+        dest: join("/mock/vscode", "codehydra.vscode-0.0.1.vsix"),
       });
     });
 
@@ -318,9 +318,9 @@ describe("VscodeSetupService", () => {
       // First call is for bundled vsix
       expect(mockProcessRunner.run).toHaveBeenCalledWith("/mock/code-server", [
         "--install-extension",
-        "/mock/vscode/codehydra.vscode-0.0.1.vsix",
+        join("/mock/vscode", "codehydra.vscode-0.0.1.vsix"),
         "--extensions-dir",
-        "/mock/vscode/extensions",
+        join("/mock/vscode", "extensions"),
       ]);
     });
 
@@ -351,7 +351,7 @@ describe("VscodeSetupService", () => {
         "--install-extension",
         "sst-dev.opencode",
         "--extensions-dir",
-        "/mock/vscode/extensions",
+        join("/mock/vscode", "extensions"),
       ]);
     });
 
@@ -381,7 +381,7 @@ describe("VscodeSetupService", () => {
       // Verify order: bundled vsix first, then marketplace
       expect(mockProcessRunner.run).toHaveBeenCalledTimes(2);
       const calls = vi.mocked(mockProcessRunner.run).mock.calls;
-      expect(calls[0]?.[1]?.[1]).toBe("/mock/vscode/codehydra.vscode-0.0.1.vsix");
+      expect(calls[0]?.[1]?.[1]).toBe(join("/mock/vscode", "codehydra.vscode-0.0.1.vsix"));
       expect(calls[1]?.[1]?.[1]).toBe("sst-dev.opencode");
 
       // Verify progress messages

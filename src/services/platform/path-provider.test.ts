@@ -2,7 +2,7 @@
  * Tests for PathProvider interface, mock factory, and DefaultPathProvider.
  */
 
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { describe, it, expect } from "vitest";
 import { createMockPathProvider } from "./path-provider.test-utils";
 import { DefaultPathProvider, type PathProvider } from "./path-provider";
@@ -69,9 +69,10 @@ describe("createMockPathProvider", () => {
     const result = pathProvider.getProjectWorkspacesDir("/home/user/myproject");
 
     // Uses projectDirName internally: <name>-<8-char-hash>
+    // Note: Uses path.join() internally so paths have platform-specific separators
     expect(result).toContain("myproject-");
-    expect(result).toContain("/workspaces");
-    expect(result.startsWith("/test/app-data/projects/")).toBe(true);
+    expect(result).toContain(`${sep}workspaces`);
+    expect(result.startsWith(join("/test/app-data/projects") + sep)).toBe(true);
   });
 
   it("getProjectWorkspacesDir can be overridden", () => {
@@ -128,7 +129,8 @@ describe("DefaultPathProvider", () => {
       const platformInfo = createMockPlatformInfo({ platform: "linux" });
       const pathProvider = new DefaultPathProvider(buildInfo, platformInfo);
 
-      expect(pathProvider.vscodeAssetsDir).toBe("/dev/project/out/main/assets");
+      // Uses join() internally so separators are platform-specific
+      expect(pathProvider.vscodeAssetsDir).toBe(join("/dev/project", "out", "main", "assets"));
     });
 
     it("ignores platform in development mode", () => {
@@ -167,23 +169,19 @@ describe("DefaultPathProvider", () => {
       });
       const pathProvider = new DefaultPathProvider(buildInfo, platformInfo);
 
-      expect(pathProvider.dataRootDir).toBe("/home/testuser/.local/share/codehydra");
-      expect(pathProvider.projectsDir).toBe("/home/testuser/.local/share/codehydra/projects");
-      expect(pathProvider.vscodeDir).toBe("/home/testuser/.local/share/codehydra/vscode");
-      expect(pathProvider.vscodeExtensionsDir).toBe(
-        "/home/testuser/.local/share/codehydra/vscode/extensions"
-      );
-      expect(pathProvider.vscodeUserDataDir).toBe(
-        "/home/testuser/.local/share/codehydra/vscode/user-data"
-      );
-      expect(pathProvider.vscodeSetupMarkerPath).toBe(
-        "/home/testuser/.local/share/codehydra/vscode/.setup-completed"
-      );
-      expect(pathProvider.electronDataDir).toBe("/home/testuser/.local/share/codehydra/electron");
+      // Uses join() internally so separators are platform-specific
+      const dataRoot = join("/home/testuser", ".local", "share", "codehydra");
+      expect(pathProvider.dataRootDir).toBe(dataRoot);
+      expect(pathProvider.projectsDir).toBe(join(dataRoot, "projects"));
+      expect(pathProvider.vscodeDir).toBe(join(dataRoot, "vscode"));
+      expect(pathProvider.vscodeExtensionsDir).toBe(join(dataRoot, "vscode", "extensions"));
+      expect(pathProvider.vscodeUserDataDir).toBe(join(dataRoot, "vscode", "user-data"));
+      expect(pathProvider.vscodeSetupMarkerPath).toBe(join(dataRoot, "vscode", ".setup-completed"));
+      expect(pathProvider.electronDataDir).toBe(join(dataRoot, "electron"));
       expect(pathProvider.vscodeAssetsDir).toBe(
-        "/opt/codehydra/resources/app.asar/out/main/assets"
+        join("/opt/codehydra/resources/app.asar", "out", "main", "assets")
       );
-      expect(pathProvider.binDir).toBe("/home/testuser/.local/share/codehydra/bin");
+      expect(pathProvider.binDir).toBe(join(dataRoot, "bin"));
     });
 
     it("binDir is under dataRootDir", () => {
@@ -213,27 +211,15 @@ describe("DefaultPathProvider", () => {
       });
       const pathProvider = new DefaultPathProvider(buildInfo, platformInfo);
 
-      expect(pathProvider.dataRootDir).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra"
-      );
-      expect(pathProvider.projectsDir).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra/projects"
-      );
-      expect(pathProvider.vscodeDir).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra/vscode"
-      );
-      expect(pathProvider.vscodeExtensionsDir).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra/vscode/extensions"
-      );
-      expect(pathProvider.vscodeUserDataDir).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra/vscode/user-data"
-      );
-      expect(pathProvider.vscodeSetupMarkerPath).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra/vscode/.setup-completed"
-      );
-      expect(pathProvider.electronDataDir).toBe(
-        "/Users/testuser/Library/Application Support/Codehydra/electron"
-      );
+      // Uses join() internally so separators are platform-specific
+      const dataRoot = join("/Users/testuser", "Library", "Application Support", "Codehydra");
+      expect(pathProvider.dataRootDir).toBe(dataRoot);
+      expect(pathProvider.projectsDir).toBe(join(dataRoot, "projects"));
+      expect(pathProvider.vscodeDir).toBe(join(dataRoot, "vscode"));
+      expect(pathProvider.vscodeExtensionsDir).toBe(join(dataRoot, "vscode", "extensions"));
+      expect(pathProvider.vscodeUserDataDir).toBe(join(dataRoot, "vscode", "user-data"));
+      expect(pathProvider.vscodeSetupMarkerPath).toBe(join(dataRoot, "vscode", ".setup-completed"));
+      expect(pathProvider.electronDataDir).toBe(join(dataRoot, "electron"));
     });
   });
 
@@ -279,9 +265,11 @@ describe("DefaultPathProvider", () => {
       const result = pathProvider.getProjectWorkspacesDir("/home/testuser/projects/myapp");
 
       // Should be <projectsDir>/<name>-<hash>/workspaces/
+      // Uses join() internally so separators are platform-specific
+      const expectedPrefix = join("/home/testuser", ".local", "share", "codehydra", "projects");
       expect(result).toContain("myapp-");
       expect(result).toMatch(/workspaces$/);
-      expect(result.startsWith("/home/testuser/.local/share/codehydra/projects/")).toBe(true);
+      expect(result.startsWith(expectedPrefix + sep)).toBe(true);
     });
 
     it("throws TypeError for relative path", () => {

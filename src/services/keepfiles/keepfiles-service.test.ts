@@ -4,6 +4,7 @@
  * Uses mocked FileSystemLayer to test the service logic.
  */
 
+import { join } from "path";
 import { describe, it, expect, vi } from "vitest";
 import { KeepFilesService } from "./keepfiles-service";
 import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
@@ -96,21 +97,23 @@ describe("KeepFilesService", () => {
 
     describe("directory pattern", () => {
       it("copies entire directory tree by scanning files", async () => {
-        // When a directory pattern matches, the implementation scans into the directory
-        // and copies matching files individually (to support negation patterns)
         const readFileFn = vi.fn().mockResolvedValue(".vscode/");
-        const readdirFn = vi.fn().mockImplementation((path: string) => {
-          if (path === "/project") {
+        // Use join() for path comparisons - the service uses path.join() internally
+        const projectRoot = "/project";
+        const vscodeDir = join(projectRoot, ".vscode");
+        const vscodeSubdir = join(projectRoot, ".vscode", "subdir");
+        const readdirFn = vi.fn().mockImplementation((pathArg: string) => {
+          if (pathArg === projectRoot) {
             return Promise.resolve([createDirEntry(".vscode", { isDirectory: true })]);
           }
-          if (path === "/project/.vscode") {
+          if (pathArg === vscodeDir) {
             return Promise.resolve([
               createDirEntry("settings.json", { isFile: true }),
               createDirEntry("extensions.json", { isFile: true }),
               createDirEntry("subdir", { isDirectory: true }),
             ]);
           }
-          if (path === "/project/.vscode/subdir") {
+          if (pathArg === vscodeSubdir) {
             return Promise.resolve([createDirEntry("config.json", { isFile: true })]);
           }
           return Promise.resolve([]);
@@ -125,10 +128,11 @@ describe("KeepFilesService", () => {
           mkdir: vi.fn(),
           unlink: vi.fn(),
           rm: vi.fn(),
+          makeExecutable: vi.fn(),
         };
         const service = new KeepFilesService(mockFs, createSilentLogger());
 
-        const result = await service.copyToWorkspace("/project", "/workspace");
+        const result = await service.copyToWorkspace(projectRoot, "/workspace");
 
         // Each file is copied individually (3 files total)
         expect(result.copiedCount).toBe(3);
@@ -162,11 +166,13 @@ describe("KeepFilesService", () => {
         // Note: For negation to work with files inside a directory, use "dir/*" or "dir/**"
         // pattern instead of "dir/". This is a gitignore limitation - you can't re-include
         // a file if a parent directory is excluded.
-        const readdirFn = vi.fn().mockImplementation((path: string) => {
-          if (path === "/project") {
+        const projectRoot = "/project";
+        const secretsDir = join(projectRoot, "secrets");
+        const readdirFn = vi.fn().mockImplementation((pathArg: string) => {
+          if (pathArg === projectRoot) {
             return Promise.resolve([createDirEntry("secrets", { isDirectory: true })]);
           }
-          if (path === "/project/secrets") {
+          if (pathArg === secretsDir) {
             return Promise.resolve([
               createDirEntry("api-key.txt", { isFile: true }),
               createDirEntry("README.md", { isFile: true }),
@@ -185,10 +191,11 @@ describe("KeepFilesService", () => {
           mkdir: vi.fn(),
           unlink: vi.fn(),
           rm: vi.fn(),
+          makeExecutable: vi.fn(),
         };
         const service = new KeepFilesService(mockFs, createSilentLogger());
 
-        const result = await service.copyToWorkspace("/project", "/workspace");
+        const result = await service.copyToWorkspace(projectRoot, "/workspace");
 
         // Should copy secrets/api-key.txt but NOT secrets/README.md
         expect(result.copiedCount).toBe(1);
@@ -220,6 +227,7 @@ describe("KeepFilesService", () => {
           mkdir: vi.fn(),
           unlink: vi.fn(),
           rm: vi.fn(),
+          makeExecutable: vi.fn(),
         };
         const service = new KeepFilesService(mockFs, createSilentLogger());
 
@@ -274,6 +282,7 @@ describe("KeepFilesService", () => {
           mkdir: vi.fn(),
           unlink: vi.fn(),
           rm: vi.fn(),
+          makeExecutable: vi.fn(),
         };
         const service = new KeepFilesService(mockFs, createSilentLogger());
 

@@ -5,6 +5,7 @@
  * Boundary tests verify actual file writing behavior.
  */
 
+import { join, sep } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMockBuildInfo } from "../platform/build-info.test-utils";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
@@ -156,7 +157,9 @@ describe("ElectronLogService", () => {
       const pathFn = mockTransports.file.resolvePathFn!;
       const logPath = pathFn({});
 
-      expect(logPath).toMatch(/^\/test\/app-data\/logs\//);
+      // Uses join() internally so paths have platform-specific separators
+      const expectedPrefix = join("/test/app-data", "logs") + sep;
+      expect(logPath.startsWith(expectedPrefix)).toBe(true);
       expect(logPath).toMatch(/\.log$/);
     });
 
@@ -167,7 +170,8 @@ describe("ElectronLogService", () => {
 
       // Should match: YYYY-MM-DDTHH-MM-SS-<uuid>.log
       // e.g., 2025-12-16T10-30-00-abc12345.log
-      const filename = logPath.split("/").pop();
+      // Use path.sep to split cross-platform
+      const filename = logPath.split(sep).pop();
       expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-[a-f0-9]{8}\.log$/);
     });
   });
