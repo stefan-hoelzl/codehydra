@@ -24,6 +24,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Add Git Bash to PATH on Windows so code-server's postinstall.sh can run
+      - name: Add Git Bash to PATH (Windows)
+        if: runner.os == 'Windows'
+        run: echo "C:\Program Files\Git\bin" >> $env:GITHUB_PATH
+
       - run: npm ci --force
       - run: npm run validate
       - run: npm run test:boundary
