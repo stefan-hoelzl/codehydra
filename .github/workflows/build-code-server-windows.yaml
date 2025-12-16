@@ -74,21 +74,37 @@ jobs:
         working-directory: build
         run: npm install "code-server@$VERSION"
 
+      - name: Download Node.js for Windows
+        shell: bash
+        working-directory: build
+        run: |
+          # Get the Node.js version from the runner
+          NODE_FULL_VERSION=$(node --version)  # e.g., v22.12.0
+          NODE_FULL_VERSION=${NODE_FULL_VERSION#v}  # Remove leading 'v'
+
+          # Download Node.js Windows x64 zip
+          NODE_URL="https://nodejs.org/dist/v${NODE_FULL_VERSION}/node-v${NODE_FULL_VERSION}-win-x64.zip"
+          curl -fsSL "$NODE_URL" -o node-windows.zip
+
+          # Extract node.exe
+          unzip -q node-windows.zip "node-v${NODE_FULL_VERSION}-win-x64/node.exe"
+          mv "node-v${NODE_FULL_VERSION}-win-x64/node.exe" node.exe
+          rm -rf "node-v${NODE_FULL_VERSION}-win-x64" node-windows.zip
+
+          echo "::notice::Downloaded Node.js v${NODE_FULL_VERSION} for Windows"
+
       - name: Create package directory with flattened structure
         shell: bash
         working-directory: build
         run: |
-          mkdir -p "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR/lib"
 
           # Move contents of node_modules/code-server to package root (flattened)
-          # This includes lib/node (bundled Node.js), lib/vscode, and license files
+          # This includes lib/vscode and license files (but not Node.js - npm package doesn't include it)
           cp -r node_modules/code-server/* "$PACKAGE_DIR/"
 
-          # Verify bundled Node exists
-          if [ ! -f "$PACKAGE_DIR/lib/node" ]; then
-            echo "::error::Bundled Node.js not found at lib/node"
-            exit 1
-          fi
+          # Add downloaded Node.js for Windows
+          mv node.exe "$PACKAGE_DIR/lib/node.exe"
 
       - name: Create launcher script
         shell: bash
@@ -108,22 +124,15 @@ jobs:
           set "ROOT_DIR=%SCRIPT_DIR%.."
 
           :: Run code-server with bundled node
-          "%ROOT_DIR%\lib\node" "%ROOT_DIR%\out\node\entry.js" %*
+          "%ROOT_DIR%\lib\node.exe" "%ROOT_DIR%\out\node\entry.js" %*
           LAUNCHER
 
       - name: Test package
-        shell: bash
+        shell: cmd
         working-directory: build
         run: |
-          # Run code-server --version using bundled node and entry point
-          VERSION_OUTPUT=$("$PACKAGE_DIR/lib/node" "$PACKAGE_DIR/out/node/entry.js" --version)
-
-          if [ $? -ne 0 ]; then
-            echo "::error::Package test failed - code-server --version returned non-zero exit code"
-            exit 1
-          fi
-
-          echo "::notice::Test passed: $VERSION_OUTPUT"
+          :: Test the launcher script
+          %PACKAGE_DIR%\bin\code-server.cmd --version
 
       - name: Create zip package
         shell: pwsh
@@ -161,7 +170,7 @@ jobs:
         working-directory: build
         run: |
           TAG="code-server-windows-v$VERSION"
-          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node" --version)
+          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node.exe" --version)
 
           # Create release notes
           cat > release-notes.md << 'EOF'
@@ -188,7 +197,7 @@ jobs:
           Or directly with the bundled node:
 
           ```powershell
-          lib\node out\node\entry.js --help
+          lib\node.exe out\node\entry.js --help
           ```
 
           ### Official Release Notes
@@ -231,7 +240,7 @@ jobs:
           SHA256: ${{ steps.checksum.outputs.sha256 }}
         working-directory: build
         run: |
-          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node" --version)
+          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node.exe" --version)
 
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "::notice::DRY RUN complete - Package: $ZIP_NAME, Node: $BUNDLED_NODE_VERSION, SHA256: $SHA256"

@@ -33,7 +33,7 @@ reviewers: [review-arch, review-docs, review-testing]
 │  │  Input: dry_run (optional, for testing) │                        │
 │  │                                         │                        │
 │  │  1. Fetch coder/code-server releases    │                        │
-│  │  2. Filter >= MIN_VERSION (4.106.0)     │                        │
+│  │  2. Filter >= MIN_VERSION (4.106.3)     │                        │
 │  │  3. Fetch existing Windows builds       │                        │
 │  │  4. Find missing versions               │                        │
 │  │  5. Trigger build for each missing      │                        │
@@ -91,8 +91,9 @@ reviewers: [review-arch, review-docs, review-testing]
   - Accepts `dry_run` input via `workflow_dispatch` (optional, default false)
   - Runs on `windows-latest`
   - Installs Node.js 22, runs `npm install code-server@{version}`
+  - Downloads Node.js for Windows (npm package doesn't include bundled Node)
   - Flattens package: moves contents of `node_modules/code-server/` to root (includes license files)
-  - Creates `bin/code-server.cmd` launcher script (uses bundled `lib/node`)
+  - Creates `bin/code-server.cmd` launcher script (uses `lib/node.exe`)
   - Creates zip package matching Linux/macOS release layout
   - Calculates SHA256 checksum
   - Generates artifact attestation using `actions/attest-build-provenance`
@@ -285,21 +286,37 @@ jobs:
         working-directory: build
         run: npm install "code-server@$VERSION"
 
+      - name: Download Node.js for Windows
+        shell: bash
+        working-directory: build
+        run: |
+          # Get the Node.js version from the runner
+          NODE_FULL_VERSION=$(node --version)  # e.g., v22.12.0
+          NODE_FULL_VERSION=${NODE_FULL_VERSION#v}  # Remove leading 'v'
+
+          # Download Node.js Windows x64 zip
+          NODE_URL="https://nodejs.org/dist/v${NODE_FULL_VERSION}/node-v${NODE_FULL_VERSION}-win-x64.zip"
+          curl -fsSL "$NODE_URL" -o node-windows.zip
+
+          # Extract node.exe
+          unzip -q node-windows.zip "node-v${NODE_FULL_VERSION}-win-x64/node.exe"
+          mv "node-v${NODE_FULL_VERSION}-win-x64/node.exe" node.exe
+          rm -rf "node-v${NODE_FULL_VERSION}-win-x64" node-windows.zip
+
+          echo "::notice::Downloaded Node.js v${NODE_FULL_VERSION} for Windows"
+
       - name: Create package directory with flattened structure
         shell: bash
         working-directory: build
         run: |
-          mkdir -p "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR/lib"
 
           # Move contents of node_modules/code-server to package root (flattened)
-          # This includes lib/node (bundled Node.js), lib/vscode, and license files
+          # This includes lib/vscode and license files (but not Node.js - npm package doesn't include it)
           cp -r node_modules/code-server/* "$PACKAGE_DIR/"
 
-          # Verify bundled Node exists
-          if [ ! -f "$PACKAGE_DIR/lib/node" ]; then
-            echo "::error::Bundled Node.js not found at lib/node"
-            exit 1
-          fi
+          # Add downloaded Node.js for Windows
+          mv node.exe "$PACKAGE_DIR/lib/node.exe"
 
       - name: Create launcher script
         shell: bash
@@ -319,22 +336,15 @@ jobs:
           set "ROOT_DIR=%SCRIPT_DIR%.."
 
           :: Run code-server with bundled node
-          "%ROOT_DIR%\lib\node" "%ROOT_DIR%\out\node\entry.js" %*
+          "%ROOT_DIR%\lib\node.exe" "%ROOT_DIR%\out\node\entry.js" %*
           LAUNCHER
 
       - name: Test package
-        shell: bash
+        shell: cmd
         working-directory: build
         run: |
-          # Run code-server --version using bundled node and entry point
-          VERSION_OUTPUT=$("$PACKAGE_DIR/lib/node" "$PACKAGE_DIR/out/node/entry.js" --version)
-
-          if [ $? -ne 0 ]; then
-            echo "::error::Package test failed - code-server --version returned non-zero exit code"
-            exit 1
-          fi
-
-          echo "::notice::Test passed: $VERSION_OUTPUT"
+          :: Test the launcher script
+          %PACKAGE_DIR%\bin\code-server.cmd --version
 
       - name: Create zip package
         shell: pwsh
@@ -372,7 +382,7 @@ jobs:
         working-directory: build
         run: |
           TAG="code-server-windows-v$VERSION"
-          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node" --version)
+          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node.exe" --version)
 
           # Create release notes
           cat > release-notes.md << 'EOF'
@@ -399,7 +409,7 @@ jobs:
           Or directly with the bundled node:
 
           ```powershell
-          lib\node out\node\entry.js --help
+          lib\node.exe out\node\entry.js --help
           ```
 
           ### Official Release Notes
@@ -442,7 +452,7 @@ jobs:
           SHA256: ${{ steps.checksum.outputs.sha256 }}
         working-directory: build
         run: |
-          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node" --version)
+          BUNDLED_NODE_VERSION=$("$PACKAGE_DIR/lib/node.exe" --version)
 
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "::notice::DRY RUN complete - Package: $ZIP_NAME, Node: $BUNDLED_NODE_VERSION, SHA256: $SHA256"
@@ -472,7 +482,7 @@ permissions:
   actions: write # Required to trigger other workflows
 
 env:
-  MIN_VERSION: "4.106.0"
+  MIN_VERSION: "4.106.3"
 
 jobs:
   check:
@@ -534,8 +544,8 @@ jobs:
           UPSTREAM='${{ steps.upstream.outputs.versions }}'
           EXISTING='${{ steps.existing.outputs.versions }}'
 
-          # Find versions in upstream but not in existing
-          MISSING=$(jq -n \
+          # Find versions in upstream but not in existing (use -c for compact single-line output)
+          MISSING=$(jq -c -n \
             --argjson upstream "$UPSTREAM" \
             --argjson existing "$EXISTING" \
             '$upstream - $existing')
@@ -597,7 +607,7 @@ code-server-4.106.3-win32-x64.zip
     ├── bin/
     │   └── code-server.cmd       # Windows launcher script
     ├── lib/
-    │   ├── node                  # Bundled Node.js (from code-server npm package)
+    │   ├── node.exe              # Bundled Node.js (downloaded for Windows)
     │   └── vscode/               # VS Code distribution
     ├── out/
     │   └── node/
@@ -612,7 +622,7 @@ code-server-4.106.3-win32-x64.zip
 | Linux/macOS                      | Windows (our build)           |
 | -------------------------------- | ----------------------------- |
 | `bin/code-server` (shell script) | `bin/code-server.cmd` (batch) |
-| `lib/node` (bundled Node.js)     | `lib/node` (same)             |
+| `lib/node` (bundled Node.js)     | `lib/node.exe` (downloaded)   |
 | `lib/vscode/`                    | `lib/vscode/`                 |
 | `out/node/entry.js`              | `out\node\entry.js`           |
 

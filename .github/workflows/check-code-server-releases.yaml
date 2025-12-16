@@ -16,7 +16,7 @@ permissions:
   actions: write # Required to trigger other workflows
 
 env:
-  MIN_VERSION: "4.106.0"
+  MIN_VERSION: "4.106.3"
 
 jobs:
   check:
@@ -78,8 +78,8 @@ jobs:
           UPSTREAM='${{ steps.upstream.outputs.versions }}'
           EXISTING='${{ steps.existing.outputs.versions }}'
 
-          # Find versions in upstream but not in existing
-          MISSING=$(jq -n \
+          # Find versions in upstream but not in existing (use -c for compact single-line output)
+          MISSING=$(jq -c -n \
             --argjson upstream "$UPSTREAM" \
             --argjson existing "$EXISTING" \
             '$upstream - $existing')

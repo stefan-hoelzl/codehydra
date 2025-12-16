@@ -107,7 +107,7 @@ code-server doesn't publish Windows binaries. CodeHydra automatically builds and
 ### Automation
 
 - **Daily check**: `check-code-server-releases.yaml` runs at 6 AM UTC
-- **Build trigger**: Automatically triggers builds for missing versions (>= 4.106.0)
+- **Build trigger**: Automatically triggers builds for missing versions (>= 4.106.3)
 - **Releases**: Published to GitHub Releases in this repository
 
 ### Package Layout
@@ -119,7 +119,7 @@ code-server-{version}-win32-x64/
 ├── bin/
 │   └── code-server.cmd       # Windows launcher script
 ├── lib/
-│   ├── node                  # Bundled Node.js (from code-server npm package)
+│   ├── node.exe              # Bundled Node.js (downloaded for Windows)
 │   └── vscode/               # VS Code distribution
 ├── out/
 │   └── node/
