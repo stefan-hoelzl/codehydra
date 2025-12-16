@@ -7,6 +7,7 @@ import type { WorkspacePath, AgentStatusCounts, AggregatedAgentStatus } from "..
 import type { IDisposable, Unsubscribe, ClientStatus, DiscoveredInstance } from "./types";
 import { OpenCodeClient, type PermissionEvent, type SdkClientFactory } from "./opencode-client";
 import type { DiscoveryService } from "./discovery-service";
+import type { Logger } from "../logging";
 
 /**
  * Callback for status changes.
@@ -23,8 +24,10 @@ export type StatusChangedCallback = (
 class OpenCodeProvider implements IDisposable {
   private readonly clients = new Map<number, OpenCodeClient>();
   private readonly sdkFactory: SdkClientFactory | undefined;
+  private readonly logger: Logger;
 
-  constructor(sdkFactory: SdkClientFactory | undefined) {
+  constructor(logger: Logger, sdkFactory: SdkClientFactory | undefined) {
+    this.logger = logger;
     this.sdkFactory = sdkFactory;
   }
   /**
@@ -75,7 +78,7 @@ class OpenCodeProvider implements IDisposable {
     // Add clients for new ports (don't connect yet - need to fetch root sessions first)
     for (const { port } of instances) {
       if (!this.clients.has(port)) {
-        const client = new OpenCodeClient(port, this.sdkFactory);
+        const client = new OpenCodeClient(port, this.logger, this.sdkFactory);
         // Subscribe to status changes from client
         client.onStatusChanged((status) => this.handleStatusChanged(port, status));
         // Subscribe to session events for permission correlation
@@ -253,11 +256,14 @@ export class AgentStatusManager implements IDisposable {
   private readonly listeners = new Set<StatusChangedCallback>();
   private discoveryUnsubscribe: Unsubscribe | null = null;
   private readonly sdkFactory: SdkClientFactory | undefined;
+  private readonly logger: Logger;
 
   constructor(
     private readonly discoveryService: DiscoveryService,
+    logger: Logger,
     sdkFactory: SdkClientFactory | undefined = undefined
   ) {
+    this.logger = logger;
     this.sdkFactory = sdkFactory;
     // Subscribe to discovery service for instance changes
     this.discoveryUnsubscribe = discoveryService.onInstancesChanged((workspace, instances) => {
@@ -273,7 +279,7 @@ export class AgentStatusManager implements IDisposable {
       return;
     }
 
-    const provider = new OpenCodeProvider(this.sdkFactory);
+    const provider = new OpenCodeProvider(this.logger, this.sdkFactory);
     // Subscribe to status changes (includes permission changes)
     provider.onStatusChange(() => this.updateStatus(path));
 

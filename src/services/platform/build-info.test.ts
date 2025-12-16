@@ -7,6 +7,12 @@ import { createMockBuildInfo } from "./build-info.test-utils";
 import type { BuildInfo } from "./build-info";
 
 describe("createMockBuildInfo", () => {
+  it("returns version: '1.0.0-test' by default", () => {
+    const buildInfo = createMockBuildInfo();
+
+    expect(buildInfo.version).toBe("1.0.0-test");
+  });
+
   it("returns isDevelopment: true by default", () => {
     const buildInfo = createMockBuildInfo();
 
@@ -17,6 +23,12 @@ describe("createMockBuildInfo", () => {
     const buildInfo = createMockBuildInfo();
 
     expect(buildInfo.gitBranch).toBe("test-branch");
+  });
+
+  it("accepts override for version", () => {
+    const buildInfo = createMockBuildInfo({ version: "2.0.0" });
+
+    expect(buildInfo.version).toBe("2.0.0");
   });
 
   it("accepts override for isDevelopment", () => {
@@ -42,7 +54,9 @@ describe("createMockBuildInfo", () => {
 
     // TypeScript ensures type compatibility at compile time
     // This test verifies the interface is implemented correctly
+    expect(buildInfo).toHaveProperty("version");
     expect(buildInfo).toHaveProperty("isDevelopment");
+    expect(typeof buildInfo.version).toBe("string");
     expect(typeof buildInfo.isDevelopment).toBe("boolean");
   });
 });

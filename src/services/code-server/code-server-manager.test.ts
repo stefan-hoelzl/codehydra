@@ -9,6 +9,9 @@ import { CodeServerManager, urlForFolder } from "./code-server-manager";
 import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
 import { createMockHttpClient, createMockPortManager } from "../platform/network.test-utils";
 import type { HttpClient, PortManager, HttpRequestOptions } from "../platform/network";
+import { createSilentLogger } from "../logging";
+
+const testLogger = createSilentLogger();
 
 describe("urlForFolder", () => {
   it("generates correct URL with folder path", () => {
@@ -67,7 +70,8 @@ describe("CodeServerManager", () => {
       },
       mockProcessRunner,
       mockHttpClient,
-      mockPortManager
+      mockPortManager,
+      testLogger
     );
   });
 
@@ -91,7 +95,13 @@ describe("CodeServerManager", () => {
         userDataDir: "/tmp/code-server-user-data",
       };
 
-      const instance = new CodeServerManager(config, processRunner, httpClient, portManager);
+      const instance = new CodeServerManager(
+        config,
+        processRunner,
+        httpClient,
+        portManager,
+        testLogger
+      );
 
       expect(instance).toBeInstanceOf(CodeServerManager);
     });
@@ -152,7 +162,8 @@ describe("CodeServerManager", () => {
         },
         mockProcessRunner,
         mockHttpClient,
-        mockPortManager
+        mockPortManager,
+        testLogger
       );
 
       const port = await manager.ensureRunning();
@@ -199,7 +210,8 @@ describe("CodeServerManager", () => {
         },
         mockProcessRunner,
         mockHttpClient,
-        mockPortManager
+        mockPortManager,
+        testLogger
       );
 
       await manager.ensureRunning();
@@ -219,7 +231,8 @@ describe("CodeServerManager", () => {
         },
         mockProcessRunner,
         mockHttpClient,
-        mockPortManager
+        mockPortManager,
+        testLogger
       );
 
       // Should complete successfully (health check passed)
@@ -249,7 +262,8 @@ describe("CodeServerManager", () => {
         },
         mockProcessRunner,
         mockHttpClient,
-        mockPortManager
+        mockPortManager,
+        testLogger
       );
 
       const port = await manager.ensureRunning();
@@ -278,7 +292,8 @@ describe("CodeServerManager", () => {
         },
         mockProcessRunner,
         mockHttpClient,
-        mockPortManager
+        mockPortManager,
+        testLogger
       );
 
       const port = await manager.ensureRunning();
@@ -377,7 +392,13 @@ describe("CodeServerManager (with full DI)", () => {
         userDataDir: "/tmp/code-server-user-data",
       };
 
-      const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+      const manager = new CodeServerManager(
+        config,
+        processRunner,
+        httpClient,
+        portManager,
+        testLogger
+      );
 
       expect(manager).toBeInstanceOf(CodeServerManager);
     });
@@ -395,7 +416,13 @@ describe("CodeServerManager (with full DI)", () => {
         userDataDir: "/tmp/code-server-user-data",
       };
 
-      const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+      const manager = new CodeServerManager(
+        config,
+        processRunner,
+        httpClient,
+        portManager,
+        testLogger
+      );
 
       await manager.ensureRunning();
 
@@ -427,7 +454,13 @@ describe("CodeServerManager (with full DI)", () => {
         userDataDir: "/tmp/code-server-user-data",
       };
 
-      const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+      const manager = new CodeServerManager(
+        config,
+        processRunner,
+        httpClient,
+        portManager,
+        testLogger
+      );
 
       await manager.ensureRunning();
       await manager.stop();
@@ -465,7 +498,13 @@ describe("CodeServerManager (with full DI)", () => {
         userDataDir: "/tmp/code-server-user-data",
       };
 
-      const manager = new CodeServerManager(config, processRunner, httpClient, portManager);
+      const manager = new CodeServerManager(
+        config,
+        processRunner,
+        httpClient,
+        portManager,
+        testLogger
+      );
 
       await manager.ensureRunning();
       await manager.stop();

@@ -8,6 +8,7 @@ import type { ProcessRunner, SpawnedProcess } from "../platform/process";
 import type { HttpClient, PortManager } from "../platform/network";
 import { encodePathForUrl } from "../platform/paths";
 import { CodeServerError } from "../errors";
+import type { Logger } from "../logging";
 
 /**
  * Function to unsubscribe from PID change events.
@@ -48,6 +49,7 @@ export class CodeServerManager {
   private readonly processRunner: ProcessRunner;
   private readonly httpClient: HttpClient;
   private readonly portManager: PortManager;
+  private readonly logger: Logger;
   private state: InstanceState = "stopped";
   private currentPort: number | null = null;
   private currentPid: number | null = null;
@@ -59,12 +61,14 @@ export class CodeServerManager {
     config: CodeServerConfig,
     processRunner: ProcessRunner,
     httpClient: HttpClient,
-    portManager: PortManager
+    portManager: PortManager,
+    logger: Logger
   ) {
     this.config = config;
     this.processRunner = processRunner;
     this.httpClient = httpClient;
     this.portManager = portManager;
+    this.logger = logger;
   }
 
   /**
@@ -151,6 +155,8 @@ export class CodeServerManager {
   }
 
   private async doStart(): Promise<number> {
+    this.logger.info("Starting code-server");
+
     // Find an available port
     const port = await this.portManager.findFreePort();
     this.currentPort = port;
@@ -199,6 +205,7 @@ export class CodeServerManager {
         this.notifyPidChanged(this.currentPid);
       }
 
+      this.logger.info("Started", { port, pid: this.currentPid ?? 0 });
       return port;
     } catch (error: unknown) {
       this.currentPort = null;
@@ -206,6 +213,7 @@ export class CodeServerManager {
       this.process = null;
 
       const message = error instanceof Error ? error.message : "Unknown error starting code-server";
+      this.logger.error("Start failed", { error: message });
       throw new CodeServerError(`Failed to start code-server: ${message}`);
     }
   }
@@ -242,8 +250,12 @@ export class CodeServerManager {
       const response = await this.httpClient.fetch(`http://localhost:${port}/healthz`, {
         timeout: 1000,
       });
-      return response.status === 200;
-    } catch {
+      const healthy = response.status === 200;
+      this.logger.debug("Health check", { status: healthy ? "ok" : "failed" });
+      return healthy;
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Health check failed", { error: errMsg });
       return false;
     }
   }
@@ -260,10 +272,12 @@ export class CodeServerManager {
    */
   async stop(): Promise<void> {
     const proc = this.process;
+    const pid = this.currentPid;
     if (this.state === "stopped" || proc === null) {
       return;
     }
 
+    this.logger.info("Stopping", { pid: pid ?? 0 });
     this.state = "stopping";
 
     try {
@@ -278,6 +292,8 @@ export class CodeServerManager {
         proc.kill("SIGKILL");
         await proc.wait();
       }
+
+      this.logger.info("Stopped", { pid: pid ?? 0, exitCode: result.exitCode ?? 0 });
     } finally {
       this.state = "stopped";
       this.currentPort = null;

@@ -22,6 +22,7 @@ vi.mock("electron", () => {
 
 // Import after mock
 import { registerApiHandlers, wireApiEvents, formatWindowTitle } from "./api-handlers";
+import { createSilentLogger } from "../../services/logging";
 
 // =============================================================================
 // Mock API Factory
@@ -139,7 +140,7 @@ describe("registerApiHandlers", () => {
   });
 
   it("registers all API handlers", () => {
-    registerApiHandlers(mockApi);
+    registerApiHandlers(mockApi, createSilentLogger());
 
     // Verify expected channels are registered
     const registeredChannels = mockHandle.mock.calls.map((call) => call[0]);
@@ -167,7 +168,7 @@ describe("Project API handlers", () => {
   beforeEach(() => {
     mockHandle.mockClear();
     mockApi = createMockApi();
-    registerApiHandlers(mockApi);
+    registerApiHandlers(mockApi, createSilentLogger());
   });
 
   function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
@@ -269,7 +270,7 @@ describe("Workspace API handlers", () => {
   beforeEach(() => {
     mockHandle.mockClear();
     mockApi = createMockApi();
-    registerApiHandlers(mockApi);
+    registerApiHandlers(mockApi, createSilentLogger());
   });
 
   function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
@@ -385,7 +386,7 @@ describe("UI API handlers", () => {
   beforeEach(() => {
     mockHandle.mockClear();
     mockApi = createMockApi();
-    registerApiHandlers(mockApi);
+    registerApiHandlers(mockApi, createSilentLogger());
   });
 
   function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
@@ -483,7 +484,7 @@ describe("Error serialization", () => {
   beforeEach(() => {
     mockHandle.mockClear();
     mockApi = createMockApi();
-    registerApiHandlers(mockApi);
+    registerApiHandlers(mockApi, createSilentLogger());
   });
 
   function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
@@ -698,7 +699,7 @@ describe("Workspace Metadata IPC Handlers", () => {
     });
 
     mockApi = createMockApi();
-    registerApiHandlers(mockApi);
+    registerApiHandlers(mockApi, createSilentLogger());
   });
 
   describe("api:workspace:set-metadata handler", () => {

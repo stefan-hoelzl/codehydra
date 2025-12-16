@@ -4,6 +4,7 @@
  */
 
 import pidtree from "pidtree";
+import type { Logger } from "../logging";
 
 /**
  * Interface for process tree operations.
@@ -22,11 +23,16 @@ export interface ProcessTreeProvider {
  * Process tree provider implementation using pidtree.
  */
 export class PidtreeProvider implements ProcessTreeProvider {
+  constructor(private readonly logger: Logger) {}
+
   async getDescendantPids(pid: number): Promise<Set<number>> {
     try {
       const descendants = await pidtree(pid);
+      this.logger.debug("GetDescendants", { pid, count: descendants.length });
       return new Set(descendants);
-    } catch {
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("GetDescendants failed", { pid, error: errMsg });
       // Return empty set on error (process may have exited)
       return new Set();
     }

@@ -35,10 +35,13 @@
     errorSetup,
     resetSetup,
   } from "$lib/stores/setup.svelte.js";
+  import { createLogger } from "$lib/logging";
   import MainView from "$lib/components/MainView.svelte";
   import SetupScreen from "$lib/components/SetupScreen.svelte";
   import SetupComplete from "$lib/components/SetupComplete.svelte";
   import SetupError from "$lib/components/SetupError.svelte";
+
+  const logger = createLogger("ui");
 
   /**
    * App mode discriminated union.
@@ -60,6 +63,10 @@
   $effect(() => {
     const unsubModeChange = api.onModeChange((event) => {
       handleModeChange(event);
+      // Log shortcut mode changes
+      if (event.mode === "shortcut" || event.previousMode === "shortcut") {
+        logger.debug("Shortcut mode", { enabled: event.mode === "shortcut" });
+      }
       // Announce mode changes for screen readers
       if (event.mode === "shortcut") {
         announceMessage = "Shortcut mode active. Use arrow keys to navigate.";
@@ -109,6 +116,8 @@
       }
     } catch (error) {
       // If lifecycle.getState() fails, fall back to ready mode
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn("UI error", { component: "App", error: message });
       console.error("Setup state check failed:", error);
       appMode = { type: "ready" };
     }
@@ -127,7 +136,9 @@
         errorSetup(result.message);
       }
     } catch (error) {
-      errorSetup(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn("UI error", { component: "App", error: message });
+      errorSetup(message);
     }
   }
 

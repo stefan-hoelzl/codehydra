@@ -3,7 +3,7 @@
  * This file is in shared/ so both main/preload and renderer can access the types.
  */
 
-import type { UIModeChangedEvent } from "./ipc";
+import type { UIModeChangedEvent, LogContext } from "./ipc";
 import type { UIMode } from "./ipc";
 import type { ShortcutKey } from "./shortcuts";
 
@@ -71,6 +71,16 @@ export interface Api {
     getState(): Promise<AppStateType>;
     setup(): Promise<SetupResult>;
     quit(): Promise<void>;
+  };
+  /**
+   * Log API for renderer-to-main process logging.
+   * Fire-and-forget - does not return a promise.
+   */
+  log: {
+    debug(logger: string, message: string, context?: LogContext): void;
+    info(logger: string, message: string, context?: LogContext): void;
+    warn(logger: string, message: string, context?: LogContext): void;
+    error(logger: string, message: string, context?: LogContext): void;
   };
   /**
    * Subscribe to API events.

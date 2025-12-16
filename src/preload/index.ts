@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { ApiIpcChannels } from "../shared/ipc";
-import type { UIModeChangedEvent } from "../shared/ipc";
+import type { UIModeChangedEvent, LogContext } from "../shared/ipc";
 import type { ShortcutKey } from "../shared/shortcuts";
 
 /**
@@ -72,6 +72,17 @@ contextBridge.exposeInMainWorld("api", {
     getState: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_GET_STATE),
     setup: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_SETUP),
     quit: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_QUIT),
+  },
+  // Log API (renderer → main, fire-and-forget)
+  log: {
+    debug: (logger: string, message: string, context?: LogContext) =>
+      ipcRenderer.send(ApiIpcChannels.LOG_DEBUG, { logger, message, context }),
+    info: (logger: string, message: string, context?: LogContext) =>
+      ipcRenderer.send(ApiIpcChannels.LOG_INFO, { logger, message, context }),
+    warn: (logger: string, message: string, context?: LogContext) =>
+      ipcRenderer.send(ApiIpcChannels.LOG_WARN, { logger, message, context }),
+    error: (logger: string, message: string, context?: LogContext) =>
+      ipcRenderer.send(ApiIpcChannels.LOG_ERROR, { logger, message, context }),
   },
   // Event subscription using api: prefixed channels
   on: <T>(event: string, callback: (event: T) => void): Unsubscribe => {

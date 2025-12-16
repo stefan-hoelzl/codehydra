@@ -13,6 +13,7 @@ import { createMockSdkClient, createMockSdkFactory, createTestSession } from "./
 import type { SdkClientFactory } from "./opencode-client";
 import type { SessionStatus as SdkSessionStatus } from "@opencode-ai/sdk";
 import type { DiscoveredInstance } from "./types";
+import { createSilentLogger } from "../logging";
 
 describe("AgentStatusManager", () => {
   let manager: AgentStatusManager;
@@ -44,7 +45,7 @@ describe("AgentStatusManager", () => {
     const mockSdk = createMockSdkClient();
     mockSdkFactory = createMockSdkFactory(mockSdk);
 
-    manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+    manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
   });
 
   afterEach(() => {
@@ -84,7 +85,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: {},
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath);
@@ -99,7 +100,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: {},
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       // Return instances so provider has clients
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
@@ -228,7 +229,7 @@ describe("AgentStatusManager", () => {
         });
       });
 
-      manager = new AgentStatusManager(mockDiscoveryService, factoryFn);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), factoryFn);
 
       const listener = vi.fn();
       manager.onStatusChanged(listener);
@@ -265,7 +266,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "idle" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 
@@ -283,7 +284,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "busy" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 
@@ -309,7 +310,7 @@ describe("AgentStatusManager", () => {
         });
       });
 
-      manager = new AgentStatusManager(mockDiscoveryService, factoryFn);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), factoryFn);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([
         { port: 8080 },
@@ -330,7 +331,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "busy" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 
@@ -366,7 +367,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": retryStatus },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 
@@ -385,7 +386,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "idle" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 
@@ -417,7 +418,7 @@ describe("AgentStatusManager", () => {
         });
       });
 
-      manager = new AgentStatusManager(mockDiscoveryService, factoryFn);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), factoryFn);
 
       // Two instances for the same workspace
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([
@@ -442,7 +443,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "idle" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(mockDiscoveryService, mockSdkFactory);
+      manager = new AgentStatusManager(mockDiscoveryService, createSilentLogger(), mockSdkFactory);
 
       vi.mocked(mockDiscoveryService.getInstancesForWorkspace).mockReturnValue([{ port: 8080 }]);
 

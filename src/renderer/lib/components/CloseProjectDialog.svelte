@@ -3,7 +3,10 @@
   import { projects as projectsApi, workspaces } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { projects } from "$lib/stores/projects.svelte.js";
+  import { createLogger } from "$lib/logging";
   import type { ProjectId } from "@shared/api/types";
+
+  const logger = createLogger("ui");
 
   interface CloseProjectDialogProps {
     open: boolean;
@@ -35,6 +38,8 @@
 
     submitError = null;
     isSubmitting = true;
+
+    logger.debug("Dialog submitted", { type: "close-project" });
 
     try {
       // If removeAll is checked, remove all workspaces first
@@ -71,13 +76,16 @@
       await projectsApi.close(projectId);
       closeDialog();
     } catch (error) {
-      submitError = error instanceof Error ? error.message : "Failed to close project";
+      const message = error instanceof Error ? error.message : "Failed to close project";
+      logger.warn("UI error", { component: "CloseProjectDialog", error: message });
+      submitError = message;
       isSubmitting = false;
     }
   }
 
   // Handle cancel
   function handleCancel(): void {
+    logger.debug("Dialog closed", { type: "close-project" });
     closeDialog();
   }
 

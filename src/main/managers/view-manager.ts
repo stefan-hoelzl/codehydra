@@ -13,6 +13,7 @@ import { openExternal } from "../utils/external-url";
 import { ShortcutController } from "../shortcut-controller";
 import { projectDirName } from "../../services/platform/paths";
 import type { WorkspaceName } from "../../shared/api/types";
+import type { Logger } from "../../services/logging";
 
 /**
  * Sidebar minimized width in pixels.
@@ -101,17 +102,20 @@ export class ViewManager implements IViewManager {
    */
   private isChangingWorkspace = false;
   private readonly unsubscribeResize: Unsubscribe;
+  private readonly logger: Logger;
 
   private constructor(
     windowManager: WindowManager,
     codeServerPort: number,
     uiView: WebContentsView,
-    shortcutController: ShortcutController
+    shortcutController: ShortcutController,
+    logger: Logger
   ) {
     this.windowManager = windowManager;
     this.uiView = uiView;
     this.shortcutController = shortcutController;
     this.codeServerPort = codeServerPort;
+    this.logger = logger;
 
     // Subscribe to resize events
     this.unsubscribeResize = this.windowManager.onResize(() => {
@@ -124,9 +128,14 @@ export class ViewManager implements IViewManager {
    *
    * @param windowManager - The WindowManager instance
    * @param config - Configuration options
+   * @param logger - Logger for [view] scope
    * @returns A new ViewManager instance
    */
-  static create(windowManager: WindowManager, config: ViewManagerConfig): ViewManager {
+  static create(
+    windowManager: WindowManager,
+    config: ViewManagerConfig,
+    logger: Logger
+  ): ViewManager {
     // Create UI layer with security settings
     const uiView = new WebContentsView({
       webPreferences: {
@@ -166,7 +175,8 @@ export class ViewManager implements IViewManager {
       windowManager,
       config.codeServerPort,
       uiView,
-      shortcutController
+      shortcutController,
+      logger
     );
     viewManagerHolder.instance = viewManager;
 
@@ -268,6 +278,7 @@ export class ViewManager implements IViewManager {
     // Note: No loadURL() - URL is loaded on first activation
     // Note: No updateBounds() - detached views don't need bounds
 
+    this.logger.debug("View created", { workspace: workspaceName });
     return view;
   }
 
@@ -284,6 +295,8 @@ export class ViewManager implements IViewManager {
     if (!view) {
       return;
     }
+
+    const workspaceName = basename(workspacePath);
 
     // Save partition name before removing from map (needed for storage clearing)
     const partitionName = this.workspacePartitions.get(workspacePath);
@@ -345,6 +358,8 @@ export class ViewManager implements IViewManager {
       // Ignore errors during cleanup - view may be in an inconsistent state
       // This can happen when the view or its webContents is already destroyed
     }
+
+    this.logger.debug("View destroyed", { workspace: workspaceName });
   }
 
   /**
@@ -411,6 +426,9 @@ export class ViewManager implements IViewManager {
     // Mark as loaded first to prevent re-entry
     this.loadedWorkspaces.add(workspacePath);
 
+    const workspaceName = basename(workspacePath);
+    this.logger.debug("Loading URL", { workspace: workspaceName });
+
     // Load the URL
     void view.webContents.loadURL(url);
   }
@@ -430,6 +448,8 @@ export class ViewManager implements IViewManager {
       if (!window.isDestroyed()) {
         window.contentView.addChildView(view);
         this.attachedWorkspacePath = workspacePath;
+        const workspaceName = basename(workspacePath);
+        this.logger.debug("View attached", { workspace: workspaceName });
       }
     } catch {
       // Ignore errors during attach - window may be closing
@@ -446,10 +466,13 @@ export class ViewManager implements IViewManager {
     const view = this.workspaceViews.get(workspacePath);
     if (!view) return;
 
+    const workspaceName = basename(workspacePath);
+
     try {
       const window = this.windowManager.getWindow();
       if (!window.isDestroyed()) {
         window.contentView.removeChildView(view);
+        this.logger.debug("View detached", { workspace: workspaceName });
       }
     } catch {
       // Ignore errors during detach - window may be closing
@@ -603,6 +626,8 @@ export class ViewManager implements IViewManager {
     } catch {
       // Ignore errors during mode change - window may be closing
     }
+
+    this.logger.debug("Mode changed", { mode: newMode, previous: previousMode });
 
     // Emit event to subscribers
     const event: UIModeChangedEvent = { mode: newMode, previousMode };

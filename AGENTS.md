@@ -103,9 +103,12 @@ For GPU optimization, workspace views use **detachment** instead of zero-bounds 
 
 ### Environment Variables
 
-| Variable                   | Values                | Description                    |
-| -------------------------- | --------------------- | ------------------------------ |
-| `CODEHYDRA_ELECTRON_FLAGS` | Space-separated flags | Electron command-line switches |
+| Variable                   | Values                   | Description                                 |
+| -------------------------- | ------------------------ | ------------------------------------------- |
+| `CODEHYDRA_ELECTRON_FLAGS` | Space-separated flags    | Electron command-line switches              |
+| `CODEHYDRA_LOGLEVEL`       | debug\|info\|warn\|error | Override default log level                  |
+| `CODEHYDRA_PRINT_LOGS`     | any non-empty value      | Print logs to stdout/stderr                 |
+| `CODEHYDRA_LOGGER`         | comma-separated names    | Filter logs by logger (e.g., `git,process`) |
 
 ### Common Electron Flags for GPU Issues
 

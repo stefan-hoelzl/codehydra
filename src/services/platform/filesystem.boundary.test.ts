@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { symlink, writeFile as nodeWriteFile, mkdir as nodeMkdir } from "node:fs/promises";
 import { DefaultFileSystemLayer } from "./filesystem";
+import { createSilentLogger } from "../logging";
 import { FileSystemError } from "../errors";
 import { createTempDir } from "../test-utils";
 
@@ -16,7 +17,7 @@ describe("DefaultFileSystemLayer", () => {
   let tempDir: { path: string; cleanup: () => Promise<void> };
 
   beforeEach(async () => {
-    fs = new DefaultFileSystemLayer();
+    fs = new DefaultFileSystemLayer(createSilentLogger());
     tempDir = await createTempDir();
   });
 

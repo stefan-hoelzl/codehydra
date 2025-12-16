@@ -9,6 +9,7 @@ import { GitWorktreeProvider } from "./git-worktree-provider";
 import { SimpleGitClient } from "./simple-git-client";
 import { createTestGitRepo, createTempDir } from "../test-utils";
 import { DefaultFileSystemLayer } from "../platform/filesystem";
+import { createSilentLogger } from "../logging";
 import { simpleGit } from "simple-git";
 import path, { join } from "node:path";
 import { mkdir as nodeMkdir, writeFile as nodeWriteFile } from "node:fs/promises";
@@ -32,8 +33,8 @@ describe("GitWorktreeProvider integration", () => {
     workspacesDir = wsDir.path;
     cleanupWorkspacesDir = wsDir.cleanup;
 
-    gitClient = new SimpleGitClient();
-    fs = new DefaultFileSystemLayer();
+    gitClient = new SimpleGitClient(createSilentLogger());
+    fs = new DefaultFileSystemLayer(createSilentLogger());
   });
 
   afterEach(async () => {
@@ -225,7 +226,7 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
     workspacesDir = join(tempDir.path, "workspaces");
     await nodeMkdir(projectRoot);
     await nodeMkdir(workspacesDir);
-    fs = new DefaultFileSystemLayer();
+    fs = new DefaultFileSystemLayer(createSilentLogger());
 
     // Initialize git repo
     await initGitRepo(projectRoot);
@@ -254,8 +255,8 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
       // Create a file that shouldn't be copied
       await nodeWriteFile(join(projectRoot, "README.md"), "# README", "utf-8");
 
-      const gitClient = new SimpleGitClient();
-      const keepFilesService = new KeepFilesService(fs);
+      const gitClient = new SimpleGitClient(createSilentLogger());
+      const keepFilesService = new KeepFilesService(fs, createSilentLogger());
       const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
         keepFilesService,
       });
@@ -284,8 +285,8 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
       // Create only .env (nonexistent.txt doesn't exist, but that shouldn't cause an error)
       await nodeWriteFile(join(projectRoot, ".env"), "SECRET=value", "utf-8");
 
-      const gitClient = new SimpleGitClient();
-      const keepFilesService = new KeepFilesService(fs);
+      const gitClient = new SimpleGitClient(createSilentLogger());
+      const keepFilesService = new KeepFilesService(fs, createSilentLogger());
       const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
         keepFilesService,
       });
@@ -307,8 +308,8 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
       await nodeWriteFile(join(projectRoot, ".keepfiles"), ".env\n", "utf-8");
       await nodeWriteFile(join(projectRoot, ".env"), "SHARED=value", "utf-8");
 
-      const gitClient = new SimpleGitClient();
-      const keepFilesService = new KeepFilesService(fs);
+      const gitClient = new SimpleGitClient(createSilentLogger());
+      const keepFilesService = new KeepFilesService(fs, createSilentLogger());
       const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
         keepFilesService,
       });
@@ -336,8 +337,8 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
       await nodeWriteFile(join(projectRoot, ".keepfiles"), ".env\n", "utf-8");
       await nodeWriteFile(join(projectRoot, ".env"), "SECRET=value", "utf-8");
 
-      const gitClient = new SimpleGitClient();
-      const keepFilesService = new KeepFilesService(fs);
+      const gitClient = new SimpleGitClient(createSilentLogger());
+      const keepFilesService = new KeepFilesService(fs, createSilentLogger());
 
       // Spy on copyToWorkspace to verify timing
       const copyToWorkspaceSpy = vi.spyOn(keepFilesService, "copyToWorkspace");

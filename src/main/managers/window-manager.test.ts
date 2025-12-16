@@ -52,6 +52,7 @@ vi.mock("electron", () => ({
 }));
 
 import { WindowManager } from "./window-manager";
+import { createSilentLogger } from "../../services/logging";
 
 describe("WindowManager", () => {
   beforeEach(() => {
@@ -64,7 +65,7 @@ describe("WindowManager", () => {
 
   describe("create", () => {
     it("creates a BaseWindow with default title", () => {
-      WindowManager.create();
+      WindowManager.create(createSilentLogger());
 
       expect(MockBaseWindowClass).toHaveBeenCalledWith({
         width: 1200,
@@ -76,7 +77,7 @@ describe("WindowManager", () => {
     });
 
     it("creates a BaseWindow with custom title", () => {
-      WindowManager.create("CodeHydra (feature-branch)");
+      WindowManager.create(createSilentLogger(), "CodeHydra (feature-branch)");
 
       expect(MockBaseWindowClass).toHaveBeenCalledWith({
         width: 1200,
@@ -88,13 +89,13 @@ describe("WindowManager", () => {
     });
 
     it("returns a WindowManager instance", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
 
       expect(manager).toBeInstanceOf(WindowManager);
     });
 
     it("sets window icon from provided icon path", () => {
-      WindowManager.create("CodeHydra", "/app/resources/icon.png");
+      WindowManager.create(createSilentLogger(), "CodeHydra", "/app/resources/icon.png");
 
       expect(mockNativeImage.createFromPath).toHaveBeenCalledWith("/app/resources/icon.png");
       expect(mockBaseWindow.setIcon).toHaveBeenCalledWith(mockNativeImage._mockImage);
@@ -103,7 +104,7 @@ describe("WindowManager", () => {
     it("does not set icon when nativeImage returns empty", () => {
       mockNativeImage._mockImage.isEmpty.mockReturnValueOnce(true);
 
-      WindowManager.create("CodeHydra", "/app/resources/icon.png");
+      WindowManager.create(createSilentLogger(), "CodeHydra", "/app/resources/icon.png");
 
       expect(mockNativeImage.createFromPath).toHaveBeenCalled();
       expect(mockBaseWindow.setIcon).not.toHaveBeenCalled();
@@ -115,11 +116,13 @@ describe("WindowManager", () => {
       });
 
       // Should not throw
-      expect(() => WindowManager.create("CodeHydra", "/app/resources/icon.png")).not.toThrow();
+      expect(() =>
+        WindowManager.create(createSilentLogger(), "CodeHydra", "/app/resources/icon.png")
+      ).not.toThrow();
     });
 
     it("does not attempt to load icon when iconPath is not provided", () => {
-      WindowManager.create("CodeHydra");
+      WindowManager.create(createSilentLogger(), "CodeHydra");
 
       expect(mockNativeImage.createFromPath).not.toHaveBeenCalled();
       expect(mockBaseWindow.setIcon).not.toHaveBeenCalled();
@@ -129,7 +132,7 @@ describe("WindowManager", () => {
   describe("maximizeAsync", () => {
     it("maximizes the window and notifies resize callbacks after delay", async () => {
       vi.useFakeTimers();
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
       const callback = vi.fn();
       manager.onResize(callback);
       callback.mockClear();
@@ -155,7 +158,7 @@ describe("WindowManager", () => {
 
   describe("getWindow", () => {
     it("returns the created BaseWindow", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
 
       const window = manager.getWindow();
 
@@ -166,7 +169,7 @@ describe("WindowManager", () => {
   describe("getBounds", () => {
     it("returns window content bounds", () => {
       mockBaseWindow.getContentBounds.mockReturnValue({ width: 1400, height: 900, x: 100, y: 50 });
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
 
       const bounds = manager.getBounds();
 
@@ -176,7 +179,7 @@ describe("WindowManager", () => {
 
   describe("onResize", () => {
     it("registers a resize event listener", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
       const callback = vi.fn();
 
       manager.onResize(callback);
@@ -185,7 +188,7 @@ describe("WindowManager", () => {
     });
 
     it("calls callback when window resizes", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
       const callback = vi.fn();
 
       manager.onResize(callback);
@@ -202,7 +205,7 @@ describe("WindowManager", () => {
     });
 
     it("returns unsubscribe function that removes listener", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
       const callback = vi.fn();
 
       const unsubscribe = manager.onResize(callback);
@@ -223,7 +226,7 @@ describe("WindowManager", () => {
 
   describe("setTitle", () => {
     it("sets the window title", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
 
       manager.setTitle("CodeHydra - my-app / feature - (main)");
 
@@ -233,7 +236,7 @@ describe("WindowManager", () => {
 
   describe("close", () => {
     it("closes the window", () => {
-      const manager = WindowManager.create();
+      const manager = WindowManager.create(createSilentLogger());
 
       manager.close();
 

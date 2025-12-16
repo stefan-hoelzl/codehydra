@@ -197,6 +197,7 @@ export interface FileSystemLayer {
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { FileSystemError } from "../errors";
+import type { Logger } from "../logging";
 
 /**
  * Known error codes that map to FileSystemErrorCode.
@@ -265,69 +266,108 @@ function mapError(error: unknown, path: string): FileSystemError {
  * Maps Node.js errors to FileSystemError for consistent error handling.
  */
 export class DefaultFileSystemLayer implements FileSystemLayer {
-  async readFile(path: string): Promise<string> {
+  constructor(private readonly logger: Logger) {}
+
+  async readFile(filePath: string): Promise<string> {
+    this.logger.debug("Read", { path: filePath });
     try {
-      return await fs.readFile(path, "utf-8");
+      return await fs.readFile(filePath, "utf-8");
     } catch (error) {
-      throw mapError(error, path);
+      const fsError = mapError(error, filePath);
+      this.logger.warn("Read failed", {
+        path: filePath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
   }
 
-  async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(filePath: string, content: string): Promise<void> {
+    this.logger.debug("Write", { path: filePath });
     try {
-      await fs.writeFile(path, content, "utf-8");
+      await fs.writeFile(filePath, content, "utf-8");
     } catch (error) {
-      throw mapError(error, path);
+      const fsError = mapError(error, filePath);
+      this.logger.warn("Write failed", {
+        path: filePath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
   }
 
-  async mkdir(path: string, options?: MkdirOptions): Promise<void> {
+  async mkdir(dirPath: string, options?: MkdirOptions): Promise<void> {
     const recursive = options?.recursive ?? true;
+    this.logger.debug("Mkdir", { path: dirPath });
     try {
-      await fs.mkdir(path, { recursive });
+      await fs.mkdir(dirPath, { recursive });
     } catch (error) {
-      throw mapError(error, path);
+      const fsError = mapError(error, dirPath);
+      this.logger.warn("Mkdir failed", {
+        path: dirPath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
   }
 
-  async readdir(path: string): Promise<readonly DirEntry[]> {
+  async readdir(dirPath: string): Promise<readonly DirEntry[]> {
     try {
-      const entries = await fs.readdir(path, { withFileTypes: true });
-      return entries.map((entry) => ({
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      const result = entries.map((entry) => ({
         name: entry.name,
         isDirectory: entry.isDirectory(),
         isFile: entry.isFile(),
         isSymbolicLink: entry.isSymbolicLink(),
       }));
+      this.logger.debug("Readdir", { path: dirPath, count: result.length });
+      return result;
     } catch (error) {
-      throw mapError(error, path);
+      const fsError = mapError(error, dirPath);
+      this.logger.warn("Readdir failed", {
+        path: dirPath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
   }
 
-  async unlink(path: string): Promise<void> {
+  async unlink(filePath: string): Promise<void> {
+    this.logger.debug("Unlink", { path: filePath });
     try {
-      await fs.unlink(path);
+      await fs.unlink(filePath);
     } catch (error) {
-      throw mapError(error, path);
+      const fsError = mapError(error, filePath);
+      this.logger.warn("Unlink failed", {
+        path: filePath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
   }
 
-  async rm(path: string, options?: RmOptions): Promise<void> {
+  async rm(targetPath: string, options?: RmOptions): Promise<void> {
     const recursive = options?.recursive ?? false;
     const force = options?.force ?? false;
+    this.logger.debug("Rm", { path: targetPath, recursive });
     try {
       if (recursive) {
         // Use fs.rm for recursive deletion
-        await fs.rm(path, { recursive, force });
+        await fs.rm(targetPath, { recursive, force });
       } else {
         // For non-recursive: check if directory or file
-        const stat = await fs.stat(path);
+        const stat = await fs.stat(targetPath);
         if (stat.isDirectory()) {
           // Use rmdir for directories - fails with ENOTEMPTY if not empty
-          await fs.rmdir(path);
+          await fs.rmdir(targetPath);
         } else {
           // Use rm for files
-          await fs.rm(path, { force });
+          await fs.rm(targetPath, { force });
         }
       }
     } catch (error) {
@@ -336,22 +376,38 @@ export class DefaultFileSystemLayer implements FileSystemLayer {
       if (force && nodeError.code === "ENOENT") {
         return;
       }
-      throw mapError(error, path);
+      const fsError = mapError(error, targetPath);
+      this.logger.warn("Rm failed", {
+        path: targetPath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
   }
 
   async copyTree(src: string, dest: string): Promise<CopyTreeResult> {
+    this.logger.debug("CopyTree", { src, dest });
+
     // Check if source exists and get its type using lstat (doesn't follow symlinks)
     let srcStat;
     try {
       srcStat = await fs.lstat(src);
     } catch (error) {
-      throw mapError(error, src);
+      const fsError = mapError(error, src);
+      this.logger.warn("CopyTree failed", {
+        path: src,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
     }
 
     // Handle symlink at root level
     if (srcStat.isSymbolicLink()) {
-      return { copiedCount: 0, skippedSymlinks: [src] };
+      const result = { copiedCount: 0, skippedSymlinks: [src] };
+      this.logger.debug("CopyTree complete", { copied: 0, skippedSymlinks: 1 });
+      return result;
     }
 
     // If source is a file, copy it directly
@@ -363,9 +419,16 @@ export class DefaultFileSystemLayer implements FileSystemLayer {
       try {
         await fs.copyFile(src, dest);
       } catch (error) {
-        throw mapError(error, dest);
+        const fsError = mapError(error, dest);
+        this.logger.warn("CopyTree failed", {
+          path: dest,
+          code: fsError.fsCode,
+          error: fsError.message,
+        });
+        throw fsError;
       }
 
+      this.logger.debug("CopyTree complete", { copied: 1, skippedSymlinks: 0 });
       return { copiedCount: 1, skippedSymlinks: [] };
     }
 
@@ -387,7 +450,13 @@ export class DefaultFileSystemLayer implements FileSystemLayer {
       try {
         entries = await fs.readdir(current.srcPath, { withFileTypes: true });
       } catch (error) {
-        throw mapError(error, current.srcPath);
+        const fsError = mapError(error, current.srcPath);
+        this.logger.warn("CopyTree failed", {
+          path: current.srcPath,
+          code: fsError.fsCode,
+          error: fsError.message,
+        });
+        throw fsError;
       }
 
       for (const entry of entries) {
@@ -406,13 +475,23 @@ export class DefaultFileSystemLayer implements FileSystemLayer {
             await fs.copyFile(entrySrcPath, entryDestPath);
             copiedCount++;
           } catch (error) {
-            throw mapError(error, entryDestPath);
+            const fsError = mapError(error, entryDestPath);
+            this.logger.warn("CopyTree failed", {
+              path: entryDestPath,
+              code: fsError.fsCode,
+              error: fsError.message,
+            });
+            throw fsError;
           }
         }
         // Skip other entry types (sockets, FIFOs, etc.)
       }
     }
 
+    this.logger.debug("CopyTree complete", {
+      copied: copiedCount,
+      skippedSymlinks: skippedSymlinks.length,
+    });
     return { copiedCount, skippedSymlinks };
   }
 }

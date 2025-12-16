@@ -26,6 +26,7 @@ vi.mock("electron", () => ({
     getAppPath() {
       return "/mock/app/path";
     },
+    getVersion: () => "1.0.0-test",
   },
 }));
 

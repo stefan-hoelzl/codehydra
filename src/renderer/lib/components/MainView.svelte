@@ -42,6 +42,7 @@
   import { updateStatus, setAllStatuses } from "$lib/stores/agent-status.svelte.js";
   import { setupDomainEvents } from "$lib/utils/domain-events";
   import { AgentNotificationService } from "$lib/services/agent-notifications";
+  import { createLogger } from "$lib/logging";
   import Sidebar from "./Sidebar.svelte";
   import CreateWorkspaceDialog from "./CreateWorkspaceDialog.svelte";
   import RemoveWorkspaceDialog from "./RemoveWorkspaceDialog.svelte";
@@ -51,6 +52,8 @@
   import type { ProjectId, WorkspaceRef } from "$lib/api";
   import type { AggregatedAgentStatus } from "@shared/ipc";
   import type { Project, WorkspaceStatus, AgentStatus } from "@shared/api/types";
+
+  const logger = createLogger("ui");
 
   // Container ref for focus management
   let containerRef: HTMLElement;
@@ -170,12 +173,14 @@
         addProject: (project) => {
           // Project format - store accepts directly
           addProject(project);
+          logger.debug("Store updated", { store: "projects" });
         },
         removeProject: (projectId) => {
           // Find project by ID and remove by path
           const project = projects.value.find((p) => p.id === projectId);
           if (project) {
             removeProject(project.path);
+            logger.debug("Store updated", { store: "projects" });
           }
         },
         addWorkspace: (projectId, workspace) => {
@@ -183,6 +188,7 @@
           const project = projects.value.find((p) => p.id === projectId);
           if (project) {
             addWorkspace(project.path, workspace);
+            logger.debug("Store updated", { store: "projects" });
           }
         },
         removeWorkspace: (ref) => {
@@ -190,15 +196,18 @@
           const project = projects.value.find((p) => p.id === ref.projectId);
           if (project) {
             removeWorkspace(project.path, ref.path);
+            logger.debug("Store updated", { store: "projects" });
           }
         },
         setActiveWorkspace: (ref) => {
           // uses WorkspaceRef | null, store uses path | null
           setActiveWorkspace(ref?.path ?? null);
+          logger.debug("Store updated", { store: "projects" });
         },
         updateAgentStatus: (ref, status) => {
           // Convert WorkspaceStatus to AggregatedAgentStatus
           updateStatus(ref.path, toAggregatedStatus(status.agent));
+          logger.debug("Store updated", { store: "agent-status" });
         },
       },
       {
@@ -235,24 +244,29 @@
       return;
     }
     if (project.workspaces.length > 0) {
+      logger.debug("Dialog opened", { type: "close-project" });
       openCloseProjectDialog(projectId);
     } else {
+      // Project has no workspaces, close directly
       await api.projects.close(projectId);
     }
   }
 
   // Handle switching workspace
   async function handleSwitchWorkspace(workspaceRef: WorkspaceRef): Promise<void> {
+    logger.debug("Workspace selected", { workspaceName: workspaceRef.workspaceName });
     await api.ui.switchWorkspace(workspaceRef.projectId, workspaceRef.workspaceName);
   }
 
   // Handle opening create dialog
   function handleOpenCreateDialog(projectId: ProjectId): void {
+    logger.debug("Dialog opened", { type: "create-workspace" });
     openCreateDialog(projectId);
   }
 
   // Handle opening remove dialog
   function handleOpenRemoveDialog(workspaceRef: WorkspaceRef): void {
+    logger.debug("Dialog opened", { type: "remove-workspace" });
     openRemoveDialog(workspaceRef);
   }
 </script>

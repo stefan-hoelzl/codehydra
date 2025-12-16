@@ -12,6 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer, type Server } from "net";
 import { DefaultNetworkLayer, type HttpClient, type PortManager } from "./network";
 import { createTestServer, type TestServer } from "./network.test-utils";
+import { createSilentLogger } from "../logging";
 
 // ============================================================================
 // Constants
@@ -109,7 +110,7 @@ describe("DefaultNetworkLayer boundary tests", () => {
     let networkLayer: PortManager;
 
     beforeEach(() => {
-      networkLayer = new DefaultNetworkLayer();
+      networkLayer = new DefaultNetworkLayer(createSilentLogger());
     });
 
     it("findFreePort returns valid port number (1024-65535)", async () => {
@@ -186,7 +187,7 @@ describe("DefaultNetworkLayer boundary tests", () => {
     let testServer: Server | null = null;
 
     beforeEach(() => {
-      networkLayer = new DefaultNetworkLayer();
+      networkLayer = new DefaultNetworkLayer(createSilentLogger());
     });
 
     afterAll(async () => {
@@ -296,7 +297,7 @@ describe("DefaultNetworkLayer boundary tests", () => {
     });
 
     beforeEach(() => {
-      httpClient = new DefaultNetworkLayer();
+      httpClient = new DefaultNetworkLayer(createSilentLogger());
     });
 
     describe("successful requests", () => {

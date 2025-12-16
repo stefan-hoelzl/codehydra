@@ -1,0 +1,138 @@
+/**
+ * Logging types and interfaces.
+ *
+ * Provides a testable logging abstraction over electron-log with:
+ * - Type-safe logger names (scopes)
+ * - Constrained context type (no nested objects, functions, symbols)
+ * - Interface for dependency injection
+ */
+
+/**
+ * Log levels in order of verbosity (most verbose to least).
+ */
+export const LogLevel = {
+  debug: "debug",
+  info: "info",
+  warn: "warn",
+  error: "error",
+} as const;
+
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+
+/**
+ * Valid logger names (scopes).
+ * Each name corresponds to a module or subsystem in the application.
+ */
+export type LoggerName =
+  | "process" // LoggingProcessRunner - process spawning
+  | "network" // DefaultNetworkLayer - HTTP, ports
+  | "fs" // DefaultFileSystemLayer - filesystem operations
+  | "git" // SimpleGitClient - git operations
+  | "opencode" // OpenCodeClient - OpenCode SDK
+  | "code-server" // CodeServerManager - code-server process
+  | "pidtree" // PidtreeProvider - process tree lookups
+  | "keepfiles" // KeepFilesService - .keepfiles copying
+  | "api" // IPC handlers
+  | "window" // WindowManager
+  | "view" // ViewManager
+  | "app" // Application lifecycle
+  | "ui"; // Renderer UI components
+
+/**
+ * Context data for log entries.
+ * Constrained to primitive types for serialization safety:
+ * - No nested objects (prevents circular references)
+ * - No functions or symbols (not serializable)
+ * - null allowed for explicit "no value" cases
+ */
+export type LogContext = Record<string, string | number | boolean | null>;
+
+/**
+ * Logger interface for dependency injection.
+ * Services receive this interface via constructor injection.
+ *
+ * @example
+ * ```typescript
+ * class MyService {
+ *   constructor(private readonly logger: Logger) {}
+ *
+ *   async doWork(): Promise<void> {
+ *     this.logger.debug('Starting work', { taskId: 'abc123' });
+ *     try {
+ *       // ... work
+ *       this.logger.info('Work complete', { durationMs: 100 });
+ *     } catch (err) {
+ *       this.logger.error('Work failed', { taskId: 'abc123' }, err as Error);
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export interface Logger {
+  /**
+   * Log a debug message (most verbose).
+   * Use for detailed tracing information useful during development.
+   */
+  debug(message: string, context?: LogContext): void;
+
+  /**
+   * Log an info message.
+   * Use for significant operations (start/stop, connections, completions).
+   */
+  info(message: string, context?: LogContext): void;
+
+  /**
+   * Log a warning message.
+   * Use for recoverable issues or deprecated behavior.
+   */
+  warn(message: string, context?: LogContext): void;
+
+  /**
+   * Log an error message.
+   * Use for failures that require attention.
+   *
+   * @param message - Human-readable error description
+   * @param context - Structured context data
+   * @param error - Optional Error object for stack trace inclusion
+   */
+  error(message: string, context?: LogContext, error?: Error): void;
+}
+
+/**
+ * Logging service interface for the main process.
+ * Creates named loggers and manages renderer logging via IPC.
+ *
+ * @example
+ * ```typescript
+ * // In main process startup
+ * const loggingService = new ElectronLogService(buildInfo, pathProvider);
+ * loggingService.initialize(); // Enable renderer logging
+ *
+ * // Create loggers for services
+ * const logger = loggingService.createLogger('git');
+ * const gitClient = new SimpleGitClient(logger);
+ * ```
+ */
+export interface LoggingService {
+  /**
+   * Create a logger with the specified name (scope).
+   * The name appears in log output to identify the source.
+   *
+   * @param name - Logger name/scope (e.g., 'git', 'process', 'api')
+   * @returns Logger instance for the named scope
+   */
+  createLogger(name: LoggerName): Logger;
+
+  /**
+   * Initialize the logging service.
+   * Call this to enable renderer logging via IPC.
+   * Must be called before renderer logs can be received.
+   */
+  initialize(): void;
+
+  /**
+   * Dispose of the logging service.
+   * Cleans up any resources (e.g., IPC handlers).
+   */
+  dispose(): void;
+}

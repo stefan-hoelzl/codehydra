@@ -9,6 +9,8 @@
  * removed in favor of the @opencode-ai/sdk which handles SSE internally.
  */
 
+import type { Logger } from "../logging";
+
 // ============================================================================
 // HTTP Client Interface
 // ============================================================================
@@ -112,8 +114,10 @@ export interface NetworkLayerConfig {
  */
 export class DefaultNetworkLayer implements HttpClient, PortManager {
   private readonly config: Required<NetworkLayerConfig>;
+  private readonly logger: Logger;
 
-  constructor(config: NetworkLayerConfig = {}) {
+  constructor(logger: Logger, config: NetworkLayerConfig = {}) {
+    this.logger = logger;
     this.config = {
       defaultTimeout: config.defaultTimeout ?? 5000,
     };
@@ -123,6 +127,8 @@ export class DefaultNetworkLayer implements HttpClient, PortManager {
   async fetch(url: string, options?: HttpRequestOptions): Promise<Response> {
     const timeout = options?.timeout ?? this.config.defaultTimeout;
     const externalSignal = options?.signal;
+
+    this.logger.debug("Fetch", { url, method: "GET" });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -148,7 +154,12 @@ export class DefaultNetworkLayer implements HttpClient, PortManager {
 
     try {
       const response = await fetch(url, { signal: controller.signal });
+      this.logger.debug("Fetch complete", { url, status: response.status });
       return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Fetch failed", { url, error: errorMessage });
+      throw error;
     } finally {
       clearTimeout(timeoutId);
       if (externalSignal) {
@@ -167,6 +178,7 @@ export class DefaultNetworkLayer implements HttpClient, PortManager {
         const address = server.address();
         if (address && typeof address === "object") {
           const { port } = address;
+          this.logger.debug("Found free port", { port });
           server.close(() => resolve(port));
         } else {
           server.close(() => reject(new Error("Failed to get port from server address")));
@@ -177,23 +189,35 @@ export class DefaultNetworkLayer implements HttpClient, PortManager {
   }
 
   async getListeningPorts(): Promise<readonly ListeningPort[]> {
-    const si = await import("systeminformation");
-    const connections = await si.default.networkConnections();
+    try {
+      const si = await import("systeminformation");
+      const connections = await si.default.networkConnections();
 
-    if (!Array.isArray(connections)) return [];
+      if (!Array.isArray(connections)) {
+        this.logger.debug("Scanned listening ports", { count: 0 });
+        return [];
+      }
 
-    return connections
-      .filter(
-        (conn): conn is typeof conn & { localPort: string; pid: number } =>
-          conn !== null &&
-          conn.state === "LISTEN" &&
-          typeof conn.localPort === "string" &&
-          typeof conn.pid === "number" &&
-          conn.pid > 0
-      )
-      .map((conn) => ({
-        port: parseInt(conn.localPort, 10),
-        pid: conn.pid,
-      }));
+      const ports = connections
+        .filter(
+          (conn): conn is typeof conn & { localPort: string; pid: number } =>
+            conn !== null &&
+            conn.state === "LISTEN" &&
+            typeof conn.localPort === "string" &&
+            typeof conn.pid === "number" &&
+            conn.pid > 0
+        )
+        .map((conn) => ({
+          port: parseInt(conn.localPort, 10),
+          pid: conn.pid,
+        }));
+
+      this.logger.debug("Scanned listening ports", { count: ports.length });
+      return ports;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Port scan failed", { error: errorMessage });
+      throw error;
+    }
   }
 }

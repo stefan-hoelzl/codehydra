@@ -7,12 +7,15 @@ import path from "path";
 import { GitError } from "../errors";
 import type { IGitClient } from "./git-client";
 import type { BranchInfo, StatusResult, WorktreeInfo } from "./types";
+import type { Logger } from "../logging";
 
 /**
  * Implementation of IGitClient using the simple-git library.
  * Wraps simple-git calls and maps errors to GitError.
  */
 export class SimpleGitClient implements IGitClient {
+  constructor(private readonly logger: Logger) {}
+
   /**
    * Create a simple-git instance for a given path.
    */
@@ -28,11 +31,19 @@ export class SimpleGitClient implements IGitClient {
 
   /**
    * Wrap a simple-git operation and convert errors to GitError.
+   * Logs errors at WARN level.
    */
-  private async wrapGitOperation<T>(operation: () => Promise<T>, errorMessage: string): Promise<T> {
+  private async wrapGitOperation<T>(
+    operation: () => Promise<T>,
+    opName: string,
+    repoPath: string,
+    errorMessage: string
+  ): Promise<T> {
     try {
       return await operation();
     } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Git error", { op: opName, path: repoPath, error: errMsg });
       const message = error instanceof Error ? `${errorMessage}: ${error.message}` : errorMessage;
       throw new GitError(message);
     }
@@ -42,9 +53,12 @@ export class SimpleGitClient implements IGitClient {
     try {
       const git = this.getGit(repoPath);
       const result = await git.checkIsRepo();
+      this.logger.debug("IsGitRepository", { path: repoPath, result });
       return result;
     } catch (error: unknown) {
       // If the path doesn't exist or is inaccessible, throw GitError
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Git error", { op: "isGitRepository", path: repoPath, error: errMsg });
       const message =
         error instanceof Error
           ? `Failed to check repository: ${error.message}`
@@ -54,162 +68,220 @@ export class SimpleGitClient implements IGitClient {
   }
 
   async listWorktrees(repoPath: string): Promise<readonly WorktreeInfo[]> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
+    const worktrees = await this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
 
-      // Get raw worktree list output
-      const result = await git.raw(["worktree", "list", "--porcelain"]);
+        // Get raw worktree list output
+        const result = await git.raw(["worktree", "list", "--porcelain"]);
 
-      const worktrees: WorktreeInfo[] = [];
-      const entries = result.split("\n\n").filter((entry) => entry.trim());
+        const worktreesResult: WorktreeInfo[] = [];
+        const entries = result.split("\n\n").filter((entry) => entry.trim());
 
-      for (const entry of entries) {
-        const lines = entry.split("\n");
-        let worktreePath = "";
-        let branch: string | null = null;
-        let isMain = false;
+        for (const entry of entries) {
+          const lines = entry.split("\n");
+          let worktreePath = "";
+          let branch: string | null = null;
+          let isMain = false;
 
-        for (const line of lines) {
-          if (line.startsWith("worktree ")) {
-            // Normalize path for cross-platform consistency.
-            // Git on Windows outputs forward slashes (C:/Users/...),
-            // but Node.js path.normalize() converts to backslashes.
-            worktreePath = path.normalize(line.substring("worktree ".length));
-          } else if (line.startsWith("branch ")) {
-            // Branch format is "refs/heads/branch-name"
-            const ref = line.substring("branch ".length);
-            branch = ref.replace("refs/heads/", "");
-          } else if (line === "detached") {
-            branch = null;
-          } else if (line === "bare") {
-            // Skip bare repository entries
-            continue;
+          for (const line of lines) {
+            if (line.startsWith("worktree ")) {
+              // Normalize path for cross-platform consistency.
+              // Git on Windows outputs forward slashes (C:/Users/...),
+              // but Node.js path.normalize() converts to backslashes.
+              worktreePath = path.normalize(line.substring("worktree ".length));
+            } else if (line.startsWith("branch ")) {
+              // Branch format is "refs/heads/branch-name"
+              const ref = line.substring("branch ".length);
+              branch = ref.replace("refs/heads/", "");
+            } else if (line === "detached") {
+              branch = null;
+            } else if (line === "bare") {
+              // Skip bare repository entries
+              continue;
+            }
+          }
+
+          // First worktree is the main one
+          isMain = worktreesResult.length === 0;
+
+          if (worktreePath) {
+            const name = path.basename(worktreePath);
+            worktreesResult.push({
+              name,
+              path: worktreePath,
+              branch,
+              isMain,
+            });
           }
         }
 
-        // First worktree is the main one
-        isMain = worktrees.length === 0;
+        return worktreesResult;
+      },
+      "listWorktrees",
+      repoPath,
+      "Failed to list worktrees"
+    );
 
-        if (worktreePath) {
-          const name = path.basename(worktreePath);
-          worktrees.push({
-            name,
-            path: worktreePath,
-            branch,
-            isMain,
-          });
-        }
-      }
-
-      return worktrees;
-    }, "Failed to list worktrees");
+    this.logger.debug("ListWorktrees", { path: repoPath, count: worktrees.length });
+    return worktrees;
   }
 
   async addWorktree(repoPath: string, worktreePath: string, branch: string): Promise<void> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      await git.raw(["worktree", "add", worktreePath, branch]);
-    }, `Failed to add worktree at ${worktreePath}`);
+    await this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        await git.raw(["worktree", "add", worktreePath, branch]);
+      },
+      "addWorktree",
+      repoPath,
+      `Failed to add worktree at ${worktreePath}`
+    );
+    this.logger.debug("AddWorktree", { path: worktreePath, branch });
   }
 
   async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      await git.raw(["worktree", "remove", worktreePath, "--force"]);
-    }, `Failed to remove worktree at ${worktreePath}`);
+    await this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        await git.raw(["worktree", "remove", worktreePath, "--force"]);
+      },
+      "removeWorktree",
+      repoPath,
+      `Failed to remove worktree at ${worktreePath}`
+    );
+    this.logger.debug("RemoveWorktree", { path: worktreePath });
   }
 
   async pruneWorktrees(repoPath: string): Promise<void> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      await git.raw(["worktree", "prune"]);
-    }, "Failed to prune worktrees");
+    return this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        await git.raw(["worktree", "prune"]);
+      },
+      "pruneWorktrees",
+      repoPath,
+      "Failed to prune worktrees"
+    );
   }
 
   async listBranches(repoPath: string): Promise<readonly BranchInfo[]> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      const summary = await git.branch(["-a"]);
+    const branches = await this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        const summary = await git.branch(["-a"]);
 
-      const branches: BranchInfo[] = [];
+        const branchesResult: BranchInfo[] = [];
 
-      for (const branchName of Object.keys(summary.branches)) {
-        const isRemote = branchName.startsWith("remotes/");
+        for (const branchName of Object.keys(summary.branches)) {
+          const isRemote = branchName.startsWith("remotes/");
 
-        // Clean up the name for remote branches
-        let name = branchName;
-        if (isRemote) {
-          // Remove "remotes/" prefix and skip HEAD references
-          name = branchName.replace("remotes/", "");
-          if (name.endsWith("/HEAD")) {
-            continue;
+          // Clean up the name for remote branches
+          let name = branchName;
+          if (isRemote) {
+            // Remove "remotes/" prefix and skip HEAD references
+            name = branchName.replace("remotes/", "");
+            if (name.endsWith("/HEAD")) {
+              continue;
+            }
           }
+
+          branchesResult.push({
+            name,
+            isRemote,
+          });
         }
 
-        branches.push({
-          name,
-          isRemote,
-        });
-      }
+        return branchesResult;
+      },
+      "listBranches",
+      repoPath,
+      "Failed to list branches"
+    );
 
-      return branches;
-    }, "Failed to list branches");
+    const localCount = branches.filter((b) => !b.isRemote).length;
+    const remoteCount = branches.filter((b) => b.isRemote).length;
+    this.logger.debug("ListBranches", { path: repoPath, local: localCount, remote: remoteCount });
+    return branches;
   }
 
   async createBranch(repoPath: string, name: string, startPoint: string): Promise<void> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      await git.branch([name, startPoint]);
-    }, `Failed to create branch ${name}`);
+    return this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        await git.branch([name, startPoint]);
+      },
+      "createBranch",
+      repoPath,
+      `Failed to create branch ${name}`
+    );
   }
 
   async deleteBranch(repoPath: string, name: string): Promise<void> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      // Use -D to force delete (handles unmerged branches)
-      await git.branch(["-d", name]);
-    }, `Failed to delete branch ${name}`);
+    return this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        // Use -D to force delete (handles unmerged branches)
+        await git.branch(["-d", name]);
+      },
+      "deleteBranch",
+      repoPath,
+      `Failed to delete branch ${name}`
+    );
   }
 
   async getCurrentBranch(repoPath: string): Promise<string | null> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      const result = await git.revparse(["--abbrev-ref", "HEAD"]);
+    return this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        const result = await git.revparse(["--abbrev-ref", "HEAD"]);
 
-      // "HEAD" is returned when in detached HEAD state
-      if (result === "HEAD") {
-        return null;
-      }
+        // "HEAD" is returned when in detached HEAD state
+        if (result === "HEAD") {
+          return null;
+        }
 
-      return result;
-    }, "Failed to get current branch");
+        return result;
+      },
+      "getCurrentBranch",
+      repoPath,
+      "Failed to get current branch"
+    );
   }
 
   async getStatus(repoPath: string): Promise<StatusResult> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      const status = await git.status();
+    const status = await this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        const gitStatus = await git.status();
 
-      // Modified files that are not staged
-      const modifiedCount = status.modified.length + status.deleted.length;
-      // Staged files (created/added files that are staged)
-      const stagedCount = status.staged.length;
-      // Untracked files (not_added means not tracked by git)
-      const untrackedCount = status.not_added.length;
+        // Modified files that are not staged
+        const modifiedCount = gitStatus.modified.length + gitStatus.deleted.length;
+        // Staged files (created/added files that are staged)
+        const stagedCount = gitStatus.staged.length;
+        // Untracked files (not_added means not tracked by git)
+        const untrackedCount = gitStatus.not_added.length;
 
-      const isDirty = modifiedCount > 0 || stagedCount > 0 || untrackedCount > 0;
+        const isDirty = modifiedCount > 0 || stagedCount > 0 || untrackedCount > 0;
 
-      return {
-        isDirty,
-        modifiedCount,
-        stagedCount,
-        untrackedCount,
-      };
-    }, "Failed to get status");
+        return {
+          isDirty,
+          modifiedCount,
+          stagedCount,
+          untrackedCount,
+        };
+      },
+      "getStatus",
+      repoPath,
+      "Failed to get status"
+    );
+
+    this.logger.debug("GetStatus", { path: repoPath, dirty: status.isDirty });
+    return status;
   }
 
   async fetch(repoPath: string, remote?: string): Promise<void> {
-    return this.wrapGitOperation(
+    await this.wrapGitOperation(
       async () => {
         const git = this.getGit(repoPath);
         if (remote) {
@@ -219,16 +291,24 @@ export class SimpleGitClient implements IGitClient {
           await git.fetch();
         }
       },
+      "fetch",
+      repoPath,
       `Failed to fetch${remote ? ` from ${remote}` : ""}`
     );
+    this.logger.debug("Fetch", { path: repoPath, remote: remote ?? "all" });
   }
 
   async listRemotes(repoPath: string): Promise<readonly string[]> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      const remotes = await git.getRemotes();
-      return remotes.map((r) => r.name);
-    }, "Failed to list remotes");
+    return this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        const remotes = await git.getRemotes();
+        return remotes.map((r) => r.name);
+      },
+      "listRemotes",
+      repoPath,
+      "Failed to list remotes"
+    );
   }
 
   async getBranchConfig(repoPath: string, branch: string, key: string): Promise<string | null> {
@@ -249,6 +329,8 @@ export class SimpleGitClient implements IGitClient {
       if (error instanceof Error && error.message.includes("exit code 1")) {
         return null;
       }
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Git error", { op: "getBranchConfig", path: repoPath, error: errMsg });
       const message =
         error instanceof Error
           ? `Failed to get branch config: ${error.message}`
@@ -263,11 +345,16 @@ export class SimpleGitClient implements IGitClient {
     key: string,
     value: string
   ): Promise<void> {
-    return this.wrapGitOperation(async () => {
-      const git = this.getGit(repoPath);
-      const configKey = `branch.${branch}.${key}`;
-      await git.raw(["config", configKey, value]);
-    }, `Failed to set branch config branch.${branch}.${key}`);
+    return this.wrapGitOperation(
+      async () => {
+        const git = this.getGit(repoPath);
+        const configKey = `branch.${branch}.${key}`;
+        await git.raw(["config", configKey, value]);
+      },
+      "setBranchConfig",
+      repoPath,
+      `Failed to set branch config branch.${branch}.${key}`
+    );
   }
 
   async getBranchConfigsByPrefix(
@@ -315,6 +402,12 @@ export class SimpleGitClient implements IGitClient {
       if (error instanceof Error && error.message.includes("exit code 1")) {
         return {};
       }
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Git error", {
+        op: "getBranchConfigsByPrefix",
+        path: repoPath,
+        error: errMsg,
+      });
       const message =
         error instanceof Error
           ? `Failed to get branch configs: ${error.message}`
@@ -339,6 +432,8 @@ export class SimpleGitClient implements IGitClient {
       if (error instanceof Error && error.message.includes("exit code 5")) {
         return;
       }
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Git error", { op: "unsetBranchConfig", path: repoPath, error: errMsg });
       const message =
         error instanceof Error
           ? `Failed to unset branch config: ${error.message}`

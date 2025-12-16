@@ -36,12 +36,14 @@ export function getGitBranch(): string {
  * In development mode, also captures the git branch name for display in the window title.
  */
 export class ElectronBuildInfo implements BuildInfo {
+  readonly version: string;
   readonly isDevelopment: boolean;
   readonly gitBranch?: string;
   readonly appPath: string;
 
   constructor(gitBranchFn: () => string = getGitBranch) {
     // Cache at construction time - these values should never change during runtime
+    this.version = app.getVersion();
     this.isDevelopment = !app.isPackaged;
 
     if (this.isDevelopment) {

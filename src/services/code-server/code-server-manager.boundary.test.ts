@@ -71,9 +71,17 @@ describe("CodeServerManager (boundary)", () => {
 
     // Real dependencies - no mocks
     const runner = new ExecaProcessRunner();
-    const networkLayer = new DefaultNetworkLayer();
+    const { createSilentLogger } = await import("../logging");
+    const logger = createSilentLogger();
+    const networkLayer = new DefaultNetworkLayer(logger);
 
-    manager = new CodeServerManager(createTestConfig(tempDir), runner, networkLayer, networkLayer);
+    manager = new CodeServerManager(
+      createTestConfig(tempDir),
+      runner,
+      networkLayer,
+      networkLayer,
+      logger
+    );
   });
 
   afterEach(async (): Promise<void> => {

@@ -206,6 +206,11 @@ export const ApiIpcChannels = {
   LIFECYCLE_GET_STATE: "api:lifecycle:get-state",
   LIFECYCLE_SETUP: "api:lifecycle:setup",
   LIFECYCLE_QUIT: "api:lifecycle:quit",
+  // Log commands (renderer → main)
+  LOG_DEBUG: "api:log:debug",
+  LOG_INFO: "api:log:info",
+  LOG_WARN: "api:log:warn",
+  LOG_ERROR: "api:log:error",
   // Events (main → renderer)
   PROJECT_OPENED: "api:project:opened",
   PROJECT_CLOSED: "api:project:closed",
@@ -298,4 +303,24 @@ export interface ApiUiSwitchWorkspacePayload {
  */
 export interface ApiUiSetModePayload {
   readonly mode: UIMode;
+}
+
+// ============ Log API Types ============
+
+/**
+ * Context data for log entries.
+ * Constrained to primitive types for serialization safety.
+ */
+export type LogContext = Record<string, string | number | boolean | null>;
+
+/**
+ * Payload for api:log:* commands.
+ */
+export interface ApiLogPayload {
+  /** Logger name/scope (e.g., 'ui', 'api') */
+  readonly logger: string;
+  /** Log message */
+  readonly message: string;
+  /** Optional context data */
+  readonly context?: LogContext;
 }

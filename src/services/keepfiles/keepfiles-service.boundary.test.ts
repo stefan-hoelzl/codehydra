@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { writeFile as nodeWriteFile, mkdir as nodeMkdir } from "node:fs/promises";
 import { KeepFilesService } from "./keepfiles-service";
 import { DefaultFileSystemLayer } from "../platform/filesystem";
+import { createSilentLogger } from "../logging";
 import { createTempDir } from "../test-utils";
 
 describe("KeepFilesService", () => {
@@ -24,8 +25,8 @@ describe("KeepFilesService", () => {
     targetPath = join(tempDir.path, "workspace");
     await nodeMkdir(projectRoot);
     await nodeMkdir(targetPath);
-    fs = new DefaultFileSystemLayer();
-    service = new KeepFilesService(fs);
+    fs = new DefaultFileSystemLayer(createSilentLogger());
+    service = new KeepFilesService(fs, createSilentLogger());
   });
 
   afterEach(async () => {

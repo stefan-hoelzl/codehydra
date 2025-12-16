@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { PidtreeProvider } from "./process-tree";
 import { ExecaProcessRunner } from "../platform/process";
+import { createSilentLogger } from "../logging";
 import {
   spawnWithChildren,
   spawnLongRunning,
@@ -12,7 +13,7 @@ import {
 const TEST_TIMEOUT = 5000;
 
 describe("PidtreeProvider", () => {
-  const provider = new PidtreeProvider();
+  const provider = new PidtreeProvider(createSilentLogger());
   const runner = new ExecaProcessRunner();
 
   // Track spawned processes for cleanup

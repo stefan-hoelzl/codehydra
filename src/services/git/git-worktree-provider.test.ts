@@ -2037,7 +2037,7 @@ describe("GitWorktreeProvider", () => {
       expect(workspace.name).toBe("feature-x");
     });
 
-    it("logs copy errors but does not throw", async () => {
+    it("does not throw when copy has errors (logging handled by KeepFilesService)", async () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi
           .fn()
@@ -2053,7 +2053,6 @@ describe("GitWorktreeProvider", () => {
           errors: [{ path: ".env", message: "Permission denied" }],
         }),
       };
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
@@ -2062,15 +2061,14 @@ describe("GitWorktreeProvider", () => {
         { keepFilesService: mockKeepFilesService }
       );
 
-      // Should not throw despite copy errors
+      // Should not throw despite copy errors (logging handled by KeepFilesService)
       const workspace = await provider.createWorkspace("feature-x", "main");
 
       expect(workspace.name).toBe("feature-x");
-      expect(warnSpy).toHaveBeenCalled();
-      warnSpy.mockRestore();
+      expect(mockKeepFilesService.copyToWorkspace).toHaveBeenCalled();
     });
 
-    it("logs success at info level", async () => {
+    it("creates workspace when copy succeeds (logging handled by KeepFilesService)", async () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi
           .fn()
@@ -2086,7 +2084,6 @@ describe("GitWorktreeProvider", () => {
           errors: [],
         }),
       };
-      const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
@@ -2095,10 +2092,13 @@ describe("GitWorktreeProvider", () => {
         { keepFilesService: mockKeepFilesService }
       );
 
-      await provider.createWorkspace("feature-x", "main");
+      const workspace = await provider.createWorkspace("feature-x", "main");
 
-      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining("5"));
-      infoSpy.mockRestore();
+      expect(workspace.name).toBe("feature-x");
+      expect(mockKeepFilesService.copyToWorkspace).toHaveBeenCalledWith(
+        PROJECT_ROOT,
+        expect.stringContaining("feature-x")
+      );
     });
   });
 

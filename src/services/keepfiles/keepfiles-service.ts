@@ -11,6 +11,7 @@ import ignore, { type Ignore } from "ignore";
 import type { FileSystemLayer, CopyTreeResult } from "../platform/filesystem";
 import type { IKeepFilesService, CopyResult, CopyError } from "./types";
 import { KeepFilesError } from "../errors";
+import type { Logger } from "../logging";
 
 /**
  * Configuration file name for keep files patterns.
@@ -30,7 +31,10 @@ const UTF8_BOM = "\ufeff";
  * so direct usage is acceptable (documented exception to interface rule).
  */
 export class KeepFilesService implements IKeepFilesService {
-  constructor(private readonly fileSystem: FileSystemLayer) {}
+  constructor(
+    private readonly fileSystem: FileSystemLayer,
+    private readonly logger: Logger
+  ) {}
 
   async copyToWorkspace(projectRoot: string, targetPath: string): Promise<CopyResult> {
     // Try to read .keepfiles config
@@ -42,6 +46,7 @@ export class KeepFilesService implements IKeepFilesService {
     } catch (error) {
       // Check if it's ENOENT (file not found)
       if (error instanceof Error && "fsCode" in error && error.fsCode === "ENOENT") {
+        this.logger.debug("No .keepfiles found", { path: projectRoot });
         return {
           configExists: false,
           copiedCount: 0,
@@ -59,6 +64,7 @@ export class KeepFilesService implements IKeepFilesService {
 
     // Parse patterns and validate
     const patterns = this.parsePatterns(configContent);
+    this.logger.debug("Parsed .keepfiles", { patterns: patterns.length });
 
     // If no patterns, nothing to copy
     if (patterns.length === 0) {
@@ -79,8 +85,22 @@ export class KeepFilesService implements IKeepFilesService {
     const positivePatterns = patterns.filter((p) => !p.startsWith("!"));
     const igPositive = ignore().add(positivePatterns);
 
+    this.logger.debug("CopyKeepFiles", { src: projectRoot, dest: targetPath });
+
     // Scan and copy matching files
-    return await this.scanAndCopy(projectRoot, targetPath, ig, igPositive);
+    const result = await this.scanAndCopy(projectRoot, targetPath, ig, igPositive);
+
+    // Log completion or errors
+    if (result.errors.length > 0) {
+      this.logger.warn("CopyKeepFiles failed", { error: `${result.errors.length} errors` });
+    } else {
+      this.logger.debug("CopyKeepFiles complete", {
+        copied: result.copiedCount,
+        skipped: result.skippedCount,
+      });
+    }
+
+    return result;
   }
 
   /**

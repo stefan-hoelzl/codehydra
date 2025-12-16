@@ -16,6 +16,7 @@ import {
 import { promises as fs } from "fs";
 import path from "path";
 import { simpleGit } from "simple-git";
+import { createSilentLogger } from "../logging";
 
 describe("SimpleGitClient", () => {
   let client: SimpleGitClient;
@@ -23,7 +24,7 @@ describe("SimpleGitClient", () => {
   let repoPath: string;
 
   beforeEach(async () => {
-    client = new SimpleGitClient();
+    client = new SimpleGitClient(createSilentLogger());
     const result = await createTestGitRepo();
     repoPath = result.path;
     cleanup = result.cleanup;
@@ -459,7 +460,7 @@ describe("SimpleGitClient", () => {
       await client.setBranchConfig(repoPath, "main", "base", "feature-branch");
 
       // Create a new client instance
-      const newClient = new SimpleGitClient();
+      const newClient = new SimpleGitClient(createSilentLogger());
       const value = await newClient.getBranchConfig(repoPath, "main", "base");
       expect(value).toBe("feature-branch");
     });

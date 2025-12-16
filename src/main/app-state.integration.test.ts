@@ -13,7 +13,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AppState } from "./app-state";
 import type { IViewManager } from "./managers/view-manager.interface";
-import { createMockPathProvider, type PathProvider, type ProjectStore } from "../services";
+import {
+  createMockPathProvider,
+  createMockFileSystemLayer,
+  createMockLoggingService,
+  type PathProvider,
+  type ProjectStore,
+  type FileSystemLayer,
+  type MockLoggingService,
+} from "../services";
 import type { AgentStatusManager } from "../services/opencode/agent-status-manager";
 import type { WorkspacePath } from "../shared/ipc";
 
@@ -112,6 +120,8 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
   let mockViewManager: IViewManager;
   let mockAgentStatusManager: AgentStatusManager;
   let mockPathProvider: PathProvider;
+  let mockFileSystemLayer: FileSystemLayer;
+  let mockLoggingService: MockLoggingService;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -121,6 +131,8 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
     });
     mockViewManager = createMockViewManager();
     mockAgentStatusManager = createMockAgentStatusManager();
+    mockFileSystemLayer = createMockFileSystemLayer();
+    mockLoggingService = createMockLoggingService();
   });
 
   afterEach(() => {
@@ -133,7 +145,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -166,7 +180,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -184,7 +200,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -202,7 +220,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       // Don't set agentStatusManager
 
@@ -224,7 +244,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -254,7 +276,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -277,7 +301,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -300,7 +326,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 
@@ -329,7 +357,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
 

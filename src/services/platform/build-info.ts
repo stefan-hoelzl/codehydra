@@ -4,6 +4,11 @@
  */
 export interface BuildInfo {
   /**
+   * Application version string from package.json.
+   */
+  readonly version: string;
+
+  /**
    * Whether the app is running in development mode.
    * - true: Development (unpackaged, via electron-vite dev)
    * - false: Production (packaged .app/.exe/.AppImage)

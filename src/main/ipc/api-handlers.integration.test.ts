@@ -37,6 +37,7 @@ vi.mock("electron", () => ({
 
 // Import after mock
 import { registerApiHandlers, wireApiEvents } from "./api-handlers";
+import { createSilentLogger } from "../../services/logging";
 
 // =============================================================================
 // Test Data
@@ -273,7 +274,7 @@ describe("Handler + API integration", () => {
     mockHandle.mockClear();
     const mock = createMockApiWithEvents();
     api = mock.api;
-    registerApiHandlers(api);
+    registerApiHandlers(api, createSilentLogger());
   });
 
   function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
@@ -465,7 +466,7 @@ describe("Error handling across IPC boundaries", () => {
     mockHandle.mockClear();
     const mock = createMockApiWithEvents();
     api = mock.api;
-    registerApiHandlers(api);
+    registerApiHandlers(api, createSilentLogger());
   });
 
   function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {

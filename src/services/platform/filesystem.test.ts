@@ -16,6 +16,7 @@ import {
   symlink,
 } from "node:fs/promises";
 import { DefaultFileSystemLayer, type CopyTreeResult } from "./filesystem";
+import { createSilentLogger } from "../logging";
 import { FileSystemError } from "../errors";
 import { createTempDir } from "../test-utils";
 
@@ -24,7 +25,7 @@ describe("DefaultFileSystemLayer.copyTree", () => {
   let tempDir: { path: string; cleanup: () => Promise<void> };
 
   beforeEach(async () => {
-    fs = new DefaultFileSystemLayer();
+    fs = new DefaultFileSystemLayer(createSilentLogger());
     tempDir = await createTempDir();
   });
 

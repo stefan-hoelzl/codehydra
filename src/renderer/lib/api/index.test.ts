@@ -109,6 +109,12 @@ describe("renderer API layer", () => {
           setup: vi.fn().mockResolvedValue({ success: true }),
           quit: vi.fn().mockResolvedValue(undefined),
         },
+        log: {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        },
         on: vi.fn(() => vi.fn()),
         onModeChange: vi.fn(() => vi.fn()),
         onShortcut: vi.fn(() => vi.fn()),

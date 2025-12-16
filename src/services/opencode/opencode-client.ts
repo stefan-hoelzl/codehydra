@@ -11,6 +11,7 @@ import {
   type SessionStatus as SdkSessionStatus,
 } from "@opencode-ai/sdk";
 import { OpenCodeError } from "../errors";
+import type { Logger } from "../logging";
 import {
   ok,
   err,
@@ -132,7 +133,9 @@ interface SdkEventSubscription {
  */
 export class OpenCodeClient implements IDisposable {
   private readonly baseUrl: string;
+  private readonly port: number;
   private readonly sdk: OpencodeClient;
+  private readonly logger: Logger;
   private readonly listeners = new Set<SessionEventCallback>();
   private readonly permissionListeners = new Set<PermissionEventCallback>();
   private readonly statusListeners = new Set<StatusChangedCallback>();
@@ -158,8 +161,10 @@ export class OpenCodeClient implements IDisposable {
     return this._currentStatus;
   }
 
-  constructor(port: number, sdkFactory: SdkClientFactory = defaultSdkFactory) {
+  constructor(port: number, logger: Logger, sdkFactory: SdkClientFactory = defaultSdkFactory) {
+    this.port = port;
     this.baseUrl = `http://localhost:${port}`;
+    this.logger = logger;
     this.sdk = sdkFactory(this.baseUrl);
   }
 
@@ -248,6 +253,8 @@ export class OpenCodeClient implements IDisposable {
   async connect(timeoutMs = 5000): Promise<void> {
     if (this.disposed || this.eventSubscription) return;
 
+    this.logger.info("Connecting", { port: this.port });
+
     try {
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Connect timeout")), timeoutMs)
@@ -257,10 +264,14 @@ export class OpenCodeClient implements IDisposable {
 
       this.eventSubscription = events;
 
+      this.logger.info("Connected", { port: this.port });
+
       // Process events in background with error handling
       this.processEvents(events.stream).catch((processError) => {
         if (!this.disposed) {
-          console.error("Event processing error:", processError);
+          const errMsg =
+            processError instanceof Error ? processError.message : String(processError);
+          this.logger.warn("Connection error", { port: this.port, error: errMsg });
         }
       });
 
@@ -271,10 +282,12 @@ export class OpenCodeClient implements IDisposable {
           this.updateCurrentStatus(result.value);
         }
       } catch (statusError) {
-        console.error("Failed to fetch initial status:", statusError);
+        const errMsg = statusError instanceof Error ? statusError.message : String(statusError);
+        this.logger.warn("Connection error", { port: this.port, error: errMsg });
       }
     } catch (connectError) {
-      console.error("Failed to connect:", connectError);
+      const errMsg = connectError instanceof Error ? connectError.message : String(connectError);
+      this.logger.warn("Connection error", { port: this.port, error: errMsg });
       throw connectError;
     }
   }
@@ -284,6 +297,7 @@ export class OpenCodeClient implements IDisposable {
    */
   disconnect(): void {
     this.eventSubscription = null;
+    this.logger.info("Disconnected", { port: this.port });
   }
 
   /**
@@ -308,7 +322,8 @@ export class OpenCodeClient implements IDisposable {
       }
     } catch (error) {
       if (this.disposed) return; // Expected during shutdown
-      console.error("Event stream error:", error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Connection error", { port: this.port, error: errMsg });
       throw error; // Re-throw for .catch() handler
     }
   }
@@ -317,6 +332,8 @@ export class OpenCodeClient implements IDisposable {
    * Handle an SDK event and dispatch to appropriate handlers.
    */
   private handleSdkEvent(event: SdkEvent): void {
+    this.logger.debug("Event", { type: event.type });
+
     switch (event.type) {
       case "session.status":
         this.handleSessionStatus(event.properties);
@@ -375,6 +392,7 @@ export class OpenCodeClient implements IDisposable {
     // Map "retry" to "busy"
     if (statusType === "idle" || statusType === "busy" || statusType === "retry") {
       const mappedType = statusType === "retry" ? "busy" : statusType;
+      this.logger.debug("Session status", { sessionId: properties.sessionID, status: mappedType });
       this.emitSessionEvent({ type: mappedType, sessionId: properties.sessionID });
 
       // Only update current status for root sessions (main agents)

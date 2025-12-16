@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { createFocusTrap } from "$lib/utils/focus-trap";
+  import { createLogger } from "$lib/logging";
+
+  const logger = createLogger("ui");
 
   interface DialogProps {
     open: boolean;
@@ -35,6 +38,7 @@
 
     const trap = createFocusTrap(dialogElement);
     trap.activate();
+    logger.debug("Focus trap activated", { activated: true });
 
     // Delay focus to allow web components to initialize
     const focusTimeout = setTimeout(() => {
@@ -48,6 +52,7 @@
     return () => {
       clearTimeout(focusTimeout);
       trap.deactivate();
+      logger.debug("Focus trap activated", { activated: false });
       // Focus is handled by MainView's $effect when dialog closes
     };
   });

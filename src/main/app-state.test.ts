@@ -3,13 +3,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import type { IViewManager } from "./managers/view-manager.interface";
-import { createMockPathProvider, type PathProvider } from "../services";
+import {
+  createMockPathProvider,
+  createMockFileSystemLayer,
+  createMockLoggingService,
+  type PathProvider,
+  type FileSystemLayer,
+  type MockLoggingService,
+} from "../services";
 
 // WORKSPACES_DIR used in mock pathProvider for workspace creation
 const WORKSPACES_DIR = "/test/workspaces";
 
-// Mock PathProvider - created fresh in beforeEach
+// Mock PathProvider, FileSystemLayer, and LoggingService - created fresh in beforeEach
 let mockPathProvider: PathProvider;
+let mockFileSystemLayer: FileSystemLayer;
+let mockLoggingService: MockLoggingService;
 
 // Mock services
 const { mockProjectStore, mockWorkspaceProvider, mockViewManager, mockCreateGitWorktreeProvider } =
@@ -106,6 +115,9 @@ describe("AppState", () => {
     mockPathProvider = createMockPathProvider({
       dataRootDir: WORKSPACES_DIR,
     });
+    // Create mock FileSystemLayer and LoggingService
+    mockFileSystemLayer = createMockFileSystemLayer();
+    mockLoggingService = createMockLoggingService();
   });
 
   afterEach(() => {
@@ -118,7 +130,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       expect(appState).toBeInstanceOf(AppState);
@@ -131,7 +145,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -141,6 +157,7 @@ describe("AppState", () => {
         "/project",
         mockPathProvider.getProjectWorkspacesDir("/project"),
         expect.any(Object), // FileSystemLayer
+        expect.any(Object), // Logger
         expect.objectContaining({ keepFilesService: expect.any(Object) }) // Options with KeepFilesService
       );
     });
@@ -150,7 +167,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -163,7 +182,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -180,7 +201,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -195,7 +218,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -208,7 +233,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       const project = await appState.openProject("/project");
@@ -230,7 +257,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       const project = await appState.openProject("/project");
@@ -246,7 +275,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -262,7 +293,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -276,7 +309,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -290,7 +325,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.closeProject("/nonexistent");
@@ -306,7 +343,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -320,7 +359,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       expect(appState.getProject("/nonexistent")).toBeUndefined();
@@ -333,7 +374,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -350,7 +393,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -364,7 +409,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       expect(appState.getWorkspaceProvider("/nonexistent")).toBeUndefined();
@@ -377,7 +424,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       const url = appState.getWorkspaceUrl("/path/to/workspace");
@@ -396,7 +445,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.loadPersistedProjects();
@@ -407,6 +458,7 @@ describe("AppState", () => {
         "/project",
         mockPathProvider.getProjectWorkspacesDir("/project"),
         expect.any(Object), // FileSystemLayer
+        expect.any(Object), // Logger
         expect.objectContaining({ keepFilesService: expect.any(Object) }) // Options with KeepFilesService
       );
     });
@@ -420,7 +472,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       // Should not throw
@@ -436,7 +490,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -450,7 +506,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -471,7 +529,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(
         mockAgentStatusManager as unknown as Parameters<typeof appState.setAgentStatusManager>[0]
@@ -499,7 +559,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
       appState.setAgentStatusManager(
         mockAgentStatusManager as unknown as Parameters<typeof appState.setAgentStatusManager>[0]
@@ -521,7 +583,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       // Should not throw even without agentStatusManager
@@ -541,7 +605,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       // openProject should still succeed despite cleanup failure
@@ -559,7 +625,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -576,7 +644,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -592,7 +662,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -610,7 +682,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -627,7 +701,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -642,7 +718,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       // Don't open any project
@@ -657,7 +735,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -680,7 +760,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       const project = await appState.openProject("/project");
@@ -693,7 +775,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       // Set a branch before opening the project
@@ -713,7 +797,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");
@@ -734,7 +820,9 @@ describe("AppState", () => {
         mockProjectStore as unknown as ProjectStore,
         mockViewManager as unknown as IViewManager,
         mockPathProvider,
-        8080
+        8080,
+        mockFileSystemLayer,
+        mockLoggingService
       );
 
       await appState.openProject("/project");

@@ -15,6 +15,7 @@ import type { ICodeHydraApi, Unsubscribe } from "../../shared/api/interfaces";
 import type { ProjectId, WorkspaceName } from "../../shared/api/types";
 import { isProjectId, isWorkspaceName, isValidMetadataKey } from "../../shared/api/types";
 import { ApiIpcChannels, type UIMode } from "../../shared/ipc";
+import type { Logger } from "../../services/logging";
 
 // =============================================================================
 // Validation Helpers
@@ -126,6 +127,34 @@ function validateStringOrNull(value: unknown, field: string): string | null {
 }
 
 // =============================================================================
+// Logging Wrapper
+// =============================================================================
+
+/**
+ * Execute a handler with logging for timing and errors.
+ * Logs request/response/error at DEBUG/DEBUG/WARN levels.
+ *
+ * @param logger - Logger for the [api] scope
+ * @param channel - IPC channel name for logging
+ * @param fn - Handler function to execute
+ */
+async function logged<T>(logger: Logger, channel: string, fn: () => Promise<T>): Promise<T> {
+  const startTime = Date.now();
+  logger.debug("Request", { channel });
+  try {
+    const result = await fn();
+    const duration = Date.now() - startTime;
+    logger.debug("Response", { channel, duration });
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn("Error", { channel, error: message, duration });
+    throw error;
+  }
+}
+
+// =============================================================================
 // Handler Registration
 // =============================================================================
 
@@ -133,115 +162,146 @@ function validateStringOrNull(value: unknown, field: string): string | null {
  * Register all API-based IPC handlers.
  *
  * @param api - The ICodeHydraApi instance to delegate to
+ * @param logger - Logger for the [api] scope
  */
-export function registerApiHandlers(api: ICodeHydraApi): void {
+export function registerApiHandlers(api: ICodeHydraApi, logger: Logger): void {
   // ---------------------------------------------------------------------------
   // Project API
   // ---------------------------------------------------------------------------
 
-  ipcMain.handle(ApiIpcChannels.PROJECT_OPEN, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectPath = validateAbsolutePath(p?.path, "path");
-    return await api.projects.open(projectPath);
-  });
+  ipcMain.handle(ApiIpcChannels.PROJECT_OPEN, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.PROJECT_OPEN, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectPath = validateAbsolutePath(p?.path, "path");
+      return await api.projects.open(projectPath);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.PROJECT_CLOSE, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    return await api.projects.close(projectId);
-  });
+  ipcMain.handle(ApiIpcChannels.PROJECT_CLOSE, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.PROJECT_CLOSE, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      return await api.projects.close(projectId);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.PROJECT_LIST, async () => {
-    return await api.projects.list();
-  });
+  ipcMain.handle(ApiIpcChannels.PROJECT_LIST, async () =>
+    logged(logger, ApiIpcChannels.PROJECT_LIST, async () => {
+      return await api.projects.list();
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.PROJECT_GET, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    return await api.projects.get(projectId);
-  });
+  ipcMain.handle(ApiIpcChannels.PROJECT_GET, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.PROJECT_GET, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      return await api.projects.get(projectId);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.PROJECT_FETCH_BASES, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    return await api.projects.fetchBases(projectId);
-  });
+  ipcMain.handle(ApiIpcChannels.PROJECT_FETCH_BASES, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.PROJECT_FETCH_BASES, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      return await api.projects.fetchBases(projectId);
+    })
+  );
 
   // ---------------------------------------------------------------------------
   // Workspace API
   // ---------------------------------------------------------------------------
 
-  ipcMain.handle(ApiIpcChannels.WORKSPACE_CREATE, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const name = validateString(p?.name, "name");
-    const base = validateString(p?.base, "base");
-    return await api.workspaces.create(projectId, name, base);
-  });
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_CREATE, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.WORKSPACE_CREATE, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const name = validateString(p?.name, "name");
+      const base = validateString(p?.base, "base");
+      return await api.workspaces.create(projectId, name, base);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.WORKSPACE_REMOVE, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
-    const keepBranch = validateBoolean(p?.keepBranch, "keepBranch", true);
-    return await api.workspaces.remove(projectId, workspaceName, keepBranch);
-  });
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_REMOVE, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.WORKSPACE_REMOVE, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+      const keepBranch = validateBoolean(p?.keepBranch, "keepBranch", true);
+      return await api.workspaces.remove(projectId, workspaceName, keepBranch);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
-    return await api.workspaces.get(projectId, workspaceName);
-  });
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.WORKSPACE_GET, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+      return await api.workspaces.get(projectId, workspaceName);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET_STATUS, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
-    return await api.workspaces.getStatus(projectId, workspaceName);
-  });
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET_STATUS, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.WORKSPACE_GET_STATUS, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+      return await api.workspaces.getStatus(projectId, workspaceName);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.WORKSPACE_SET_METADATA, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
-    const key = validateMetadataKey(p?.key, "key");
-    const value = validateStringOrNull(p?.value, "value");
-    return await api.workspaces.setMetadata(projectId, workspaceName, key, value);
-  });
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_SET_METADATA, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.WORKSPACE_SET_METADATA, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+      const key = validateMetadataKey(p?.key, "key");
+      const value = validateStringOrNull(p?.value, "value");
+      return await api.workspaces.setMetadata(projectId, workspaceName, key, value);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET_METADATA, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
-    return await api.workspaces.getMetadata(projectId, workspaceName);
-  });
+  ipcMain.handle(ApiIpcChannels.WORKSPACE_GET_METADATA, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.WORKSPACE_GET_METADATA, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+      return await api.workspaces.getMetadata(projectId, workspaceName);
+    })
+  );
 
   // ---------------------------------------------------------------------------
   // UI API
   // ---------------------------------------------------------------------------
 
-  ipcMain.handle(ApiIpcChannels.UI_SELECT_FOLDER, async () => {
-    return await api.ui.selectFolder();
-  });
+  ipcMain.handle(ApiIpcChannels.UI_SELECT_FOLDER, async () =>
+    logged(logger, ApiIpcChannels.UI_SELECT_FOLDER, async () => {
+      return await api.ui.selectFolder();
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.UI_GET_ACTIVE_WORKSPACE, async () => {
-    return await api.ui.getActiveWorkspace();
-  });
+  ipcMain.handle(ApiIpcChannels.UI_GET_ACTIVE_WORKSPACE, async () =>
+    logged(logger, ApiIpcChannels.UI_GET_ACTIVE_WORKSPACE, async () => {
+      return await api.ui.getActiveWorkspace();
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.UI_SWITCH_WORKSPACE, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const projectId = validateProjectId(p?.projectId, "projectId");
-    const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
-    const focus = validateBoolean(p?.focus, "focus", true);
-    return await api.ui.switchWorkspace(projectId, workspaceName, focus);
-  });
+  ipcMain.handle(ApiIpcChannels.UI_SWITCH_WORKSPACE, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.UI_SWITCH_WORKSPACE, async () => {
+      const p = payload as Record<string, unknown>;
+      const projectId = validateProjectId(p?.projectId, "projectId");
+      const workspaceName = validateWorkspaceName(p?.workspaceName, "workspaceName");
+      const focus = validateBoolean(p?.focus, "focus", true);
+      return await api.ui.switchWorkspace(projectId, workspaceName, focus);
+    })
+  );
 
-  ipcMain.handle(ApiIpcChannels.UI_SET_MODE, async (_event, payload: unknown) => {
-    const p = payload as Record<string, unknown>;
-    const mode = validateUIMode(p?.mode, "mode");
-    return await api.ui.setMode(mode);
-  });
+  ipcMain.handle(ApiIpcChannels.UI_SET_MODE, async (_event, payload: unknown) =>
+    logged(logger, ApiIpcChannels.UI_SET_MODE, async () => {
+      const p = payload as Record<string, unknown>;
+      const mode = validateUIMode(p?.mode, "mode");
+      return await api.ui.setMode(mode);
+    })
+  );
 
   // ---------------------------------------------------------------------------
   // Lifecycle API

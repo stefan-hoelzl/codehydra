@@ -274,24 +274,12 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     }
 
     // Copy keep files from project root to new workspace (if service configured)
+    // Note: Logging is handled by KeepFilesService via [keepfiles] logger
     if (this.keepFilesService) {
       try {
-        const result = await this.keepFilesService.copyToWorkspace(this.projectRoot, worktreePath);
-
-        if (result.configExists) {
-          console.info(
-            `Copied ${result.copiedCount} keep file(s) to workspace (${result.skippedCount} skipped)`
-          );
-
-          // Log any errors that occurred during copying
-          for (const error of result.errors) {
-            console.warn(`Failed to copy ${error.path}: ${error.message}`);
-          }
-        }
-      } catch (error: unknown) {
-        // Copy errors shouldn't fail workspace creation
-        const message = error instanceof Error ? error.message : "Unknown error";
-        console.warn(`Failed to copy keep files: ${message}`);
+        await this.keepFilesService.copyToWorkspace(this.projectRoot, worktreePath);
+      } catch {
+        // Copy errors shouldn't fail workspace creation - already logged by KeepFilesService
       }
     }
 

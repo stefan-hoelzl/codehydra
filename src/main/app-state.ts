@@ -6,12 +6,13 @@
 import path from "node:path";
 import {
   createGitWorktreeProvider,
-  DefaultFileSystemLayer,
   KeepFilesService,
   type IWorkspaceProvider,
   type PathProvider,
   type ProjectStore,
   type Workspace,
+  type FileSystemLayer,
+  type LoggingService,
   urlForFolder,
 } from "../services";
 import type { IViewManager } from "./managers/view-manager.interface";
@@ -37,6 +38,8 @@ export class AppState {
   private readonly viewManager: IViewManager;
   private readonly pathProvider: PathProvider;
   private readonly codeServerPort: number;
+  private readonly fileSystemLayer: FileSystemLayer;
+  private readonly loggingService: LoggingService;
   private readonly openProjects: Map<string, OpenProject> = new Map();
   private readonly lastBaseBranches: Map<string, string> = new Map();
   private discoveryService: DiscoveryService | null = null;
@@ -46,12 +49,16 @@ export class AppState {
     projectStore: ProjectStore,
     viewManager: IViewManager,
     pathProvider: PathProvider,
-    codeServerPort: number
+    codeServerPort: number,
+    fileSystemLayer: FileSystemLayer,
+    loggingService: LoggingService
   ) {
     this.projectStore = projectStore;
     this.viewManager = viewManager;
     this.pathProvider = pathProvider;
     this.codeServerPort = codeServerPort;
+    this.fileSystemLayer = fileSystemLayer;
+    this.loggingService = loggingService;
   }
 
   /**
@@ -133,11 +140,17 @@ export class AppState {
   async openProject(projectPath: string): Promise<Project> {
     // Create workspace provider (validates it's a git repo)
     const workspacesDir = this.pathProvider.getProjectWorkspacesDir(projectPath);
-    const fileSystemLayer = new DefaultFileSystemLayer();
-    const keepFilesService = new KeepFilesService(fileSystemLayer);
-    const provider = await createGitWorktreeProvider(projectPath, workspacesDir, fileSystemLayer, {
-      keepFilesService,
-    });
+    const keepFilesService = new KeepFilesService(
+      this.fileSystemLayer,
+      this.loggingService.createLogger("keepfiles")
+    );
+    const provider = await createGitWorktreeProvider(
+      projectPath,
+      workspacesDir,
+      this.fileSystemLayer,
+      this.loggingService.createLogger("git"),
+      { keepFilesService }
+    );
 
     // Run cleanup non-blocking (fire and forget)
     if (provider.cleanupOrphanedWorkspaces) {

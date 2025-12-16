@@ -4,6 +4,7 @@
  */
 
 import { BaseWindow, nativeImage } from "electron";
+import type { Logger } from "../../services/logging";
 
 /**
  * Function to unsubscribe from an event.
@@ -23,24 +24,34 @@ export interface ContentBounds {
  */
 export class WindowManager {
   private readonly window: BaseWindow;
+  private readonly logger: Logger;
   private readonly resizeCallbacks: Set<() => void> = new Set();
 
-  private constructor(window: BaseWindow) {
+  private constructor(window: BaseWindow, logger: Logger) {
     this.window = window;
+    this.logger = logger;
 
     // Set up resize event handler
     this.window.on("resize", () => {
+      const bounds = this.window.getContentBounds();
+      this.logger.debug("Window resized", { width: bounds.width, height: bounds.height });
       this.notifyResizeCallbacks();
     });
 
     // On Linux, maximize/unmaximize may not trigger resize event,
     // so we need to listen for these separately
     this.window.on("maximize", () => {
+      this.logger.debug("Window maximized");
       this.notifyResizeCallbacks();
     });
 
     this.window.on("unmaximize", () => {
       this.notifyResizeCallbacks();
+    });
+
+    // Listen for close event
+    this.window.on("close", () => {
+      this.logger.info("Window closed");
     });
   }
 
@@ -59,10 +70,11 @@ export class WindowManager {
    * - Icon: Loaded from iconPath if provided
    * - No application menu
    *
+   * @param logger - Logger for [window] scope
    * @param title - Window title (defaults to "CodeHydra")
    * @param iconPath - Absolute path to the window icon (e.g., from PathProvider.appIconPath)
    */
-  static create(title: string = "CodeHydra", iconPath?: string): WindowManager {
+  static create(logger: Logger, title: string = "CodeHydra", iconPath?: string): WindowManager {
     const window = new BaseWindow({
       width: 1200,
       height: 800,
@@ -84,7 +96,8 @@ export class WindowManager {
       }
     }
 
-    return new WindowManager(window);
+    logger.info("Window created");
+    return new WindowManager(window, logger);
   }
 
   /**

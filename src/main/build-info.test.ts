@@ -19,6 +19,7 @@ vi.mock("electron", () => ({
     getAppPath() {
       return mockState.appPath;
     },
+    getVersion: () => "1.2.3-test",
   },
 }));
 
@@ -32,6 +33,14 @@ describe("ElectronBuildInfo", () => {
 
   afterEach(() => {
     mockState.isPackaged = false;
+  });
+
+  describe("version", () => {
+    it("returns the app version from Electron", () => {
+      const buildInfo = new ElectronBuildInfo();
+
+      expect(buildInfo.version).toBe("1.2.3-test");
+    });
   });
 
   describe("isDevelopment", () => {

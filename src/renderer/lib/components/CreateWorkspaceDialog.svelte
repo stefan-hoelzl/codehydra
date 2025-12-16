@@ -5,6 +5,9 @@
   import { workspaces, ui, type Workspace, type ProjectId } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { getProjectById } from "$lib/stores/projects.svelte.js";
+  import { createLogger } from "$lib/logging";
+
+  const logger = createLogger("ui");
 
   interface CreateWorkspaceDialogProps {
     open: boolean;
@@ -77,6 +80,7 @@
 
   // Handle project selection - clears branch and re-validates name
   function handleProjectSelect(newProjectId: ProjectId): void {
+    logger.debug("Project selected", { projectId: newProjectId });
     userSelectedProject = newProjectId;
     // Clear branch selection since we're switching projects
     selectedBranch = "";
@@ -124,18 +128,22 @@
     isSubmitting = true;
 
     try {
+      logger.debug("Dialog submitted", { type: "create-workspace" });
       const workspace = await workspaces.create(selectedProjectId, name, selectedBranch);
       // Switch to the newly created workspace to load its view
       await ui.switchWorkspace(selectedProjectId, workspace.name);
       closeDialog();
     } catch (error) {
-      submitError = error instanceof Error ? error.message : "Failed to create workspace";
+      const message = error instanceof Error ? error.message : "Failed to create workspace";
+      logger.warn("UI error", { component: "CreateWorkspaceDialog", error: message });
+      submitError = message;
       isSubmitting = false;
     }
   }
 
   // Handle cancel
   function handleCancel(): void {
+    logger.debug("Dialog closed", { type: "create-workspace" });
     closeDialog();
   }
 

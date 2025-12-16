@@ -4,13 +4,14 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DefaultNetworkLayer, type HttpClient } from "./network";
+import { createSilentLogger } from "../logging";
 
 describe("DefaultNetworkLayer", () => {
   describe("HttpClient.fetch()", () => {
     let networkLayer: HttpClient;
 
     beforeEach(() => {
-      networkLayer = new DefaultNetworkLayer();
+      networkLayer = new DefaultNetworkLayer(createSilentLogger());
     });
 
     it("fetch returns response on success", async () => {
@@ -61,7 +62,7 @@ describe("DefaultNetworkLayer", () => {
 
     it("fetch uses default timeout when not specified", async () => {
       // Test that custom default timeout is applied
-      const customLayer = new DefaultNetworkLayer({ defaultTimeout: 50 });
+      const customLayer = new DefaultNetworkLayer(createSilentLogger(), { defaultTimeout: 50 });
       let abortTriggered = false;
 
       vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {

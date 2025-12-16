@@ -2,6 +2,9 @@
   import Dialog from "./Dialog.svelte";
   import { workspaces, type WorkspaceRef } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
+  import { createLogger } from "$lib/logging";
+
+  const logger = createLogger("ui");
 
   interface RemoveWorkspaceDialogProps {
     open: boolean;
@@ -49,6 +52,7 @@
     isSubmitting = true;
 
     try {
+      logger.debug("Dialog submitted", { type: "remove-workspace" });
       const result = await workspaces.remove(
         workspaceRef.projectId,
         workspaceRef.workspaceName,
@@ -64,13 +68,16 @@
         closeDialog();
       }
     } catch (error) {
-      submitError = error instanceof Error ? error.message : "Failed to remove workspace";
+      const message = error instanceof Error ? error.message : "Failed to remove workspace";
+      logger.warn("UI error", { component: "RemoveWorkspaceDialog", error: message });
+      submitError = message;
       isSubmitting = false;
     }
   }
 
   // Handle cancel
   function handleCancel(): void {
+    logger.debug("Dialog closed", { type: "remove-workspace" });
     closeDialog();
   }
 

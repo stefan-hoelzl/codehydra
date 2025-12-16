@@ -13,10 +13,13 @@ import {
   DefaultPathProvider,
   DefaultNetworkLayer,
   DefaultFileSystemLayer,
+  ElectronLogService,
   type CodeServerConfig,
   type PathProvider,
   type BuildInfo,
+  type LoggingService,
 } from "../services";
+import { LoggingProcessRunner } from "../services/platform/logging-process-runner";
 import { VscodeSetupService } from "../services/vscode-setup";
 import { ExecaProcessRunner } from "../services/platform/process";
 import {
@@ -33,6 +36,7 @@ import {
   wireApiEvents,
   registerLifecycleHandlers,
   formatWindowTitle,
+  registerLogHandlers,
 } from "./ipc";
 import { CodeHydraApiImpl } from "./api/codehydra-api";
 import { LifecycleApi } from "./api/lifecycle-api";
@@ -115,7 +119,10 @@ const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 const buildInfo: BuildInfo = new ElectronBuildInfo();
 const platformInfo = new NodePlatformInfo();
 const pathProvider: PathProvider = new DefaultPathProvider(buildInfo, platformInfo);
-const fileSystemLayer = new DefaultFileSystemLayer();
+
+// Create logging service - must be before any services that need loggers
+const loggingService: LoggingService = new ElectronLogService(buildInfo, pathProvider);
+const fileSystemLayer = new DefaultFileSystemLayer(loggingService.createLogger("fs"));
 
 /**
  * Redirect Electron's data paths to isolate from system defaults.
@@ -211,9 +218,21 @@ async function startServices(): Promise<void> {
   }
 
   // Create shared network layer for all network operations
-  const networkLayer = new DefaultNetworkLayer();
+  const networkLayer = new DefaultNetworkLayer(loggingService.createLogger("network"));
 
-  codeServerManager = new CodeServerManager(config, processRunner, networkLayer, networkLayer);
+  // Wrap process runner with logging decorator
+  const loggingProcessRunner = new LoggingProcessRunner(
+    processRunner!,
+    loggingService.createLogger("process")
+  );
+
+  codeServerManager = new CodeServerManager(
+    config,
+    loggingProcessRunner,
+    networkLayer,
+    networkLayer,
+    loggingService.createLogger("code-server")
+  );
 
   try {
     await codeServerManager.ensureRunning();
@@ -238,10 +257,17 @@ async function startServices(): Promise<void> {
 
   // Create ProjectStore and AppState
   const projectStore = new ProjectStore(pathProvider.projectsDir, fileSystemLayer);
-  appState = new AppState(projectStore, viewManager, pathProvider, port);
+  appState = new AppState(
+    projectStore,
+    viewManager,
+    pathProvider,
+    port,
+    fileSystemLayer,
+    loggingService
+  );
 
   // Initialize OpenCode services
-  const processTree = new PidtreeProvider();
+  const processTree = new PidtreeProvider(loggingService.createLogger("pidtree"));
   const instanceProbe = new HttpInstanceProbe(networkLayer);
 
   discoveryService = new DiscoveryService({
@@ -250,7 +276,10 @@ async function startServices(): Promise<void> {
     instanceProbe,
   });
 
-  agentStatusManager = new AgentStatusManager(discoveryService);
+  agentStatusManager = new AgentStatusManager(
+    discoveryService,
+    loggingService.createLogger("opencode")
+  );
 
   // Inject services into AppState
   appState.setDiscoveryService(discoveryService);
@@ -290,7 +319,7 @@ async function startServices(): Promise<void> {
   );
 
   // Register API handlers
-  registerApiHandlers(codeHydraApi);
+  registerApiHandlers(codeHydraApi, loggingService.createLogger("api"));
 
   // Default window title (used when no workspace is active)
   const defaultTitle = formatWindowTitle(undefined, undefined, buildInfo.gitBranch);
@@ -394,6 +423,15 @@ async function startServices(): Promise<void> {
  *    - If "setup": renderer shows SetupScreen, calls lifecycle.setup()
  */
 async function bootstrap(): Promise<void> {
+  // 0. Initialize logging service (enables renderer logging via IPC)
+  loggingService.initialize();
+  registerLogHandlers(loggingService);
+  const appLogger = loggingService.createLogger("app");
+  appLogger.info("Bootstrap starting", {
+    version: buildInfo.version,
+    isDev: buildInfo.isDevelopment,
+  });
+
   // 1. Disable application menu
   Menu.setApplicationMenu(null);
 
@@ -416,14 +454,22 @@ async function bootstrap(): Promise<void> {
     buildInfo.isDevelopment && buildInfo.gitBranch
       ? `CodeHydra (${buildInfo.gitBranch})`
       : "CodeHydra";
-  windowManager = WindowManager.create(windowTitle, pathProvider.appIconPath);
+  windowManager = WindowManager.create(
+    loggingService.createLogger("window"),
+    windowTitle,
+    pathProvider.appIconPath
+  );
 
   // 5. Create ViewManager with port=0 initially
   // Port will be updated when startServices() runs
-  viewManager = ViewManager.create(windowManager, {
-    uiPreloadPath: nodePath.join(__dirname, "../preload/index.cjs"),
-    codeServerPort: 0,
-  });
+  viewManager = ViewManager.create(
+    windowManager,
+    {
+      uiPreloadPath: nodePath.join(__dirname, "../preload/index.cjs"),
+      codeServerPort: 0,
+    },
+    loggingService.createLogger("view")
+  );
 
   // 6. Maximize window after ViewManager subscription is active
   // On Linux, maximize() is async - wait for it to complete before loading UI
@@ -439,7 +485,9 @@ async function bootstrap(): Promise<void> {
     app,
     // onSetupComplete callback - starts services when setup completes
     async () => {
+      appLogger.info("Setup complete");
       await startServices();
+      appLogger.info("Services started");
     },
     // emitProgress callback - sends progress events to renderer
     (progress) => {
@@ -455,6 +503,9 @@ async function bootstrap(): Promise<void> {
   // This is done BEFORE loading UI so handlers are ready when MainView mounts
   if (setupComplete) {
     await startServices();
+    appLogger.info("Services started");
+  } else {
+    appLogger.info("Setup required");
   }
 
   // 10. Load UI layer HTML
@@ -483,6 +534,9 @@ async function bootstrap(): Promise<void> {
  * Cleans up resources on shutdown.
  */
 async function cleanup(): Promise<void> {
+  const appLogger = loggingService.createLogger("app");
+  appLogger.info("Shutdown initiated");
+
   // Stop scan interval
   if (scanInterval) {
     clearInterval(scanInterval);
@@ -533,10 +587,20 @@ async function cleanup(): Promise<void> {
 
   windowManager = null;
   appState = null;
+
+  appLogger.info("Cleanup complete");
 }
 
 // App lifecycle handlers
-app.whenReady().then(bootstrap).catch(console.error);
+app
+  .whenReady()
+  .then(bootstrap)
+  .catch((error: unknown) => {
+    const appLogger = loggingService.createLogger("app");
+    const message = error instanceof Error ? error.message : String(error);
+    appLogger.error("Fatal error", { error: message }, error instanceof Error ? error : undefined);
+    console.error(error);
+  });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

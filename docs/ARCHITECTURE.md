@@ -811,6 +811,131 @@ This approach means:
 - No JavaScript needed for theme switching
 - Layout variables (widths, spacing) are NOT in the media query
 
+## Logging System
+
+The logging system provides comprehensive logging across both main and renderer processes using electron-log.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LOGGING ARCHITECTURE                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  MAIN PROCESS                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │                     LoggingService (interface)                           ││
+│  │  - createLogger(name: LoggerName): Logger                               ││
+│  │  - initialize(): void  (enables renderer logging via IPC)               ││
+│  │                              │                                           ││
+│  │                              ▼                                           ││
+│  │              ElectronLogService (boundary impl)                          ││
+│  │  - Wraps electron-log/main                                              ││
+│  │  - Configures file path: <app-data>/logs/<datetime>-<uuid>.log          ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  RENDERER PROCESS (via IPC)                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  createLogger('ui') → Logger that calls window.api.log.*                ││
+│  │                              │                                           ││
+│  │                              │ IPC to main                               ││
+│  │                              ▼                                           ││
+│  │              LoggingService.createLogger(name).method(msg, context)     ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration
+
+| Variable               | Values                   | Description                                           |
+| ---------------------- | ------------------------ | ----------------------------------------------------- |
+| `CODEHYDRA_LOGLEVEL`   | debug\|info\|warn\|error | Override default log level                            |
+| `CODEHYDRA_PRINT_LOGS` | any non-empty value      | Print logs to stdout/stderr                           |
+| `CODEHYDRA_LOGGER`     | comma-separated names    | Only log from specified loggers (e.g., `git,process`) |
+
+**Default Levels**:
+
+- Development (isDevelopment=true): DEBUG
+- Production (isDevelopment=false): WARN
+
+### Logger Names/Scopes
+
+| Logger          | Module                 | Description                      |
+| --------------- | ---------------------- | -------------------------------- |
+| `[process]`     | LoggingProcessRunner   | Spawned processes, stdout/stderr |
+| `[network]`     | DefaultNetworkLayer    | HTTP fetch, port operations      |
+| `[fs]`          | DefaultFileSystemLayer | File read/write operations       |
+| `[git]`         | SimpleGitClient        | Git commands                     |
+| `[opencode]`    | OpenCodeClient         | OpenCode SSE connections         |
+| `[code-server]` | CodeServerManager      | code-server lifecycle            |
+| `[pidtree]`     | PidtreeProvider        | Process tree lookups             |
+| `[keepfiles]`   | KeepFilesService       | .keepfiles copy operations       |
+| `[api]`         | IPC Handlers           | API request/response timing      |
+| `[window]`      | WindowManager          | Window create/resize/close       |
+| `[view]`        | ViewManager            | View lifecycle, mode changes     |
+| `[app]`         | Application Lifecycle  | Bootstrap, startup, shutdown     |
+| `[ui]`          | Renderer Components    | Dialog events, user actions      |
+
+### Log File Location
+
+| Environment | Path                                                           |
+| ----------- | -------------------------------------------------------------- |
+| Development | `./app-data/logs/2025-12-16T10-30-00-abc123.log`               |
+| Linux       | `~/.local/share/codehydra/logs/2025-12-16T10-30-00-abc123.log` |
+| macOS       | `~/Library/Application Support/Codehydra/logs/...`             |
+| Windows     | `%APPDATA%\Codehydra\logs\...`                                 |
+
+### Usage in Services
+
+Services receive a Logger via constructor injection (required parameter):
+
+```typescript
+class CodeServerManager {
+  constructor(
+    config: CodeServerConfig,
+    processRunner: ProcessRunner,
+    httpClient: HttpClient,
+    portManager: PortManager,
+    logger: Logger // Required
+  ) {
+    this.logger = logger;
+  }
+
+  async start(): Promise<void> {
+    this.logger.info("Starting code-server");
+    // ...
+    this.logger.info("Started", { port, pid });
+  }
+}
+```
+
+### Usage in Renderer
+
+Renderer components use `createLogger` from `$lib/logging`:
+
+```svelte
+<script lang="ts">
+  import { createLogger } from "$lib/logging";
+
+  const logger = createLogger("ui");
+
+  function handleDialogOpen() {
+    logger.debug("Dialog opened", { type: "create-workspace" });
+  }
+
+  function handleSubmit() {
+    try {
+      // ...
+      logger.debug("Dialog submitted", { type: "create-workspace" });
+    } catch (error) {
+      logger.warn("UI error", { component: "Dialog", error: error.message });
+    }
+  }
+</script>
+```
+
+**Svelte 5 Guidance**: Call logger methods in event handlers and lifecycle hooks (`onMount`, `onDestroy`), NOT inside `$effect()` or `$derived()` runes.
+
 ## OpenCode Integration
 
 The OpenCode integration provides real-time agent status monitoring for AI agents running in each workspace.

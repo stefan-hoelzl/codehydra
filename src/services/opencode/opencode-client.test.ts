@@ -21,6 +21,7 @@ import {
   type SdkClientFactory,
 } from "./sdk-test-utils";
 import type { OpencodeClient, SessionStatus as SdkSessionStatus, Session } from "@opencode-ai/sdk";
+import { createSilentLogger } from "../logging";
 
 describe("OpenCodeClient", () => {
   let client: OpenCodeClient;
@@ -46,7 +47,7 @@ describe("OpenCodeClient", () => {
    * Helper to create a client with mock SDK.
    */
   function createClient(port = 8080, customFactory?: SdkClientFactory): OpenCodeClient {
-    return new OpenCodeClient(port, customFactory ?? mockFactory);
+    return new OpenCodeClient(port, createSilentLogger(), customFactory ?? mockFactory);
   }
 
   /**
@@ -1552,7 +1553,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1583,7 +1584,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1603,7 +1604,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1618,7 +1619,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1634,7 +1635,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1662,7 +1663,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1680,7 +1681,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1696,7 +1697,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       const unsubscribe = client.onPermissionEvent(listener);
 
@@ -1717,7 +1718,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, mockFactory);
+      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 

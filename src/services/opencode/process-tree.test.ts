@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { PidtreeProvider, type ProcessTreeProvider } from "./process-tree";
+import { createSilentLogger } from "../logging";
 
 // Mock pidtree
 vi.mock("pidtree", () => ({
@@ -23,7 +24,7 @@ describe("PidtreeProvider", () => {
   let provider: ProcessTreeProvider;
 
   beforeEach(() => {
-    provider = new PidtreeProvider();
+    provider = new PidtreeProvider(createSilentLogger());
     vi.clearAllMocks();
   });
 

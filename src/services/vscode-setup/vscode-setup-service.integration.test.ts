@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { VscodeSetupService } from "./vscode-setup-service";
 import { DefaultFileSystemLayer } from "../platform/filesystem";
+import { createSilentLogger } from "../logging";
 import {
   CURRENT_SETUP_VERSION,
   type SetupMarker,
@@ -129,7 +130,7 @@ describe("VscodeSetupService Integration", () => {
 
   beforeEach(async () => {
     tempDir = await createTestDir();
-    fsLayer = new DefaultFileSystemLayer();
+    fsLayer = new DefaultFileSystemLayer(createSilentLogger());
 
     // Set up mock paths pointing to our temp directory
     mockPaths = {
