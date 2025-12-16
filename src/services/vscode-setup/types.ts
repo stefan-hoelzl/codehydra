@@ -10,7 +10,7 @@ export type { ProcessRunner, ProcessResult } from "../platform/process";
  * Current version of the setup process.
  * Increment when setup steps change to force re-setup on existing installs.
  */
-export const CURRENT_SETUP_VERSION = 4;
+export const CURRENT_SETUP_VERSION = 5;
 
 /**
  * Setup steps for progress tracking.

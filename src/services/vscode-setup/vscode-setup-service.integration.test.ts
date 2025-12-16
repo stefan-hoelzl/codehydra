@@ -63,34 +63,6 @@ describe("VscodeSetupService Integration", () => {
   async function createMockAssets(assetsDir: string): Promise<void> {
     await mkdir(assetsDir, { recursive: true });
 
-    // settings.json
-    await writeFile(
-      join(assetsDir, "settings.json"),
-      JSON.stringify({
-        "workbench.startupEditor": "none",
-        "workbench.colorTheme": "Default Dark+",
-        "window.autoDetectColorScheme": true,
-        "workbench.preferredDarkColorTheme": "Default Dark+",
-        "workbench.preferredLightColorTheme": "Default Light+",
-        "extensions.autoUpdate": false,
-        "telemetry.telemetryLevel": "off",
-        "window.menuBarVisibility": "hidden",
-        "terminal.integrated.gpuAcceleration": "off",
-        "security.workspace.trust.enabled": false,
-        "security.workspace.trust.untrustedFiles": "open",
-        "security.workspace.trust.startupPrompt": "never",
-      })
-    );
-
-    // keybindings.json
-    await writeFile(
-      join(assetsDir, "keybindings.json"),
-      JSON.stringify([
-        { key: "ctrl+j", command: "-workbench.action.togglePanel" },
-        { key: "alt+t", command: "workbench.action.togglePanel" },
-      ])
-    );
-
     // extensions.json
     await writeFile(
       join(assetsDir, "extensions.json"),
@@ -184,23 +156,6 @@ describe("VscodeSetupService Integration", () => {
       const vsixContent = await readFile(vsixPath, "utf-8");
       expect(vsixContent).toBe("mock-vsix-content");
 
-      // Verify config files were copied from assets
-      const userDir = join(mockPaths.userDataDir, "User");
-      const settings = JSON.parse(await readFile(join(userDir, "settings.json"), "utf-8"));
-      expect(settings["workbench.colorTheme"]).toBe("Default Dark+");
-      expect(settings["workbench.startupEditor"]).toBe("none");
-      expect(settings["telemetry.telemetryLevel"]).toBe("off");
-      // Verify auto-detect system theme settings
-      expect(settings["window.autoDetectColorScheme"]).toBe(true);
-      expect(settings["workbench.preferredDarkColorTheme"]).toBe("Default Dark+");
-      expect(settings["workbench.preferredLightColorTheme"]).toBe("Default Light+");
-
-      const keybindings = JSON.parse(await readFile(join(userDir, "keybindings.json"), "utf-8"));
-      expect(keybindings).toEqual([
-        { key: "ctrl+j", command: "-workbench.action.togglePanel" },
-        { key: "alt+t", command: "workbench.action.togglePanel" },
-      ]);
-
       // Verify marker file
       const marker = JSON.parse(await readFile(mockPaths.markerPath, "utf-8")) as SetupMarker;
       expect(marker.version).toBe(CURRENT_SETUP_VERSION);
@@ -222,21 +177,21 @@ describe("VscodeSetupService Integration", () => {
       });
 
       expect(result.success).toBe(true);
-      // New asset-based flow: bundled vsix first, then marketplace
+      // Extension installation, then CLI scripts, then finalize
       expect(progressMessages).toContain("Installing codehydra.vscode-0.0.1.vsix...");
       expect(progressMessages).toContain("Installing sst-dev.opencode...");
-      expect(progressMessages).toContain("Writing configuration...");
+      expect(progressMessages).toContain("Creating CLI wrapper scripts...");
       expect(progressMessages).toContain("Finalizing setup...");
 
-      // Verify order: bundled extension, then marketplace, then config, then finalize
+      // Verify order: bundled extension, then marketplace, then CLI scripts, then finalize
       const codehydraIndex = progressMessages.indexOf("Installing codehydra.vscode-0.0.1.vsix...");
       const opencodeIndex = progressMessages.indexOf("Installing sst-dev.opencode...");
-      const configIndex = progressMessages.indexOf("Writing configuration...");
+      const scriptsIndex = progressMessages.indexOf("Creating CLI wrapper scripts...");
       const finalizeIndex = progressMessages.indexOf("Finalizing setup...");
 
       expect(codehydraIndex).toBeLessThan(opencodeIndex);
-      expect(opencodeIndex).toBeLessThan(configIndex);
-      expect(configIndex).toBeLessThan(finalizeIndex);
+      expect(opencodeIndex).toBeLessThan(scriptsIndex);
+      expect(scriptsIndex).toBeLessThan(finalizeIndex);
     });
 
     it("completes within reasonable time", async () => {

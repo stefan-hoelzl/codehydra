@@ -15,8 +15,6 @@ export default defineConfig({
     plugins: [
       viteStaticCopy({
         targets: [
-          { src: "src/services/vscode-setup/assets/settings.json", dest: "assets" },
-          { src: "src/services/vscode-setup/assets/keybindings.json", dest: "assets" },
           { src: "src/services/vscode-setup/assets/extensions.json", dest: "assets" },
           { src: "src/services/vscode-setup/assets/*.vsix", dest: "assets" },
         ],

@@ -236,10 +236,10 @@ describe("VscodeSetupService", () => {
       await expect(service.validateAssets()).resolves.not.toThrow();
     });
 
-    it("throws VscodeSetupError when assets are missing", async () => {
+    it("throws VscodeSetupError when extensions.json is missing", async () => {
       mockFs = createMockFileSystemLayer({
         readFile: {
-          error: new FileSystemError("ENOENT", "/mock/assets/settings.json", "Not found"),
+          error: new FileSystemError("ENOENT", "/mock/assets/extensions.json", "Not found"),
         },
       });
 
@@ -250,7 +250,7 @@ describe("VscodeSetupService", () => {
         mockFs
       );
       await expect(service.validateAssets()).rejects.toThrow(VscodeSetupError);
-      await expect(service.validateAssets()).rejects.toThrow(/settings\.json/);
+      await expect(service.validateAssets()).rejects.toThrow(/extensions\.json/);
     });
   });
 
@@ -456,59 +456,6 @@ describe("VscodeSetupService", () => {
     });
   });
 
-  describe("writeConfigFiles", () => {
-    const defaultCopyResult = { copiedCount: 1, skippedSymlinks: [] };
-
-    it("creates user-data directory and copies config files", async () => {
-      const createdDirs: string[] = [];
-      const copiedFiles: Array<{ src: string; dest: string }> = [];
-
-      mockFs = createMockFileSystemLayer({
-        mkdir: {
-          implementation: async (path) => {
-            createdDirs.push(path);
-          },
-        },
-        copyTree: {
-          implementation: async (src, dest) => {
-            copiedFiles.push({ src, dest });
-            return defaultCopyResult;
-          },
-        },
-      });
-      const progressCallback = vi.fn();
-
-      const service = new VscodeSetupService(
-        mockProcessRunner,
-        mockPathProvider,
-        "/mock/code-server",
-        mockFs
-      );
-      await service.writeConfigFiles(progressCallback);
-
-      // Verify directory created
-      expect(createdDirs).toContain("/mock/vscode/user-data/User");
-
-      // Verify settings.json copied from assets
-      expect(copiedFiles).toContainEqual({
-        src: "/mock/assets/settings.json",
-        dest: "/mock/vscode/user-data/User/settings.json",
-      });
-
-      // Verify keybindings.json copied from assets
-      expect(copiedFiles).toContainEqual({
-        src: "/mock/assets/keybindings.json",
-        dest: "/mock/vscode/user-data/User/keybindings.json",
-      });
-
-      // Verify progress callback called
-      expect(progressCallback).toHaveBeenCalledWith({
-        step: "config",
-        message: "Writing configuration...",
-      });
-    });
-  });
-
   describe("writeCompletionMarker", () => {
     it("writes marker file with version and timestamp", async () => {
       const writtenFiles: Map<string, string> = new Map();
@@ -553,7 +500,7 @@ describe("VscodeSetupService", () => {
     it("validates assets before proceeding", async () => {
       mockFs = createMockFileSystemLayer({
         readFile: {
-          error: new FileSystemError("ENOENT", "/mock/assets/settings.json", "Not found"),
+          error: new FileSystemError("ENOENT", "/mock/assets/extensions.json", "Not found"),
         },
       });
 
@@ -599,7 +546,7 @@ describe("VscodeSetupService", () => {
       );
       expect(progressMessages).toContain("Installing codehydra.vscode-0.0.1.vsix...");
       expect(progressMessages).toContain("Installing sst-dev.opencode...");
-      expect(progressMessages).toContain("Writing configuration...");
+      expect(progressMessages).toContain("Creating CLI wrapper scripts...");
       expect(progressMessages).toContain("Finalizing setup...");
     });
 

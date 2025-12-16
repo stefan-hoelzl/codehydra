@@ -86,13 +86,10 @@ export class VscodeSetupService implements IVscodeSetup {
       return extensionsResult;
     }
 
-    // Step 2: Write config files
-    await this.writeConfigFiles(onProgress);
-
-    // Step 3: Create CLI wrapper scripts
+    // Step 2: Create CLI wrapper scripts
     await this.setupBinDirectory(onProgress);
 
-    // Step 4: Write completion marker
+    // Step 3: Write completion marker
     await this.writeCompletionMarker(onProgress);
 
     return { success: true };
@@ -124,7 +121,7 @@ export class VscodeSetupService implements IVscodeSetup {
    * @throws VscodeSetupError with type "missing-assets" if any asset is missing
    */
   async validateAssets(): Promise<void> {
-    const requiredAssets = ["settings.json", "keybindings.json", "extensions.json"];
+    const requiredAssets = ["extensions.json"];
     const missingAssets: string[] = [];
 
     for (const asset of requiredAssets) {
@@ -142,27 +139,6 @@ export class VscodeSetupService implements IVscodeSetup {
         "missing-assets"
       );
     }
-  }
-
-  /**
-   * Write VS Code configuration files (settings.json, keybindings.json).
-   * Copies files from assets directory to user data directory.
-   * @param onProgress Optional callback for progress updates
-   */
-  async writeConfigFiles(onProgress?: ProgressCallback): Promise<void> {
-    onProgress?.({ step: "config", message: "Writing configuration..." });
-
-    const userDir = join(this.pathProvider.vscodeUserDataDir, "User");
-    await this.fs.mkdir(userDir);
-
-    // Copy settings.json from assets
-    await this.fs.copyTree(join(this.assetsDir, "settings.json"), join(userDir, "settings.json"));
-
-    // Copy keybindings.json from assets
-    await this.fs.copyTree(
-      join(this.assetsDir, "keybindings.json"),
-      join(userDir, "keybindings.json")
-    );
   }
 
   /**

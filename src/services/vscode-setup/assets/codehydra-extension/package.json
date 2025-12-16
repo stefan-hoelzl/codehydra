@@ -15,5 +15,16 @@
     "onStartupFinished"
   ],
   "main": "./extension.js",
-  "contributes": {}
+  "contributes": {
+    "configurationDefaults": {
+      "workbench.startupEditor": "none",
+      "window.autoDetectColorScheme": true,
+      "workbench.preferredDarkColorTheme": "Default Dark+",
+      "workbench.preferredLightColorTheme": "Default Light+",
+      "telemetry.telemetryLevel": "off",
+      "security.workspace.trust.enabled": false,
+      "security.workspace.trust.untrustedFiles": "open",
+      "security.workspace.trust.startupPrompt": "never"
+    }
+  }
 }
