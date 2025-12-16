@@ -1082,6 +1082,29 @@ API/IPC interfaces are contracts between processes. Changes can break:
 3. Wait for explicit user approval
 4. Update all locations atomically (main, preload, renderer, shared types)
 
+## CRITICAL: New Boundary Interfaces
+
+**NEVER add without explicit user approval:**
+
+- New abstraction interfaces for external systems (e.g., `*Layer`, `*Client`, `*Provider`)
+- New boundary types (interfaces that abstract over I/O, network, filesystem, processes)
+- Adding entries to the "External System Access Rules" table
+
+**Why this matters:**
+
+Boundary interfaces are architectural decisions with long-term implications:
+
+1. **Maintenance burden**: Each interface requires mock factories, test utilities, and documentation
+2. **Consistency**: New boundaries should follow established patterns (`FileSystemLayer`, `HttpClient`, etc.)
+3. **Necessity check**: Not all external access needs abstraction (e.g., pure libraries like `ignore`)
+
+**Process if new boundary needed:**
+
+1. Explain what external system access requires abstraction
+2. Justify why existing interfaces don't cover the use case
+3. Wait for explicit user approval
+4. Follow established patterns (interface + default implementation + mock factory + boundary tests)
+
 ## Validation Commands
 
 | Check      | Command              | Requirement   |
