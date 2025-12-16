@@ -4,30 +4,55 @@
 
 This document defines the testing strategy for CodeHydra. All tests use vitest.
 
-## TDD Workflow
+## Efficient Coverage Workflow
 
-For unit and integration tests, follow the red-green-refactor cycle:
+For AI agent implementation work, use efficient coverage instead of strict TDD to reduce token usage and execution time.
 
-1. **RED**: Write a failing test first
-   - Test describes the desired behavior
-   - Run test → it should FAIL (no implementation yet)
+### For New Features/Code
 
-2. **GREEN**: Write minimal code to pass the test
-   - Only write enough code to make the test pass
-   - Run test → it should PASS
+1. **IMPLEMENT**: Write implementation code and corresponding tests together
+   - Focus on getting the logic right
+   - Write tests alongside the implementation
+   - Don't run tests after each small change
 
-3. **REFACTOR**: Improve the code while keeping tests green
-   - Clean up implementation
-   - Run tests → they should still PASS
+2. **VALIDATE**: After completing all implementation steps
+   - Run: `npm run validate:fix`
+   - This runs unit tests, integration tests, linting, and type checking
 
-Repeat for each new behavior/feature.
+3. **FIX**: Address any failures from batch validation
+
+### For Bug Fixes (Cleanup Phase)
+
+1. **FIX**: Apply the code fix
+2. **COVER**: Ensure a test covers the fixed behavior
+   - If existing tests cover it, no new test needed
+   - If not covered, add a test that verifies the fix
+3. **VALIDATE**: Run `npm run validate:fix`
+
+### Why Not Strict TDD?
+
+Strict TDD (RED-GREEN-REFACTOR per step) is valuable but costly in AI agent workflows:
+
+- Each test run consumes tokens and time
+- 3+ test runs per step compounds quickly
+- For a 10-step feature, strict TDD means ~30+ test executions
+
+Efficient Coverage provides the same test coverage with fewer test executions.
+
+### When to Use Each Approach
+
+| Scenario                   | Approach              | Rationale                |
+| -------------------------- | --------------------- | ------------------------ |
+| New feature implementation | Efficient Coverage    | Reduces iteration cycles |
+| Bug fix during cleanup     | Fix + ensure coverage | Verifies fix works       |
+| Boundary tests             | Implementation-first  | Real systems required    |
 
 ## Test Types
 
 ### Unit Tests
 
 - **Purpose**: Test single modules in isolation
-- **When to write**: Before implementation (TDD)
+- **When to write**: Alongside implementation
 - **File pattern**: `*.test.ts`
 - **What to mock**: All dependencies
 - **Characteristics**:
@@ -38,7 +63,7 @@ Repeat for each new behavior/feature.
 ### Integration Tests
 
 - **Purpose**: Test multiple modules working together
-- **When to write**: Before implementation (TDD)
+- **When to write**: Alongside implementation
 - **File pattern**: `*.integration.test.ts`
 - **What to mock**: External systems only (Electron APIs, Git CLI, network, filesystem)
 - **Characteristics**:

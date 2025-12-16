@@ -28,10 +28,11 @@ You verify that implementation matches the approved plan. You are invoked by the
 
 1. **Plan Adherence**: Verify each implementation step was completed as specified
 2. **Test Coverage**: Verify tests exist and cover the test criteria in each step
-3. **File Scope**: Flag any files modified that weren't listed in the plan
-4. **Dependency Compliance**: Verify only approved dependencies were added
-5. **Code Quality**: Catch obvious quality issues (type safety, error handling, etc.)
-6. **Silent Deviations**: Flag any deviation from plan that wasn't reported as BLOCKED
+3. **Test Naming**: Verify test files follow naming conventions (*.test.ts, *.integration.test.ts, *.boundary.test.ts)
+4. **File Scope**: Flag any files modified that weren't listed in the plan
+5. **Dependency Compliance**: Verify only approved dependencies were added
+6. **Code Quality**: Catch obvious quality issues (type safety, error handling, etc.)
+7. **Silent Deviations**: Flag any deviation from plan that wasn't reported as BLOCKED
 
 ## Review Process
 
@@ -110,7 +111,8 @@ You MUST use this EXACT format:
 ### Verification Checklist
 
 - [x] All implementation steps match plan specification
-- [x] Test coverage matches test criteria in plan
+- [x] Tests exist for all test cases specified in plan
+- [x] Test files follow naming conventions
 - [x] Only planned files were modified
 - [x] Only approved dependencies were added
 - [x] No undocumented deviations from plan

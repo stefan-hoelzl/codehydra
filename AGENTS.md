@@ -992,7 +992,8 @@ agentStatusManager.onStatusChanged((path, status, counts) => {
 
 ## Development Workflow
 
-- TDD: failing test → implement → refactor
+- **Features**: Efficient coverage - implement with tests, batch validate at end
+- **Bug fixes (cleanup phase)**: Fix issue, ensure test coverage exists
 - Scripts: `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 - Use `npm install <package>` for dependencies (never edit package.json manually)
 
@@ -1027,25 +1028,33 @@ See `docs/TESTING.md` for the complete testing strategy.
 
 ### Quick Reference
 
-| Code Change                                   | Required Tests               |
-| --------------------------------------------- | ---------------------------- |
-| New module/function                           | Unit tests (TDD)             |
-| Module interactions                           | Integration tests (TDD)      |
-| External interface (Git, HTTP, fs, processes) | Boundary tests               |
-| Bug fix                                       | Test that reproduces the bug |
+| Code Change                                   | Required Tests           |
+| --------------------------------------------- | ------------------------ |
+| New module/function                           | Unit tests               |
+| Module interactions                           | Integration tests        |
+| External interface (Git, HTTP, fs, processes) | Boundary tests           |
+| Bug fix                                       | Test that covers the fix |
 
-### TDD Workflow
+### Efficient Coverage Workflow
 
-1. **RED**: Write failing test first
-2. **GREEN**: Write minimal code to pass
-3. **REFACTOR**: Clean up while keeping tests green
+For features and new code:
+
+1. **IMPLEMENT**: Write implementation and tests together (no test runs per step)
+2. **VALIDATE**: Run `npm run validate:fix` after all steps complete
+3. **FIX**: Address any failures
+
+For bug fixes during cleanup:
+
+1. **FIX**: Apply the fix
+2. **COVER**: Ensure a test covers the fixed behavior (add if missing)
+3. **VALIDATE**: Run `npm run validate:fix`
 
 ### Test Commands
 
 | Command                 | Use Case                              |
 | ----------------------- | ------------------------------------- |
 | `npm test`              | Run all tests                         |
-| `npm run test:unit`     | Quick feedback during TDD             |
+| `npm run test:unit`     | Quick feedback during development     |
 | `npm run test:boundary` | When developing external interfaces   |
 | `npm run validate`      | Pre-commit check (unit + integration) |
 

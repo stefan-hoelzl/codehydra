@@ -60,20 +60,52 @@ This allows resuming after a plan update without re-doing completed work.
 
 ```
 ┌─────────────────────────────────────────┐
-│ 1. Write failing test                   │
-│    └── Run: npm test (verify FAILS)     │
+│ 1. Write implementation code            │
 │              ↓                          │
-│ 2. Implement the code                   │
+│ 2. Write corresponding tests            │
+│    (unit and/or integration as needed)  │
 │              ↓                          │
-│ 3. Run test (verify PASSES)             │
-│    └── Run: npm test                    │
+│ 3. Update plan: mark step checkbox [x]  │
 │              ↓                          │
-│ 4. Run linting                          │
-│    └── Run: npm run lint                │
+│ 4. Proceed to next unchecked step       │
+└─────────────────────────────────────────┘
+```
+
+**DO NOT** run tests after each step. Tests run in batch at the end.
+
+### After ALL Implementation Steps Complete
+
+```
+┌─────────────────────────────────────────┐
+│ 1. Run: npm run validate:fix            │
 │              ↓                          │
-│ 5. Update plan: mark step checkbox [x]  │
+│ 2. Review output for failures           │
 │              ↓                          │
-│ 6. Proceed to next unchecked step       │
+│    ┌────────┴────────┐                  │
+│    ▼                 ▼                  │
+│ (failures)      (all pass)              │
+│    │                 │                  │
+│    ▼                 ▼                  │
+│ Fix issues     Report COMPLETE          │
+│ Re-run validate:fix                     │
+└─────────────────────────────────────────┘
+```
+
+### Fix Mode (Cleanup Phase)
+
+When invoked with fix instructions (contains "Fix the following" or similar), you are in fix mode:
+
+```
+┌─────────────────────────────────────────┐
+│ 1. Apply the fix                        │
+│              ↓                          │
+│ 2. Ensure test coverage exists          │
+│    - Check if existing tests cover it   │
+│    - Add test if not covered            │
+│              ↓                          │
+│ 3. Run: npm run validate:fix            │
+│              ↓                          │
+│ 4. Report COMPLETE                      │
 └─────────────────────────────────────────┘
 ```
 
@@ -156,8 +188,9 @@ IMPLEMENTATION COMPLETE
 
 1. **Follow the Plan**: Implement EXACTLY what the plan specifies
 2. **Skip Completed**: Always check checkboxes and skip `[x]` steps
-3. **TDD Approach**: Write failing tests FIRST, then implement
-4. **No Assumptions**: If something is unclear, STOP and report
-5. **Never Commit**: Never commit - the build agent handles commits
-6. **Report Everything**: Always report back to feature agent with status
-7. **Update Status**: Update plan status on start and completion as specified
+3. **Efficient Coverage**: Write implementation and tests together, validate in batch at end
+4. **Fix Coverage**: For fixes in cleanup phase, ensure the fixed behavior is covered by a test
+5. **No Assumptions**: If something is unclear, STOP and report
+6. **Never Commit**: Never commit - the build agent handles commits
+7. **Report Everything**: Always report back to feature agent with status
+8. **Update Status**: Update plan status on start and completion as specified
