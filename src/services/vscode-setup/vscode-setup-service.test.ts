@@ -316,11 +316,13 @@ describe("VscodeSetupService", () => {
       await service.installExtensions();
 
       // First call is for bundled vsix
+      // Note: vsix path uses join() because service constructs it with path.join()
+      // But extensions-dir is passed directly from pathProvider without modification
       expect(mockProcessRunner.run).toHaveBeenCalledWith("/mock/code-server", [
         "--install-extension",
         join("/mock/vscode", "codehydra.vscode-0.0.1.vsix"),
         "--extensions-dir",
-        join("/mock/vscode", "extensions"),
+        "/mock/vscode/extensions",
       ]);
     });
 
@@ -347,11 +349,12 @@ describe("VscodeSetupService", () => {
       await service.installExtensions();
 
       // Second call is for marketplace extension
+      // extensions-dir is passed directly from pathProvider without modification
       expect(mockProcessRunner.run).toHaveBeenCalledWith("/mock/code-server", [
         "--install-extension",
         "sst-dev.opencode",
         "--extensions-dir",
-        join("/mock/vscode", "extensions"),
+        "/mock/vscode/extensions",
       ]);
     });
 

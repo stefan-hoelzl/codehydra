@@ -2,17 +2,34 @@
 /**
  * Tests for ExecaSpawnedProcess class.
  * These tests verify the SpawnedProcess interface implementation.
+ *
+ * All tests use Node.js commands for cross-platform compatibility.
+ * This ensures identical behavior on Windows, macOS, and Linux.
  */
 import { describe, it, expect } from "vitest";
 import { execa } from "execa";
+import { mkdtemp, writeFile, chmod, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 
 import { ExecaSpawnedProcess } from "./process";
+
+/** Create a long-running Node.js process (cross-platform alternative to `sleep`) */
+const longRunningScript = "setTimeout(() => {}, 10000)";
+
+/** Create a quick Node.js process that outputs to stdout */
+const echoScript = (text: string) => `console.log('${text}')`;
+
+/** Create a quick Node.js process that outputs to stderr */
+const stderrScript = (text: string) => `console.error('${text}')`;
+
+/** Create a Node.js process that exits with a specific code */
+const exitScript = (code: number) => `process.exit(${code})`;
 
 describe("ExecaSpawnedProcess", () => {
   describe("pid", () => {
     it("returns process ID", () => {
-      // Use real execa subprocess to test pid
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -25,7 +42,7 @@ describe("ExecaSpawnedProcess", () => {
       subprocess.kill("SIGKILL");
     });
 
-    it("returns undefined on immediate spawn failure (ENOENT)", async () => {
+    it("handles spawn failure for nonexistent binary", async () => {
       const subprocess = execa("nonexistent-binary-12345", [], {
         cleanup: true,
         encoding: "utf8",
@@ -33,17 +50,23 @@ describe("ExecaSpawnedProcess", () => {
       });
       const spawned = new ExecaSpawnedProcess(subprocess);
 
-      // For ENOENT, the process never spawns so pid is undefined
-      expect(spawned.pid).toBeUndefined();
-
-      // Wait for the error to propagate
-      await spawned.wait();
+      // Platform-specific behavior:
+      // - Unix: spawn fails immediately, pid is undefined
+      // - Windows: shell spawns first (pid defined), then command lookup fails
+      if (process.platform === "win32") {
+        const result = await spawned.wait();
+        expect(result.exitCode).not.toBe(0);
+      } else {
+        expect(spawned.pid).toBeUndefined();
+        const result = await spawned.wait();
+        expect(result.exitCode).toBeNull();
+      }
     });
   });
 
   describe("kill", () => {
     it("returns true when signal sent", () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -56,7 +79,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("returns false when process already dead", async () => {
-      const subprocess = execa("echo", ["hello"], {
+      const subprocess = execa("node", ["-e", echoScript("hello")], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -73,7 +96,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("sends SIGTERM by default", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -87,7 +110,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("sends SIGKILL when specified", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -101,7 +124,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("sends SIGINT when specified", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -117,7 +140,7 @@ describe("ExecaSpawnedProcess", () => {
 
   describe("wait", () => {
     it("returns result on normal exit (exit 0)", async () => {
-      const subprocess = execa("echo", ["hello"], {
+      const subprocess = execa("node", ["-e", echoScript("hello")], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -133,7 +156,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("returns result on non-zero exit (no throw)", async () => {
-      const subprocess = execa("sh", ["-c", "exit 42"], {
+      const subprocess = execa("node", ["-e", exitScript(42)], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -147,7 +170,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("returns signal when killed", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -163,7 +186,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("returns running:true on timeout", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -182,7 +205,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("returns result if process exits before timeout", async () => {
-      const subprocess = execa("echo", ["fast"], {
+      const subprocess = execa("node", ["-e", echoScript("fast")], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -197,7 +220,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("can be called multiple times with same result", async () => {
-      const subprocess = execa("echo", ["test"], {
+      const subprocess = execa("node", ["-e", echoScript("test")], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -213,7 +236,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("handles different timeouts on subsequent calls", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -232,7 +255,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("resolves with signal when killed during wait", async () => {
-      const subprocess = execa("sleep", ["10"], {
+      const subprocess = execa("node", ["-e", longRunningScript], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -251,7 +274,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("captures stdout", async () => {
-      const subprocess = execa("echo", ["output text"], {
+      const subprocess = execa("node", ["-e", echoScript("output text")], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -264,7 +287,7 @@ describe("ExecaSpawnedProcess", () => {
     });
 
     it("captures stderr", async () => {
-      const subprocess = execa("sh", ["-c", "echo error >&2"], {
+      const subprocess = execa("node", ["-e", stderrScript("error message")], {
         cleanup: true,
         encoding: "utf8",
         reject: false,
@@ -273,12 +296,12 @@ describe("ExecaSpawnedProcess", () => {
 
       const result = await spawned.wait();
 
-      expect(result.stderr).toContain("error");
+      expect(result.stderr).toContain("error message");
     });
   });
 
   describe("error handling", () => {
-    it("handles ENOENT (binary not found)", async () => {
+    it("handles nonexistent binary", async () => {
       const subprocess = execa("nonexistent-binary-xyz-123", [], {
         cleanup: true,
         encoding: "utf8",
@@ -288,24 +311,51 @@ describe("ExecaSpawnedProcess", () => {
 
       const result = await spawned.wait();
 
-      expect(result.exitCode).toBeNull();
-      expect(result.stderr).toContain("ENOENT");
+      // Platform-specific behavior:
+      // - Unix: exitCode is null, stderr contains ENOENT
+      // - Windows: exitCode is non-zero, stderr contains error message
+      if (process.platform === "win32") {
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr.length).toBeGreaterThan(0);
+      } else {
+        expect(result.exitCode).toBeNull();
+        expect(result.stderr).toContain("ENOENT");
+      }
     });
 
-    it("handles EACCES (permission denied)", async () => {
-      // Create a non-executable file and try to run it
-      const subprocess = execa("/etc/passwd", [], {
-        cleanup: true,
-        encoding: "utf8",
-        reject: false,
-      });
-      const spawned = new ExecaSpawnedProcess(subprocess);
+    it("handles non-executable file", async () => {
+      // Create a temp file that exists but isn't executable
+      const tempDir = await mkdtemp(join(tmpdir(), "process-test-"));
+      const tempFile = join(tempDir, "not-executable.txt");
+      await writeFile(tempFile, "just text, not executable code");
 
-      const result = await spawned.wait();
+      if (process.platform !== "win32") {
+        // Ensure no execute permission on Unix
+        await chmod(tempFile, 0o644);
+      }
 
-      expect(result.exitCode).toBeNull();
-      // Error message should indicate permission issue
-      expect(result.stderr.toLowerCase()).toMatch(/eacces|permission/);
+      try {
+        const subprocess = execa(tempFile, [], {
+          cleanup: true,
+          encoding: "utf8",
+          reject: false,
+        });
+        const spawned = new ExecaSpawnedProcess(subprocess);
+
+        const result = await spawned.wait();
+
+        // Platform-specific behavior:
+        // - Unix: fails with EACCES (no execute permission)
+        // - Windows: fails because .txt isn't executable
+        if (process.platform === "win32") {
+          expect(result.exitCode).not.toBe(0);
+        } else {
+          expect(result.exitCode).toBeNull();
+          expect(result.stderr.toLowerCase()).toMatch(/eacces|permission/);
+        }
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
 
     it("handles ENOTDIR (not a directory)", async () => {

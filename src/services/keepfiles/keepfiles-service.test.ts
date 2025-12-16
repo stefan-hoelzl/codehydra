@@ -12,6 +12,9 @@ import { FileSystemError, KeepFilesError } from "../errors";
 import type { FileSystemLayer } from "../platform/filesystem";
 import { createSilentLogger } from "../logging";
 
+/** Normalize path separators for cross-platform mock comparisons */
+const normalizePath = (p: string) => p.replace(/\\/g, "/");
+
 describe("KeepFilesService", () => {
   describe("copyToWorkspace", () => {
     describe("no .keepfiles config", () => {
@@ -98,22 +101,24 @@ describe("KeepFilesService", () => {
     describe("directory pattern", () => {
       it("copies entire directory tree by scanning files", async () => {
         const readFileFn = vi.fn().mockResolvedValue(".vscode/");
-        // Use join() for path comparisons - the service uses path.join() internally
+        // Use join() for path construction, normalizePath() for comparisons
+        // This handles Windows backslashes vs Unix forward slashes
         const projectRoot = "/project";
         const vscodeDir = join(projectRoot, ".vscode");
         const vscodeSubdir = join(projectRoot, ".vscode", "subdir");
         const readdirFn = vi.fn().mockImplementation((pathArg: string) => {
-          if (pathArg === projectRoot) {
+          const normalized = normalizePath(pathArg);
+          if (normalized === normalizePath(projectRoot)) {
             return Promise.resolve([createDirEntry(".vscode", { isDirectory: true })]);
           }
-          if (pathArg === vscodeDir) {
+          if (normalized === normalizePath(vscodeDir)) {
             return Promise.resolve([
               createDirEntry("settings.json", { isFile: true }),
               createDirEntry("extensions.json", { isFile: true }),
               createDirEntry("subdir", { isDirectory: true }),
             ]);
           }
-          if (pathArg === vscodeSubdir) {
+          if (normalized === normalizePath(vscodeSubdir)) {
             return Promise.resolve([createDirEntry("config.json", { isFile: true })]);
           }
           return Promise.resolve([]);
@@ -169,10 +174,11 @@ describe("KeepFilesService", () => {
         const projectRoot = "/project";
         const secretsDir = join(projectRoot, "secrets");
         const readdirFn = vi.fn().mockImplementation((pathArg: string) => {
-          if (pathArg === projectRoot) {
+          const normalized = normalizePath(pathArg);
+          if (normalized === normalizePath(projectRoot)) {
             return Promise.resolve([createDirEntry("secrets", { isDirectory: true })]);
           }
-          if (pathArg === secretsDir) {
+          if (normalized === normalizePath(secretsDir)) {
             return Promise.resolve([
               createDirEntry("api-key.txt", { isFile: true }),
               createDirEntry("README.md", { isFile: true }),
