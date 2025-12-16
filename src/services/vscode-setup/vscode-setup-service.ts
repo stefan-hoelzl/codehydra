@@ -234,7 +234,6 @@ export class VscodeSetupService implements IVscodeSetup {
     try {
       // In dev: node_modules/code-server/out/node/entry.js
       // The package.json "bin" points to out/node/entry.js
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const codeServerEntry = require.resolve("code-server");
       // Navigate from entry.js to the root: code-server/out/node/entry.js -> code-server/
       const codeServerRoot = join(codeServerEntry, "..", "..", "..");
@@ -284,7 +283,6 @@ export class VscodeSetupService implements IVscodeSetup {
     try {
       // Try to resolve opencode-ai package (if installed as dependency)
       // require.resolve returns the absolute path to the package entry point
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const opencodeEntry = require.resolve("opencode-ai");
       // Return the resolved entry point directly - this is already an absolute path
       return opencodeEntry;
