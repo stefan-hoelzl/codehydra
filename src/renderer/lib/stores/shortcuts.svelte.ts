@@ -1,6 +1,10 @@
 /**
  * Shortcut mode state store using Svelte 5 runes.
  * Manages keyboard shortcut overlay visibility and handlers.
+ *
+ * Note: UI mode state is now centralized in ui-mode.svelte.ts.
+ * This module re-exports uiMode and shortcutModeActive for backward compatibility,
+ * and provides the handleModeChange function to update the central store.
  */
 
 import * as api from "$lib/api";
@@ -25,28 +29,32 @@ import {
   type ShortcutKey,
 } from "@shared/shortcuts";
 
-// ============ State ============
+// Import from central ui-mode store (one-way dependency: shortcuts → ui-mode)
+import {
+  uiMode,
+  shortcutModeActive,
+  setModeFromMain,
+  reset as resetUiMode,
+} from "./ui-mode.svelte.js";
 
-let _shortcutModeActive = $state(false);
-
-// ============ Getters ============
-
-export const shortcutModeActive = {
-  get value() {
-    return _shortcutModeActive;
-  },
-};
+// Re-export for existing consumers
+export { uiMode, shortcutModeActive };
 
 // ============ Actions ============
 
 /**
  * Handles ui:mode-changed event from main process.
- * Updates shortcut mode state based on the new mode.
+ * Delegates to central ui-mode store.
  * @param event - The mode change event with mode and previousMode
  */
 export function handleModeChange(event: UIModeChangedEvent): void {
-  _shortcutModeActive = event.mode === "shortcut";
+  setModeFromMain(event.mode);
 }
+
+// ============ Action Handlers ============
+
+// Guard to prevent concurrent workspace switches during rapid key presses
+let _switchingWorkspace = false;
 
 /**
  * Handles window blur events. Exits shortcut mode when window loses focus.
@@ -56,25 +64,21 @@ export function handleModeChange(event: UIModeChangedEvent): void {
 export function handleWindowBlur(): void {
   // Don't exit shortcut mode if we're actively switching workspaces
   // (Electron triggers blur events when updating view bounds)
-  if (_shortcutModeActive && !_switchingWorkspace) {
+  if (shortcutModeActive.value && !_switchingWorkspace) {
     exitShortcutMode();
   }
 }
 
 /**
  * Exits shortcut mode and restores normal state.
- * Calls setMode("workspace") to restore z-order and focus.
+ * Sets local state immediately for responsive UI, then syncs with main process.
  */
 export function exitShortcutMode(): void {
-  _shortcutModeActive = false;
+  // Set local state immediately for responsive UI
+  setModeFromMain("workspace");
   // Fire-and-forget pattern - see AGENTS.md IPC Patterns
   void api.ui.setMode("workspace");
 }
-
-// ============ Action Handlers ============
-
-// Guard to prevent concurrent workspace switches during rapid key presses
-let _switchingWorkspace = false;
 
 /**
  * Logs workspace switch errors with consistent formatting.
@@ -91,7 +95,7 @@ function logWorkspaceSwitchError(action: string, error: unknown): void {
  * @param event - The keyboard event
  */
 export function handleKeyDown(event: KeyboardEvent): void {
-  if (!_shortcutModeActive) return;
+  if (!shortcutModeActive.value) return;
 
   // Only handle Escape - other keys come via onShortcut events from main process
   if (event.key === "Escape") {
@@ -200,21 +204,23 @@ async function handleJump(key: JumpKey): Promise<void> {
 
 /**
  * Handle dialog opening keys (Enter, Delete, Backspace).
- * Deactivates shortcut mode before opening dialog.
+ * Sets mode to "workspace" locally for immediate UI feedback before opening dialog.
+ * The ui-mode store will compute desiredMode="dialog" when dialog opens.
  */
 function handleDialog(key: DialogKey): void {
   if (key === "Enter") {
     // Use active project, or fallback to first project if none active
     const project = activeProject.value ?? projects.value[0];
     if (!project) return;
-    // Deactivate mode without calling full exitShortcutMode to avoid z-order thrashing
-    _shortcutModeActive = false;
+    // Deactivate shortcut mode locally for immediate UI feedback
+    // The ui-mode store will compute desiredMode="dialog" when dialog opens
+    setModeFromMain("workspace");
     openCreateDialog(project.id);
   } else {
     // Delete or Backspace
     const workspaceRef = activeWorkspace.value;
     if (!workspaceRef) return;
-    _shortcutModeActive = false;
+    setModeFromMain("workspace");
     openRemoveDialog(workspaceRef);
   }
 }
@@ -233,6 +239,6 @@ function handleProjectOpen(): void {
  * Reset store to initial state. Used for testing.
  */
 export function reset(): void {
-  _shortcutModeActive = false;
+  resetUiMode();
   _switchingWorkspace = false;
 }

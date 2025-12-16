@@ -12,9 +12,10 @@ import { openExternal } from "../utils/external-url";
 import { ShortcutController } from "../shortcut-controller";
 
 /**
- * Sidebar width in pixels.
+ * Sidebar minimized width in pixels.
+ * Workspace views start at this offset, with expanded sidebar overlaying them.
  */
-export const SIDEBAR_WIDTH = 250;
+export const SIDEBAR_MINIMIZED_WIDTH = 20;
 
 /**
  * Minimum window dimensions.
@@ -328,9 +329,9 @@ export class ViewManager implements IViewManager {
       const activeView = this.workspaceViews.get(this.activeWorkspacePath);
       if (activeView) {
         activeView.setBounds({
-          x: SIDEBAR_WIDTH,
+          x: SIDEBAR_MINIMIZED_WIDTH,
           y: 0,
-          width: width - SIDEBAR_WIDTH,
+          width: width - SIDEBAR_MINIMIZED_WIDTH,
           height,
         });
       }

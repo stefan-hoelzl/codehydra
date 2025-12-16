@@ -86,7 +86,13 @@
 
   /* Layout variables (theme-independent) */
   --ch-sidebar-width: 250px;
+  --ch-sidebar-minimized-width: 20px;
+  --ch-sidebar-transition: 150ms ease-out;
   --ch-dialog-max-width: 450px;
+
+  /* Z-index layers */
+  --ch-z-sidebar-minimized: 1;
+  --ch-z-sidebar-expanded: 50;
 }
 
 /**

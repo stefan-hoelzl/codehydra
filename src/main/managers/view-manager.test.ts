@@ -92,7 +92,7 @@ vi.mock("../utils/external-url", () => ({
   openExternal: mockOpenExternal,
 }));
 
-import { ViewManager, SIDEBAR_WIDTH } from "./view-manager";
+import { ViewManager, SIDEBAR_MINIMIZED_WIDTH } from "./view-manager";
 import type { WindowManager } from "./window-manager";
 
 describe("ViewManager", () => {
@@ -106,9 +106,9 @@ describe("ViewManager", () => {
     vi.restoreAllMocks();
   });
 
-  describe("SIDEBAR_WIDTH constant", () => {
-    it("equals 250", () => {
-      expect(SIDEBAR_WIDTH).toBe(250);
+  describe("SIDEBAR_MINIMIZED_WIDTH constant", () => {
+    it("equals 20", () => {
+      expect(SIDEBAR_MINIMIZED_WIDTH).toBe(20);
     });
   });
 
@@ -647,9 +647,9 @@ describe("ViewManager", () => {
 
       const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
       expect(workspaceView?.setBounds).toHaveBeenCalledWith({
-        x: SIDEBAR_WIDTH,
+        x: SIDEBAR_MINIMIZED_WIDTH,
         y: 0,
-        width: 1400 - SIDEBAR_WIDTH,
+        width: 1400 - SIDEBAR_MINIMIZED_WIDTH,
         height: 900,
       });
     });
@@ -689,9 +689,9 @@ describe("ViewManager", () => {
       const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
       // Should use clamped values
       expect(workspaceView?.setBounds).toHaveBeenCalledWith({
-        x: SIDEBAR_WIDTH,
+        x: SIDEBAR_MINIMIZED_WIDTH,
         y: 0,
-        width: 800 - SIDEBAR_WIDTH,
+        width: 800 - SIDEBAR_MINIMIZED_WIDTH,
         height: 600,
       });
     });

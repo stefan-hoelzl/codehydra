@@ -34,13 +34,34 @@
     const key = globalIndex === 9 ? "0" : String(globalIndex + 1);
     return ` - Press ${key} to jump`;
   }
+
+  /**
+   * Generate status text from agent counts for aria-label.
+   */
+  export function getStatusText(idleCount: number, busyCount: number): string {
+    if (idleCount === 0 && busyCount === 0) {
+      return "No agents running";
+    }
+    if (idleCount > 0 && busyCount === 0) {
+      const noun = idleCount === 1 ? "agent" : "agents";
+      return `${idleCount} ${noun} idle`;
+    }
+    if (idleCount === 0 && busyCount > 0) {
+      const noun = busyCount === 1 ? "agent" : "agents";
+      return `${busyCount} ${noun} busy`;
+    }
+    // mixed
+    return `${idleCount} idle, ${busyCount} busy`;
+  }
 </script>
 
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { ProjectId, WorkspaceRef, WorkspaceName } from "$lib/api";
   import EmptyState from "./EmptyState.svelte";
   import AgentStatusIndicator from "./AgentStatusIndicator.svelte";
   import { getStatus } from "$lib/stores/agent-status.svelte.js";
+  import { uiMode, setSidebarExpanded } from "$lib/stores/ui-mode.svelte.js";
 
   interface SidebarProps {
     projects: readonly ProjectWithId[];
@@ -48,6 +69,7 @@
     loadingState: "loading" | "loaded" | "error";
     loadingError: string | null;
     shortcutModeActive?: boolean;
+    totalWorkspaces: number;
     onOpenProject: () => void;
     onCloseProject: (projectId: ProjectId) => void;
     onSwitchWorkspace: (workspaceRef: WorkspaceRef) => void;
@@ -61,12 +83,64 @@
     loadingState,
     loadingError,
     shortcutModeActive = false,
+    totalWorkspaces,
     onOpenProject,
     onCloseProject,
     onSwitchWorkspace,
     onOpenCreateDialog,
     onOpenRemoveDialog,
   }: SidebarProps = $props();
+
+  // ============ Expansion State ============
+
+  let isHovering = $state(false);
+  let collapseTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Sidebar is expanded when:
+  // - User is hovering over it, OR
+  // - UI mode is not "workspace" (shortcut/dialog mode), OR
+  // - There are no workspaces (so user can open a project)
+  const isExpanded = $derived(isHovering || uiMode.value !== "workspace" || totalWorkspaces === 0);
+
+  function handleMouseEnter(): void {
+    if (collapseTimeout) {
+      clearTimeout(collapseTimeout);
+      collapseTimeout = null;
+    }
+    isHovering = true;
+    setSidebarExpanded(true);
+  }
+
+  function handleMouseLeave(event: MouseEvent): void {
+    // Don't collapse if mouse is at the left edge of the window
+    // (user likely moved to window boundary, not away from sidebar)
+    if (event.clientX < 5) {
+      return;
+    }
+
+    collapseTimeout = setTimeout(() => {
+      isHovering = false;
+      setSidebarExpanded(false);
+      collapseTimeout = null;
+    }, 150); // 150ms debounce
+  }
+
+  // Clear hover state when entering shortcut mode (cleanup pending collapse)
+  $effect(() => {
+    if (shortcutModeActive && collapseTimeout) {
+      clearTimeout(collapseTimeout);
+      collapseTimeout = null;
+    }
+  });
+
+  // Clean up timeout on component destroy
+  onDestroy(() => {
+    if (collapseTimeout) {
+      clearTimeout(collapseTimeout);
+    }
+  });
+
+  // ============ Actions ============
 
   function handleAddWorkspace(projectId: ProjectId): void {
     onOpenCreateDialog(projectId);
@@ -77,8 +151,19 @@
   }
 </script>
 
-<nav class="sidebar" aria-label="Projects">
+<nav
+  class="sidebar"
+  class:expanded={isExpanded}
+  aria-label="Projects"
+  onmouseenter={handleMouseEnter}
+  onmouseleave={handleMouseLeave}
+>
   <header class="sidebar-header">
+    {#if !isExpanded}
+      <span class="expand-hint" aria-hidden="true">
+        <span class="chevron">&#9656;</span>
+      </span>
+    {/if}
     <h2>PROJECTS</h2>
   </header>
 
@@ -134,52 +219,77 @@
                 {@const displayIndex = formatIndexDisplay(globalIndex)}
                 {@const shortcutHint = getShortcutHint(globalIndex)}
                 {@const agentStatus = getStatus(workspace.path)}
-                <li
-                  class="workspace-item"
-                  class:active={workspace.path === activeWorkspacePath}
-                  aria-current={workspace.path === activeWorkspacePath ? "true" : undefined}
-                >
-                  <button
-                    type="button"
-                    class="workspace-btn"
-                    aria-label={workspace.name + (shortcutModeActive ? shortcutHint : "")}
-                    onclick={() =>
-                      onSwitchWorkspace({
-                        projectId: project.id,
-                        workspaceName: workspace.name as WorkspaceName,
-                        path: workspace.path,
-                      })}
+                {@const statusText = getStatusText(
+                  agentStatus.counts.idle,
+                  agentStatus.counts.busy
+                )}
+                {@const isActive = workspace.path === activeWorkspacePath}
+                {@const workspaceRef = {
+                  projectId: project.id,
+                  workspaceName: workspace.name as WorkspaceName,
+                  path: workspace.path,
+                }}
+                {#if isExpanded}
+                  <!-- Expanded layout: original sidebar layout -->
+                  <li
+                    class="workspace-item"
+                    class:active={isActive}
+                    aria-current={isActive ? "true" : undefined}
                   >
-                    {#if shortcutModeActive}
-                      <vscode-badge
-                        class="shortcut-badge"
-                        class:badge-dimmed={displayIndex === null}
-                        aria-hidden="true"
-                      >
-                        {displayIndex ?? "·"}
-                      </vscode-badge>
-                    {/if}
-                    {workspace.name}
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn remove-btn"
-                    id={`remove-ws-${workspace.path}`}
-                    aria-label="Remove workspace"
-                    onclick={() =>
-                      handleRemoveWorkspace({
-                        projectId: project.id,
-                        workspaceName: workspace.name as WorkspaceName,
-                        path: workspace.path,
-                      })}
+                    <button
+                      type="button"
+                      class="workspace-btn"
+                      aria-label={workspace.name + (shortcutModeActive ? shortcutHint : "")}
+                      onclick={() => onSwitchWorkspace(workspaceRef)}
+                    >
+                      {#if shortcutModeActive}
+                        <vscode-badge
+                          class="shortcut-badge"
+                          class:badge-dimmed={displayIndex === null}
+                          aria-hidden="true"
+                        >
+                          {displayIndex ?? "·"}
+                        </vscode-badge>
+                      {/if}
+                      {workspace.name}
+                    </button>
+                    <button
+                      type="button"
+                      class="action-btn remove-btn"
+                      id={`remove-ws-${workspace.path}`}
+                      aria-label="Remove workspace"
+                      onclick={() => handleRemoveWorkspace(workspaceRef)}
+                    >
+                      &times;
+                    </button>
+                    <AgentStatusIndicator
+                      idleCount={agentStatus.counts.idle}
+                      busyCount={agentStatus.counts.busy}
+                    />
+                  </li>
+                {:else}
+                  <!-- Minimized layout: clickable status indicators -->
+                  <!-- Workspace name kept in DOM (visually hidden) for accessibility -->
+                  <li
+                    class="workspace-item-minimized"
+                    class:active={isActive}
+                    aria-current={isActive ? "true" : undefined}
                   >
-                    &times;
-                  </button>
-                  <AgentStatusIndicator
-                    idleCount={agentStatus.counts.idle}
-                    busyCount={agentStatus.counts.busy}
-                  />
-                </li>
+                    <button
+                      type="button"
+                      class="status-indicator-btn"
+                      aria-label={`${workspace.name} in ${project.name} - ${statusText}`}
+                      aria-current={isActive ? "true" : undefined}
+                      onclick={() => onSwitchWorkspace(workspaceRef)}
+                    >
+                      <AgentStatusIndicator
+                        idleCount={agentStatus.counts.idle}
+                        busyCount={agentStatus.counts.busy}
+                      />
+                      <span class="ch-visually-hidden">{workspace.name}</span>
+                    </button>
+                  </li>
+                {/if}
               {/each}
             </ul>
           </li>
@@ -188,8 +298,13 @@
     {/if}
   </div>
 
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="sidebar-footer">
+    {#if !isExpanded}
+      <span class="expand-hint" aria-hidden="true">
+        <span class="chevron">&#9656;</span>
+      </span>
+    {/if}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <vscode-button
       class="open-project-btn"
       aria-label={"Open Project" + (shortcutModeActive ? " - Press O" : "")}
@@ -205,18 +320,69 @@
 
 <style>
   .sidebar {
-    width: var(--ch-sidebar-width, 250px);
+    position: absolute;
+    left: 0;
+    top: 0;
+    /* Minimized: show only left 20px, expanded: full width */
+    width: var(--ch-sidebar-minimized-width, 20px);
     height: 100%;
     background: var(--ch-background);
     color: var(--ch-foreground);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    transition:
+      width var(--ch-sidebar-transition, 150ms ease-out),
+      box-shadow var(--ch-sidebar-transition, 150ms ease-out);
+    z-index: var(--ch-z-sidebar-minimized, 1);
+    pointer-events: auto;
+  }
+
+  .sidebar.expanded {
+    width: var(--ch-sidebar-width, 250px);
+    z-index: var(--ch-z-sidebar-expanded, 50);
+    box-shadow: var(--ch-shadow);
     overflow-y: auto;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar {
+      transition: none;
+    }
+  }
+
   .sidebar-header {
-    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    padding: 12px 16px 12px 12px;
     border-bottom: 1px solid var(--ch-input-border);
+    gap: 0;
+    min-width: var(--ch-sidebar-width, 250px);
+  }
+
+  /* When minimized, expand-hint takes up left space */
+  .sidebar-header:has(.expand-hint) {
+    padding-left: 0;
+  }
+
+  .expand-hint {
+    width: var(--ch-sidebar-minimized-width, 20px);
+    min-width: var(--ch-sidebar-minimized-width, 20px);
+    height: 32px;
+    opacity: 0.5;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .expand-hint:hover {
+    opacity: 1;
+  }
+
+  .chevron {
+    font-size: 12px; /* Minimum 12px for accessibility */
+    line-height: 1;
   }
 
   .sidebar-header h2 {
@@ -225,7 +391,10 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin: 0;
+    margin-left: 8px;
     opacity: 0.7;
+    flex: 1;
+    white-space: nowrap;
   }
 
   .loading-state,
@@ -246,6 +415,7 @@
   .sidebar-content {
     flex: 1;
     overflow-y: auto;
+    min-width: var(--ch-sidebar-width, 250px);
   }
 
   .project-list {
@@ -258,8 +428,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 8px 12px 8px calc(var(--ch-sidebar-minimized-width, 20px) + 8px);
     gap: 8px;
+    min-width: var(--ch-sidebar-width, 250px);
   }
 
   .project-name {
@@ -307,8 +478,34 @@
   .workspace-item {
     display: flex;
     align-items: center;
-    padding: 4px 12px 4px 24px;
-    gap: 8px;
+    padding: 4px 12px 4px 12px;
+    gap: 4px;
+    min-height: 44px; /* Accessible click target */
+    min-width: var(--ch-sidebar-width, 250px);
+  }
+
+  .status-indicator-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ch-sidebar-minimized-width, 20px);
+    min-width: var(--ch-sidebar-minimized-width, 20px);
+    min-height: 36px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    flex-shrink: 0;
+    border-radius: 2px;
+  }
+
+  .status-indicator-btn:hover {
+    background: var(--ch-input-bg);
+  }
+
+  .status-indicator-btn:focus {
+    outline: 1px solid var(--ch-focus-border);
+    outline-offset: -1px;
   }
 
   .workspace-item.active {
@@ -348,13 +545,34 @@
     opacity: 0.7;
   }
 
+  /* Minimized layout: only status indicator visible */
+  .workspace-item-minimized {
+    display: flex;
+    align-items: center;
+    min-height: 44px; /* Accessible click target */
+  }
+
+  .workspace-item-minimized.active .status-indicator-btn {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
   .sidebar-footer {
-    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    padding: 12px 16px 12px 12px;
     border-top: 1px solid var(--ch-input-border);
+    gap: 0;
+    min-width: var(--ch-sidebar-width, 250px);
+  }
+
+  /* When minimized, expand-hint takes up left space */
+  .sidebar-footer:has(.expand-hint) {
+    padding-left: 0;
   }
 
   .open-project-btn {
-    width: 100%;
+    flex: 1;
+    margin-left: 8px;
   }
 
   .shortcut-badge {

@@ -22,30 +22,88 @@ The UI uses `@vscode-elements/elements` for consistent VS Code styling:
 
 ## Application Layout
 
+The sidebar minimizes by default to 20px, showing status indicators only. Hover or enter shortcut mode to expand. See "Sidebar Expansion Behavior" below for details.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  CODEHYDRA - [active workspace name]                                             │
-├────────────────────────┬────────────────────────────────────────────────────────┤
-│                        │                                                        │
-│  PROJECTS              │                                                        │
-│                        │                                                        │
-│  📁 my-project   [+][×]│                                                        │
-│    └─ 🌿 feature       │                VS CODE (code-server)                   │
-│    └─ 🌿 bugfix        │                                                        │
-│                        │                  Active workspace view                 │
-│  📁 other-proj   [+][×]│                                                        │
-│    └─ 🌿 experiment    │                                                        │
-│                        │                                                        │
-│  [Open Project]        │                                                        │
-│                        │                                                        │
-└────────────────────────┴────────────────────────────────────────────────────────┘
+├──┬──────────────────────────────────────────────────────────────────────────────┤
+│▸ │                                                                              │
+│██│                                                                              │
+│░░│                        VS CODE (code-server)                                 │
+│  │                                                                              │
+│▸ │                        Active workspace view                                 │
+└──┴──────────────────────────────────────────────────────────────────────────────┘
+ ↑
+20px minimized sidebar (hover to expand to 250px)
 ```
 
 ### Layout Dimensions
 
-- **Sidebar**: Fixed width (not resizable in v1)
+- **Sidebar**: 250px wide when expanded, 20px when minimized (hover to expand)
+- **VS Code area**: Starts at x=20px, expanded sidebar overlays it
 - **Window minimum size**: 800x600
 - **Window title**: "CODEHYDRA - [workspace name]" or "CODEHYDRA" if no workspace
+
+### Sidebar Expansion Behavior
+
+The sidebar minimizes by default to show only 20px of status indicators, maximizing VS Code editing space. It expands on hover to reveal full workspace names and actions.
+
+**Minimized state (default):**
+
+```
+┌──┬────────────────────────────────────────────────────────────────┐
+│▸ │                                                                │
+├──┼                                                                │
+│██│                                                                │
+│░░│                     VS CODE (code-server)                      │
+│  │                                                                │
+├──┼                     Active workspace view                      │
+│  │                                                                │
+│▸ │                                                                │
+└──┴────────────────────────────────────────────────────────────────┘
+ ↑
+20px visible (status indicators + chevron hints)
+```
+
+**Expanded state (on hover or forced):**
+
+```
+┌────────────────────────┬──────────────────────────────────────────┐
+│  PROJECTS              │                                          │
+│                        │                                          │
+│  📁 my-project   [+][×]│         VS CODE (code-server)            │
+│    └─ 🌿 feature   ░░  │                                          │
+│    └─ 🌿 bugfix    ██  │         Active workspace view            │
+│                        │         (sidebar overlays VS Code)       │
+│  [Open Project]        │                                          │
+│                        │                                          │
+└────────────────────────┴──────────────────────────────────────────┘
+         ↑                          ↑
+   250px sidebar              VS Code starts at x=20px
+    (overlays)
+```
+
+**Expansion triggers:**
+
+| Condition                      | Sidebar State |
+| ------------------------------ | ------------- |
+| Mouse hovering over sidebar    | Expanded      |
+| Mouse left sidebar (150ms ago) | Minimized     |
+| Shortcut mode active (Alt+X)   | Expanded      |
+| Dialog open                    | Expanded      |
+| No workspaces exist            | Expanded      |
+
+**Status indicators in minimized state:**
+
+- ██ (red, pulsing): Agent busy
+- ░░ (green): Agent idle
+- (empty): No agent running
+- ▸: Expand hint chevron
+
+**Click behavior:**
+
+- Clicking a status indicator in minimized state switches to that workspace
 
 ## UI Elements
 

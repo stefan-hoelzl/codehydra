@@ -38,6 +38,7 @@
     openCloseProjectDialog,
   } from "$lib/stores/dialogs.svelte.js";
   import { shortcutModeActive } from "$lib/stores/shortcuts.svelte.js";
+  import { setDialogOpen, syncMode, desiredMode } from "$lib/stores/ui-mode.svelte.js";
   import { updateStatus, setAllStatuses } from "$lib/stores/agent-status.svelte.js";
   import { setupDomainEvents } from "$lib/utils/domain-events";
   import { AgentNotificationService } from "$lib/services/agent-notifications";
@@ -93,18 +94,18 @@
     return result;
   }
 
-  // Sync dialog state with main process z-order and focus
+  // Sync dialog state to central ui-mode store
   $effect(() => {
     const isDialogOpen = dialogState.value.type !== "closed";
+    setDialogOpen(isDialogOpen);
+    // Note: shortcutModeActive guard not needed - ui-mode store handles priority
+  });
 
-    // Don't sync when in shortcut mode - shortcut mode manages its own z-order
-    // The shortcut keyboard handlers will call setMode("dialog") when opening dialogs
-    if (shortcutModeActive.value) {
-      return;
-    }
-
-    // setMode("dialog") moves UI to top; setMode("workspace") moves UI behind and focuses workspace
-    void api.ui.setMode(isDialogOpen ? "dialog" : "workspace");
+  // Sync desiredMode with main process (single IPC sync point)
+  $effect(() => {
+    // Access desiredMode to track it, then sync
+    void desiredMode.value;
+    syncMode();
   });
 
   // Initialize and subscribe to domain events on mount
@@ -131,7 +132,7 @@
         // Focus first focusable element after DOM settles with project list rendered
         await tick();
         const firstFocusable = containerRef?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button:not([tabindex="-1"]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
         firstFocusable?.focus();
 
@@ -262,6 +263,7 @@
     loadingState={loadingState.value}
     loadingError={loadingError.value}
     shortcutModeActive={shortcutModeActive.value}
+    totalWorkspaces={getAllWorkspaces().length}
     onOpenProject={handleOpenProject}
     onCloseProject={handleCloseProject}
     onSwitchWorkspace={handleSwitchWorkspace}
@@ -305,7 +307,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    left: var(--ch-sidebar-width);
+    left: var(--ch-sidebar-minimized-width, 20px);
     background: var(--ch-background);
     z-index: -1;
   }

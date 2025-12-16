@@ -75,6 +75,7 @@ vi.mock("./projects.svelte", () => mockProjectsStore);
 // Import after mock setup
 import {
   shortcutModeActive,
+  uiMode,
   handleModeChange,
   handleKeyDown,
   handleWindowBlur,
@@ -103,6 +104,46 @@ describe("shortcuts store", () => {
   describe("initial state", () => {
     it("should-have-inactive-state-initially: shortcutModeActive.value is false initially", () => {
       expect(shortcutModeActive.value).toBe(false);
+    });
+
+    it("should-have-workspace-uiMode-initially: uiMode.value is 'workspace' initially", () => {
+      expect(uiMode.value).toBe("workspace");
+    });
+  });
+
+  describe("uiMode", () => {
+    it("uiMode tracks mode from handleModeChange event", () => {
+      // Initially workspace
+      expect(uiMode.value).toBe("workspace");
+
+      // Change to shortcut
+      handleModeChange({ mode: "shortcut", previousMode: "workspace" });
+      expect(uiMode.value).toBe("shortcut");
+
+      // Change to dialog
+      handleModeChange({ mode: "dialog", previousMode: "shortcut" });
+      expect(uiMode.value).toBe("dialog");
+
+      // Change back to workspace
+      handleModeChange({ mode: "workspace", previousMode: "dialog" });
+      expect(uiMode.value).toBe("workspace");
+    });
+
+    it("shortcutModeActive derives correctly from uiMode", () => {
+      // workspace mode
+      handleModeChange({ mode: "workspace", previousMode: "workspace" });
+      expect(shortcutModeActive.value).toBe(false);
+      expect(uiMode.value).toBe("workspace");
+
+      // shortcut mode
+      handleModeChange({ mode: "shortcut", previousMode: "workspace" });
+      expect(shortcutModeActive.value).toBe(true);
+      expect(uiMode.value).toBe("shortcut");
+
+      // dialog mode
+      handleModeChange({ mode: "dialog", previousMode: "shortcut" });
+      expect(shortcutModeActive.value).toBe(false);
+      expect(uiMode.value).toBe("dialog");
     });
   });
 

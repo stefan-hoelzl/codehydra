@@ -3,5 +3,5 @@
  */
 
 export { WindowManager } from "./window-manager";
-export { ViewManager, SIDEBAR_WIDTH, type ViewManagerConfig } from "./view-manager";
+export { ViewManager, SIDEBAR_MINIMIZED_WIDTH, type ViewManagerConfig } from "./view-manager";
 export type { IViewManager, Unsubscribe } from "./view-manager.interface";
