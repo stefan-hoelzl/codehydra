@@ -141,6 +141,62 @@ CODEHYDRA_ELECTRON_FLAGS="--disable-gpu --disable-software-rasterizer"
    CODEHYDRA_ELECTRON_FLAGS="--use-gl=swiftshader" npm run dev
    ```
 
+## Log Files
+
+When investigating issues, check the application logs in `<app-data>/logs/`:
+
+| Platform    | Log Directory                                   |
+| ----------- | ----------------------------------------------- |
+| Development | `./app-data/logs/`                              |
+| Linux       | `~/.local/share/codehydra/logs/`                |
+| macOS       | `~/Library/Application Support/Codehydra/logs/` |
+| Windows     | `%APPDATA%\Codehydra\logs\`                     |
+
+### Log File Format
+
+Each application session creates a new log file: `YYYY-MM-DDTHH-MM-SS-<uuid>.log`
+
+Log entries follow this format:
+
+```
+[2025-12-16 10:30:00.123] [info] [process] Spawned command=code-server pid=12345
+ │                        │      │         └─ message with context (key=value pairs)
+ │                        │      └─ logger name (scope)
+ │                        └─ level (debug|info|warn|error)
+ └─ timestamp
+```
+
+### Logger Names
+
+| Logger          | Module                 |
+| --------------- | ---------------------- |
+| `[process]`     | Process spawning       |
+| `[network]`     | HTTP requests, ports   |
+| `[fs]`          | Filesystem operations  |
+| `[git]`         | Git operations         |
+| `[opencode]`    | OpenCode SDK           |
+| `[code-server]` | code-server process    |
+| `[pidtree]`     | Process tree lookups   |
+| `[keepfiles]`   | .keepfiles copying     |
+| `[api]`         | IPC handlers           |
+| `[window]`      | WindowManager          |
+| `[view]`        | ViewManager            |
+| `[app]`         | Application lifecycle  |
+| `[ui]`          | Renderer UI components |
+
+### Debugging with Logs
+
+```bash
+# Enable verbose logging to console
+CODEHYDRA_LOGLEVEL=debug CODEHYDRA_PRINT_LOGS=1 npm run dev
+
+# Filter to specific loggers only
+CODEHYDRA_LOGGER=git,process npm run dev
+
+# View recent log file
+tail -f ./app-data/logs/*.log
+```
+
 ## Project Structure (after Phase 1)
 
 ```
