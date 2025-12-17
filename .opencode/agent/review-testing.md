@@ -85,6 +85,15 @@ You are a testing expert specializing in vitest and TDD practices.
 - Do integration tests mock external systems appropriately?
 - Is the TDD workflow being followed (tests before implementation)?
 
+### 7. Cross-Platform Testing
+
+- Do tests avoid Unix-specific shell commands (use boundary test utilities instead)?
+- Are platform-specific tests properly skipped with `it.skipIf(isWindows)` or equivalent?
+- Do tests use `path.join()` for path construction (not string concatenation with '/')?
+- For process/signal tests, is Windows behavior documented or handled?
+- Are temp directory paths using `os.tmpdir()` or test utilities (not hardcoded /tmp)?
+- Do boundary tests work on all platforms or explicitly skip unsupported ones?
+
 ## Review Process
 
 1. Read the provided plan carefully
@@ -130,7 +139,7 @@ You MUST use this EXACT format:
 
 ## Severity Definitions
 
-- **Critical**: Missing tests for critical paths, insufficient test coverage specified, no error case coverage, wrong test type used, missing boundary tests for external interfaces
+- **Critical**: Missing tests for critical paths, insufficient test coverage specified, no error case coverage, wrong test type used, missing boundary tests for external interfaces, tests that will fail on Windows/macOS due to platform assumptions
 - **Important**: Incomplete coverage, missing edge cases, test quality concerns
 - **Suggestions**: Additional test cases, better organization, performance improvements
 

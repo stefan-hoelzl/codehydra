@@ -59,6 +59,8 @@ You verify that implementation matches the approved plan. You are invoked by the
 - Architectural decisions that contradict the plan
 - Security issues introduced
 - Files modified that could break unrelated features
+- Platform-specific code without abstractions (hardcoded '/' paths, Unix commands)
+- Missing platform handling for file operations or process spawning
 
 ### Important Issues (should be addressed)
 
@@ -66,6 +68,8 @@ You verify that implementation matches the approved plan. You are invoked by the
 - Minor deviations from plan (different naming, slightly different approach)
 - Code quality issues (missing error handling, type safety concerns)
 - Unexpected files modified (but not breaking)
+- Tests using Unix-specific patterns without proper platform skipping
+- Missing .cmd/.exe extensions for Windows binary references
 
 ### Suggestions (nice to have)
 
@@ -116,6 +120,9 @@ You MUST use this EXACT format:
 - [x] Only planned files were modified
 - [x] Only approved dependencies were added
 - [x] No undocumented deviations from plan
+- [x] Platform-specific code uses PlatformInfo abstraction
+- [x] File paths use path.join()/path.normalize()
+- [x] Tests avoid Unix-specific commands or properly skip on Windows
 
 (Use [x] for pass, [ ] for fail, note failures in issues above)
 ```

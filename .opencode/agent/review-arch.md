@@ -105,6 +105,15 @@ Before reviewing, examine:
 - Documentation requirements
 - Onboarding impact for new developers
 
+### 9. Cross-Platform Compatibility
+
+- Does the design work on all target platforms (Windows, Linux, macOS)?
+- Are platform-specific behaviors abstracted through `PlatformInfo`?
+- Are file paths handled using `path.join()` / `path.normalize()` (not hardcoded separators)?
+- Are binary/script references using platform-appropriate extensions (.cmd vs shell)?
+- Are there any Unix-specific commands or APIs that need Windows alternatives?
+- Are symlink operations considered (Windows has different symlink semantics)?
+
 ## Review Process
 
 1. Read the provided plan carefully
@@ -151,7 +160,7 @@ You MUST use this EXACT format:
 
 ## Severity Definitions
 
-- **Critical**: Architectural violations that will cause major refactoring later, circular dependencies, layer violations, major duplication, unnecessary dependencies, conflicts with existing patterns
+- **Critical**: Architectural violations that will cause major refactoring later, circular dependencies, layer violations, major duplication, unnecessary dependencies, conflicts with existing patterns, platform-specific assumptions that break on other OSes (Windows/Linux/macOS)
 - **Important**: Design concerns, coupling issues, inconsistencies with existing architecture, minor duplication, suboptimal dependency choices, maintainability concerns
 - **Suggestions**: Alternative approaches, future considerations, pattern improvements, optimization opportunities
 
