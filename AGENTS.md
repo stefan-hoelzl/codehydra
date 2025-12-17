@@ -1200,6 +1200,17 @@ agentStatusManager.onStatusChanged((path, status, counts) => {
 - Scripts: `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 - Use `npm install <package>` for dependencies (never edit package.json manually)
 
+### Windows Development Requirements
+
+Building on Windows requires Visual Studio Build Tools for native module compilation:
+
+1. **Install Visual Studio Build Tools** with "Desktop development with C++" workload
+2. Or install via `npm install --global windows-build-tools` (elevated prompt)
+
+This is required for the `@vscode/windows-process-tree` native module. If build tools are missing, `npm install` will fail with compilation errors.
+
+**Note**: GitHub Actions Windows runners have build tools pre-installed. End users receive pre-compiled binaries via electron-builder packaging.
+
 ## Git Worktree Merge Workflow
 
 When merging a worktree branch into `main`:

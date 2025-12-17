@@ -26,7 +26,7 @@ import {
   DefaultArchiveExtractor,
   type BinaryDownloadService,
 } from "../services/binary-download";
-import { PidtreeProvider } from "../services/platform/process-tree";
+import { createProcessTreeProvider } from "../services/platform/process-tree";
 import { DiscoveryService, AgentStatusManager, HttpInstanceProbe } from "../services/opencode";
 import { WindowManager } from "./managers/window-manager";
 import { ViewManager } from "./managers/view-manager";
@@ -168,9 +168,10 @@ let agentStatusCleanup: Unsubscribe | null = null;
 
 /**
  * Process tree provider for child process management.
- * Created in bootstrap(), used by ExecaProcessRunner.
+ * Created lazily in startServices() using the platform-specific factory.
  */
-let processTree: PidtreeProvider | null = null;
+import type { ProcessTreeProvider } from "../services/platform/process-tree";
+let processTree: ProcessTreeProvider | null = null;
 
 /**
  * Shared ProcessRunner instance for both VscodeSetupService and CodeServerManager.
@@ -270,10 +271,8 @@ async function startServices(): Promise<void> {
   );
 
   // Initialize OpenCode services
-  // Reuse the module-level processTree (created in bootstrap())
-  if (!processTree) {
-    throw new Error("ProcessTree not initialized - startServices called before bootstrap");
-  }
+  // Create process tree provider using platform-specific factory
+  processTree = createProcessTreeProvider(loggingService.createLogger("pidtree"));
   const instanceProbe = new HttpInstanceProbe(networkLayer);
 
   discoveryService = new DiscoveryService({
@@ -455,8 +454,7 @@ async function bootstrap(): Promise<void> {
   Menu.setApplicationMenu(null);
 
   // 2. Create VscodeSetupService early (needed for LifecycleApi)
-  // Create process tree provider for OpenCode discovery service
-  processTree = new PidtreeProvider(loggingService.createLogger("pidtree"));
+  // Note: Process tree provider is created lazily in startServices() using the factory
 
   // Store processRunner in module-level variable for reuse by CodeServerManager
   // Process runner uses platform-native tree killing (taskkill on Windows, process.kill on Unix)

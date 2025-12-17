@@ -1,6 +1,20 @@
 // @vitest-environment node
+/**
+ * Boundary tests for ProcessTreeProvider.
+ *
+ * These tests verify the ProcessTreeProvider interface contract using
+ * the factory-created implementation for the current platform:
+ * - Linux/macOS: PidtreeProvider (uses pidtree library)
+ * - Windows: WindowsProcessTreeProvider (uses @vscode/windows-process-tree)
+ *
+ * Tests are platform-agnostic and run identically on all platforms.
+ */
 import { describe, it, expect, afterEach } from "vitest";
-import { PidtreeProvider } from "./process-tree";
+import {
+  createProcessTreeProvider,
+  PidtreeProvider,
+  WindowsProcessTreeProvider,
+} from "./process-tree";
 import { ExecaProcessRunner } from "./process";
 import { createSilentLogger } from "../logging";
 import {
@@ -13,9 +27,9 @@ import {
 // Default timeout for boundary tests
 const TEST_TIMEOUT = 5000;
 
-describe("PidtreeProvider", () => {
+describe("ProcessTreeProvider (via factory)", () => {
   const logger = createSilentLogger();
-  const provider = new PidtreeProvider(logger);
+  const provider = createProcessTreeProvider(logger);
   const runner = new ExecaProcessRunner(logger);
 
   // Track spawned processes for cleanup
@@ -37,7 +51,19 @@ describe("PidtreeProvider", () => {
   });
 
   it(
-    "pidtree library works on current platform (smoke test)",
+    "uses correct implementation for current platform",
+    async () => {
+      if (process.platform === "win32") {
+        expect(provider).toBeInstanceOf(WindowsProcessTreeProvider);
+      } else {
+        expect(provider).toBeInstanceOf(PidtreeProvider);
+      }
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
+    "smoke test - provider works on current platform",
     async () => {
       // Get descendants of current process - should work without error
       const descendants = await provider.getDescendantPids(process.pid);
@@ -117,6 +143,19 @@ describe("PidtreeProvider", () => {
       // Should return empty Set, not throw
       expect(descendants).toBeInstanceOf(Set);
       expect(descendants.size).toBe(0);
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
+    "completes within 50ms",
+    async () => {
+      // Performance test - ensure process tree lookup is fast
+      const start = performance.now();
+      await provider.getDescendantPids(process.pid);
+      const elapsed = performance.now() - start;
+
+      expect(elapsed).toBeLessThan(50);
     },
     TEST_TIMEOUT
   );

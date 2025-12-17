@@ -73,5 +73,8 @@
     "vite": "^7.2.6",
     "vite-plugin-static-copy": "^3.1.4",
     "vitest": "^4.0.15"
+  },
+  "optionalDependencies": {
+    "@vscode/windows-process-tree": "^0.6.2"
   }
 }
