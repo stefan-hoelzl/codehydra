@@ -395,7 +395,7 @@ export class ExecaProcessRunner implements ProcessRunner {
       // Don't log here - will be logged in wait()
     } else {
       // Log successful spawn
-      this.logger.debug("Spawned", { command, pid: spawned.pid });
+      this.logger.debug("Spawned", { command, args: args.join(" "), pid: spawned.pid });
     }
 
     return spawned;
