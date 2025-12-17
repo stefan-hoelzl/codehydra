@@ -8,6 +8,7 @@ import { mkdtemp, rm, realpath } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { simpleGit } from "simple-git";
+import { vi } from "vitest";
 
 /**
  * Create a temporary directory with automatic cleanup.
@@ -229,4 +230,57 @@ export async function withTempRepoWithRemote(
   } finally {
     await cleanup();
   }
+}
+
+/**
+ * Suppress console output during a test that is expected to produce console output.
+ * Use this when testing error handling code that logs to console.
+ *
+ * @param methods Console methods to suppress (default: ["error", "warn"])
+ * @returns Object with restore function to call in afterEach/finally
+ *
+ * @example
+ * ```ts
+ * it("handles error gracefully", () => {
+ *   const console = suppressConsole();
+ *   try {
+ *     // Code that calls console.error
+ *     expect(console.error).toHaveBeenCalled();
+ *   } finally {
+ *     console.restore();
+ *   }
+ * });
+ * ```
+ */
+export function suppressConsole(
+  methods: Array<"error" | "warn" | "log" | "info" | "debug"> = ["error", "warn"]
+): {
+  error: ReturnType<typeof vi.spyOn>;
+  warn: ReturnType<typeof vi.spyOn>;
+  log: ReturnType<typeof vi.spyOn>;
+  info: ReturnType<typeof vi.spyOn>;
+  debug: ReturnType<typeof vi.spyOn>;
+  restore: () => void;
+} {
+  const spies = {
+    error: vi.spyOn(console, "error"),
+    warn: vi.spyOn(console, "warn"),
+    log: vi.spyOn(console, "log"),
+    info: vi.spyOn(console, "info"),
+    debug: vi.spyOn(console, "debug"),
+  };
+
+  // Suppress requested methods
+  for (const method of methods) {
+    spies[method].mockImplementation(() => {});
+  }
+
+  return {
+    ...spies,
+    restore: () => {
+      for (const spy of Object.values(spies)) {
+        spy.mockRestore();
+      }
+    },
+  };
 }

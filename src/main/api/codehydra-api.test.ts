@@ -213,6 +213,9 @@ describe("CodeHydraApiImpl - Skeleton", () => {
     });
 
     it("should not break other handlers if one throws", () => {
+      // Suppress expected console.error output from error handler
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
       const errorHandler = vi.fn().mockImplementation(() => {
         throw new Error("Handler error");
       });
@@ -228,6 +231,13 @@ describe("CodeHydraApiImpl - Skeleton", () => {
       // Both should be called despite error
       expect(errorHandler).toHaveBeenCalledTimes(1);
       expect(normalHandler).toHaveBeenCalledTimes(1);
+
+      // Verify error was logged
+      expect(consoleError).toHaveBeenCalledWith(
+        "Error in event handler for project:opened:",
+        expect.any(Error)
+      );
+      consoleError.mockRestore();
     });
   });
 

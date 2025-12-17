@@ -1693,6 +1693,9 @@ describe("GitWorktreeProvider", () => {
     });
 
     it("fails silently when listWorktrees throws", async () => {
+      // Suppress expected console.warn output from error handler
+      const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockRejectedValue(new Error("Git error")),
       });
@@ -1708,6 +1711,13 @@ describe("GitWorktreeProvider", () => {
 
       expect(result.removedCount).toBe(0);
       expect(result.failedPaths).toHaveLength(0);
+
+      // Verify warning was logged
+      expect(consoleWarn).toHaveBeenCalledWith(
+        "Failed to list worktrees for cleanup:",
+        expect.any(Error)
+      );
+      consoleWarn.mockRestore();
     });
 
     it("handles missing workspacesDir", async () => {
