@@ -16,8 +16,7 @@ const TEST_TIMEOUT = 5000;
 describe("PidtreeProvider", () => {
   const logger = createSilentLogger();
   const provider = new PidtreeProvider(logger);
-  const processTree = new PidtreeProvider(logger);
-  const runner = new ExecaProcessRunner(processTree, logger);
+  const runner = new ExecaProcessRunner(logger);
 
   // Track spawned processes for cleanup
   let spawnedWithChildren: ProcessWithChildren | null = null;

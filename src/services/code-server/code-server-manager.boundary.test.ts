@@ -49,9 +49,11 @@ function isProcessRunning(pid: number): boolean {
 
 /**
  * Create test config with proper typing.
+ * Note: binaryPath points to a non-existent path for tests that don't actually start code-server.
  */
 function createTestConfig(baseDir: string): CodeServerConfig {
   return {
+    binaryPath: `${baseDir}/bin/code-server`,
     runtimeDir: baseDir,
     extensionsDir: `${baseDir}/extensions`,
     userDataDir: `${baseDir}/user-data`,
@@ -73,9 +75,7 @@ describe("CodeServerManager (boundary)", () => {
     // Real dependencies - no mocks
     const { createSilentLogger } = await import("../logging");
     const logger = createSilentLogger();
-    const { PidtreeProvider } = await import("../platform/process-tree");
-    const processTree = new PidtreeProvider(logger);
-    const runner = new ExecaProcessRunner(processTree, logger);
+    const runner = new ExecaProcessRunner(logger);
     const networkLayer = new DefaultNetworkLayer(logger);
 
     manager = new CodeServerManager(

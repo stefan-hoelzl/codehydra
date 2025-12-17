@@ -3,8 +3,13 @@
  */
 
 import { execa } from "execa";
-import type { ProcessTreeProvider } from "./process-tree";
 import type { Logger } from "../logging";
+
+/**
+ * Platform detection for kill logic.
+ * Windows uses taskkill, Unix uses process.kill.
+ */
+const isWindows = process.platform === "win32";
 
 export interface ProcessOptions {
   /** Working directory for the process */
@@ -124,20 +129,12 @@ const TIMEOUT_SYMBOL = Symbol("timeout");
  */
 export class ExecaSpawnedProcess implements SpawnedProcess {
   private readonly subprocess: ExecaSubprocess;
-  private readonly processTree: ProcessTreeProvider;
   private readonly logger: Logger;
   private readonly command: string;
   private cachedResult: ProcessResult | null = null;
-  private childPids: Set<number> = new Set();
 
-  constructor(
-    subprocess: ExecaSubprocess,
-    processTree: ProcessTreeProvider,
-    logger: Logger,
-    command: string
-  ) {
+  constructor(subprocess: ExecaSubprocess, logger: Logger, command: string) {
     this.subprocess = subprocess;
-    this.processTree = processTree;
     this.logger = logger;
     this.command = command;
   }
@@ -147,13 +144,17 @@ export class ExecaSpawnedProcess implements SpawnedProcess {
   }
 
   async kill(termTimeout?: number, killTimeout?: number): Promise<KillResult> {
-    // Get child PIDs before killing (while parent is still alive)
-    await this.captureChildPids();
+    const pid = this.subprocess.pid;
+    if (pid === undefined) {
+      // Process never started, consider it "killed"
+      return { success: true, reason: "SIGTERM" };
+    }
 
-    // 1. Send SIGTERM to parent + children
-    this.killWithSignal("SIGTERM");
+    // 1. Send SIGTERM (or taskkill without /f on Windows)
+    await this.killProcess(pid, false);
+    this.logger.warn("Killed", { command: this.command, pid, signal: "SIGTERM" });
 
-    // 2. If termTimeout defined, wait for exit
+    // 2. If termTimeout defined, wait for graceful exit
     if (termTimeout !== undefined) {
       const result = await this.wait(termTimeout);
       if (!result.running) {
@@ -161,10 +162,11 @@ export class ExecaSpawnedProcess implements SpawnedProcess {
       }
     }
 
-    // 3. Send SIGKILL to parent + children
-    this.killWithSignal("SIGKILL");
+    // 3. Send SIGKILL (or taskkill /f on Windows)
+    await this.killProcess(pid, true);
+    this.logger.warn("Killed", { command: this.command, pid, signal: "SIGKILL" });
 
-    // 4. If killTimeout defined, wait for exit
+    // 4. If killTimeout defined, wait for forced exit
     if (killTimeout !== undefined) {
       const result = await this.wait(killTimeout);
       if (!result.running) {
@@ -177,48 +179,42 @@ export class ExecaSpawnedProcess implements SpawnedProcess {
   }
 
   /**
-   * Capture child PIDs for later cleanup.
-   * Called before killing to ensure we have the tree.
+   * Kill a process and its children using platform-appropriate method.
+   * - Windows: taskkill /pid <pid> /t [/f] for native tree killing
+   * - Unix: pkill -P to kill children, then process.kill for parent
+   *
+   * @param pid - Process ID to kill
+   * @param force - If true, use SIGKILL/taskkill /f for forced termination
    */
-  private async captureChildPids(): Promise<void> {
-    const pid = this.subprocess.pid;
-    if (pid === undefined) return;
-
-    try {
-      this.childPids = await this.processTree.getDescendantPids(pid);
-    } catch {
-      // Ignore errors - process may have already exited
-      this.childPids = new Set();
-    }
-  }
-
-  /**
-   * Send a signal to the parent process and all tracked children.
-   */
-  private killWithSignal(signal: NodeJS.Signals): void {
-    const pid = this.subprocess.pid;
-
-    // Kill parent process
-    try {
-      if (!this.subprocess.killed) {
-        this.subprocess.kill(signal);
-        this.logger.warn("Killed", {
-          command: this.command,
-          pid: pid ?? 0,
-          signal,
-        });
+  private async killProcess(pid: number, force: boolean): Promise<void> {
+    if (isWindows) {
+      // Use taskkill with /t for tree kill (kills all child processes)
+      const args = ["/pid", String(pid), "/t"];
+      if (force) {
+        args.push("/f");
       }
-    } catch {
-      // Process may have already exited
-    }
-
-    // Kill all tracked child processes
-    for (const childPid of this.childPids) {
       try {
-        process.kill(childPid, signal);
-        this.logger.debug("Killed child", { pid: childPid, signal });
+        await execa("taskkill", args);
       } catch {
-        // Child may have already exited
+        // Process may have already exited, or taskkill failed
+        // (e.g., access denied, process not found)
+      }
+    } else {
+      // Unix: kill children first with pkill -P, then kill parent
+      const signal = force ? "SIGKILL" : "SIGTERM";
+
+      // Kill all child processes by parent PID
+      try {
+        await execa("pkill", ["-P", String(pid), force ? "-9" : "-15"]);
+      } catch {
+        // pkill returns non-zero if no processes matched - that's fine
+      }
+
+      // Kill the parent process
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // Process may have already exited (ESRCH)
       }
     }
   }
@@ -278,7 +274,7 @@ export class ExecaSpawnedProcess implements SpawnedProcess {
 
     // Log exit status
     if (result.signal) {
-      // Already logged in killWithSignal
+      // Already logged in kill()
     } else {
       // Normal exit
       this.logger.debug("Exited", {
@@ -378,10 +374,7 @@ export class ExecaSpawnedProcess implements SpawnedProcess {
  * Returns a SpawnedProcess handle for controlling the spawned process.
  */
 export class ExecaProcessRunner implements ProcessRunner {
-  constructor(
-    private readonly processTree: ProcessTreeProvider,
-    private readonly logger: Logger
-  ) {}
+  constructor(private readonly logger: Logger) {}
 
   run(command: string, args: readonly string[], options?: ProcessOptions): SpawnedProcess {
     const subprocess = execa(command, [...args], {
@@ -394,7 +387,7 @@ export class ExecaProcessRunner implements ProcessRunner {
       ...(options?.env && { env: options.env, extendEnv: false }),
     }) as ExecaSubprocess;
 
-    const spawned = new ExecaSpawnedProcess(subprocess, this.processTree, this.logger, command);
+    const spawned = new ExecaSpawnedProcess(subprocess, this.logger, command);
 
     // Check if spawn failed (no PID)
     if (spawned.pid === undefined) {

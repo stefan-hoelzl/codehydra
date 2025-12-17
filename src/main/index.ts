@@ -455,12 +455,12 @@ async function bootstrap(): Promise<void> {
   Menu.setApplicationMenu(null);
 
   // 2. Create VscodeSetupService early (needed for LifecycleApi)
-  // Create process tree provider for child process management
+  // Create process tree provider for OpenCode discovery service
   processTree = new PidtreeProvider(loggingService.createLogger("pidtree"));
 
   // Store processRunner in module-level variable for reuse by CodeServerManager
-  // Process runner now includes logging and child process cleanup
-  processRunner = new ExecaProcessRunner(processTree, loggingService.createLogger("process"));
+  // Process runner uses platform-native tree killing (taskkill on Windows, process.kill on Unix)
+  processRunner = new ExecaProcessRunner(loggingService.createLogger("process"));
 
   // Create network layer for binary downloads
   const networkLayerForSetup = new DefaultNetworkLayer(loggingService.createLogger("network"));

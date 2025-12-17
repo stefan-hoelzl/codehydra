@@ -9,7 +9,6 @@ import { writeFileSync } from "fs";
 import { join } from "path";
 import type { SpawnedProcess, ProcessRunner } from "../platform/process";
 import { ExecaProcessRunner } from "../platform/process";
-import { PidtreeProvider } from "../platform/process-tree";
 import { createSilentLogger } from "../logging";
 
 /**
@@ -17,8 +16,7 @@ import { createSilentLogger } from "../logging";
  */
 function createDefaultRunner(): ProcessRunner {
   const logger = createSilentLogger();
-  const processTree = new PidtreeProvider(logger);
-  return new ExecaProcessRunner(processTree, logger);
+  return new ExecaProcessRunner(logger);
 }
 
 /**

@@ -3,7 +3,6 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import { ExecaProcessRunner, type SpawnedProcess, type ProcessRunner } from "./process";
-import { PidtreeProvider } from "./process-tree";
 import { createSilentLogger } from "../logging";
 import {
   isWindows,
@@ -11,6 +10,7 @@ import {
   spawnLongRunning,
   spawnWithOutput,
   spawnWithExitCode,
+  spawnWithChild,
 } from "./process.boundary-test-utils";
 
 // Default timeout for boundary tests
@@ -65,8 +65,7 @@ describe("ExecaProcessRunner", () => {
 
   beforeEach(async () => {
     const logger = createSilentLogger();
-    const processTree = new PidtreeProvider(logger);
-    runner = new ExecaProcessRunner(processTree, logger);
+    runner = new ExecaProcessRunner(logger);
   });
 
   afterEach(async () => {
@@ -526,10 +525,43 @@ describe("ExecaProcessRunner", () => {
   });
 
   describe("process tree cleanup", () => {
-    it.skipIf(isWindows)(
-      "kill() kills child processes via SIGTERM",
+    it(
+      "kill() kills child processes along with parent",
       async () => {
-        // Spawn parent that creates a child and echoes its PID
+        // Cross-platform test using Node.js to spawn parent with child
+        const proc = spawnWithChild(runner, 30_000);
+        runningProcesses.push(proc);
+        trackProcess(proc);
+
+        // Wait for child to spawn and PID to be printed
+        await new Promise((r) => setTimeout(r, 200));
+
+        // Kill parent with graceful shutdown
+        const killResult = await proc.kill(1000, 1000);
+        expect(killResult.success).toBe(true);
+
+        // Get the result to capture stdout with child PID
+        const result = await proc.wait(1000);
+        const childPid = parseInt(result.stdout.trim(), 10);
+
+        expect(childPid).toBeDefined();
+        expect(isNaN(childPid)).toBe(false);
+
+        // Track for cleanup in case assertion fails
+        spawnedPids.push(childPid);
+
+        // Verify child is also dead (killed by tree kill)
+        const died = await waitForProcessDeath(childPid, 1000);
+        expect(died).toBe(true);
+      },
+      TEST_TIMEOUT
+    );
+
+    // Unix-only: test SIGTERM behavior specifically (Windows doesn't have graceful SIGTERM)
+    it.skipIf(isWindows)(
+      "kill() kills child processes via SIGTERM on Unix",
+      async () => {
+        // Spawn parent that creates a child and echoes its PID using shell
         const proc = runner.run("sh", ["-c", "sleep 30 & echo $!; wait"]);
         runningProcesses.push(proc);
         trackProcess(proc);
@@ -540,6 +572,7 @@ describe("ExecaProcessRunner", () => {
         // Kill parent with graceful shutdown (SIGTERM with 1s timeout)
         const killResult = await proc.kill(1000, 100);
         expect(killResult.success).toBe(true);
+        expect(killResult.reason).toBe("SIGTERM");
 
         // Get the result to capture stdout with child PID
         const result = await proc.wait(1000);
@@ -556,8 +589,9 @@ describe("ExecaProcessRunner", () => {
       TEST_TIMEOUT
     );
 
+    // Unix-only: test SIGKILL escalation when SIGTERM is ignored
     it.skipIf(isWindows)(
-      "kill() kills child processes via SIGKILL escalation",
+      "kill() kills child processes via SIGKILL escalation on Unix",
       async () => {
         // Spawn parent that creates a child that ignores SIGTERM
         const proc = runner.run("sh", ["-c", "trap '' TERM; sleep 30 & echo $!; wait"]);

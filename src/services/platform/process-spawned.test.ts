@@ -6,22 +6,14 @@
  * All tests use Node.js commands for cross-platform compatibility.
  * This ensures identical behavior on Windows, macOS, and Linux.
  */
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { execa } from "execa";
 import { mkdtemp, writeFile, chmod, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
 import { ExecaSpawnedProcess } from "./process";
-import type { ProcessTreeProvider } from "./process-tree";
 import { createSilentLogger, type Logger } from "../logging";
-
-/** Create a mock ProcessTreeProvider for tests */
-function createMockProcessTree(): ProcessTreeProvider {
-  return {
-    getDescendantPids: vi.fn().mockResolvedValue(new Set<number>()),
-  };
-}
 
 /** Create a long-running Node.js process (cross-platform alternative to `sleep`) */
 const longRunningScript = "setTimeout(() => {}, 10000)";
@@ -36,7 +28,6 @@ const stderrScript = (text: string) => `console.error('${text}')`;
 const exitScript = (code: number) => `process.exit(${code})`;
 
 /** Shared test dependencies */
-let mockProcessTree: ProcessTreeProvider;
 let logger: Logger;
 
 /**
@@ -51,7 +42,7 @@ type ExecaSubprocess = ReturnType<typeof execa>;
  * Expects the subprocess to be cast to ExecaSubprocess at the call site.
  */
 function createSpawned(subprocess: ExecaSubprocess, command = "node"): ExecaSpawnedProcess {
-  return new ExecaSpawnedProcess(subprocess, mockProcessTree, logger, command);
+  return new ExecaSpawnedProcess(subprocess, logger, command);
 }
 
 /**
@@ -72,7 +63,6 @@ describe("ExecaSpawnedProcess", () => {
 
   // Initialize shared dependencies before each test
   beforeEach(() => {
-    mockProcessTree = createMockProcessTree();
     logger = createSilentLogger();
   });
 

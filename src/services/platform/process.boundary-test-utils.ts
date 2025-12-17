@@ -132,6 +132,46 @@ export function spawnIgnoringSignals(runner: ProcessRunner): SpawnedProcess {
 }
 
 /**
+ * Spawn a parent process that creates a single child and prints the child's PID.
+ * Cross-platform using Node.js child_process.
+ *
+ * The parent prints the child's PID to stdout immediately after spawning.
+ * Both parent and child run for `durationMs` unless killed.
+ *
+ * This is a simpler alternative to `spawnWithChildren` for tests that just
+ * need to verify tree killing works (parent + 1 child).
+ *
+ * @param runner - ProcessRunner to use for spawning
+ * @param durationMs - How long both processes should run (default: 30_000)
+ * @returns SpawnedProcess handle for the parent
+ *
+ * @example
+ * const proc = spawnWithChild(runner, 30_000);
+ * await new Promise(r => setTimeout(r, 200)); // Wait for child to spawn
+ * await proc.kill(1000, 1000);
+ * const result = await proc.wait();
+ * const childPid = parseInt(result.stdout.trim(), 10);
+ * // Verify childPid is dead
+ */
+export function spawnWithChild(runner: ProcessRunner, durationMs: number = 30_000): SpawnedProcess {
+  if (durationMs < 0) {
+    throw new Error("Duration must be non-negative");
+  }
+  // Node.js script that spawns a child and prints its PID to stdout
+  // Uses CommonJS syntax because -e eval context doesn't support ESM imports
+  const script = `
+    const { spawn } = require("child_process");
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, ${durationMs})"], {
+      stdio: "ignore",
+      detached: false
+    });
+    console.log(child.pid);
+    setTimeout(() => {}, ${durationMs});
+  `;
+  return runner.run(process.execPath, ["-e", script]);
+}
+
+/**
  * Handle for a process with children.
  * Use `waitForChildPids()` to get child PIDs (self-synchronizing).
  * Use `cleanup()` in afterEach to ensure all processes are killed.
