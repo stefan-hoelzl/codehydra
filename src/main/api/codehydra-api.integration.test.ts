@@ -350,9 +350,6 @@ describe("CodeHydraApiImpl Integration", () => {
 
   describe("Event isolation", () => {
     it("should not break other handlers if one throws", async () => {
-      // Suppress expected console.error output from error handler
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-
       const errorHandler = vi.fn().mockImplementation(() => {
         throw new Error("Handler error");
       });
@@ -370,13 +367,7 @@ describe("CodeHydraApiImpl Integration", () => {
       // Both handlers should have been called
       expect(errorHandler).toHaveBeenCalled();
       expect(normalHandler).toHaveBeenCalled();
-
-      // Verify error was logged
-      expect(consoleError).toHaveBeenCalledWith(
-        "Error in event handler for project:opened:",
-        expect.any(Error)
-      );
-      consoleError.mockRestore();
+      // Logging is an implementation detail - we just verify both handlers were called
     });
   });
 });

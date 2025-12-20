@@ -12,6 +12,20 @@ import { exec } from "node:child_process";
 export const ALLOWED_SCHEMES: readonly string[] = ["http:", "https:", "mailto:"];
 
 /**
+ * Error thrown when opening an external URL fails.
+ */
+export class ExternalUrlError extends Error {
+  constructor(
+    message: string,
+    public readonly url: string,
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = "ExternalUrlError";
+  }
+}
+
+/**
  * Validates a URL and checks if its scheme is allowed.
  * @param url - The URL to validate
  * @returns The parsed URL object
@@ -36,19 +50,17 @@ function validateUrl(url: string): URL {
  * - Validates URL scheme against allowlist before opening
  * - Throws for blocked schemes (file://, javascript:, data:, etc.)
  *
- * Fire-and-forget:
- * - Does not throw if the external open fails
- * - Logs errors to console
- *
  * Platform behavior:
  * - Linux: gdbus portal → xdg-open fallback
  * - macOS: open command
  * - Windows: start command
  *
  * @param url - The URL to open
- * @throws Error if the URL is invalid or scheme is not allowed
+ * @returns Promise that resolves when URL is opened, rejects on failure
+ * @throws Error if the URL is invalid or scheme is not allowed (sync)
+ * @throws ExternalUrlError if opening fails (async, via Promise rejection)
  */
-export function openExternal(url: string): void {
+export async function openExternal(url: string): Promise<void> {
   // Validate URL and scheme (throws on failure)
   validateUrl(url);
 
@@ -56,54 +68,68 @@ export function openExternal(url: string): void {
   const platform = process.platform;
 
   if (platform === "linux") {
-    openOnLinux(url);
+    return openOnLinux(url);
   } else if (platform === "darwin") {
-    openOnMac(url);
+    return openOnMac(url);
   } else if (platform === "win32") {
-    openOnWindows(url);
+    return openOnWindows(url);
   } else {
-    console.error(`Failed to open external URL: unsupported platform '${platform}'`);
+    throw new ExternalUrlError(`Unsupported platform '${platform}'`, url);
   }
 }
 
 /**
  * Opens a URL on Linux using gdbus portal, falling back to xdg-open.
  */
-function openOnLinux(url: string): void {
-  // Try gdbus portal first (preferred, works in sandboxed environments)
-  const gdbusCommand = `gdbus call --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.portal.OpenURI.OpenURI "" "${url}" {}`;
+function openOnLinux(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Try gdbus portal first (preferred, works in sandboxed environments)
+    const gdbusCommand = `gdbus call --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.portal.OpenURI.OpenURI "" "${url}" {}`;
 
-  exec(gdbusCommand, (error) => {
-    if (error) {
-      // Fallback to xdg-open
-      exec(`xdg-open "${url}"`, (fallbackError) => {
-        if (fallbackError) {
-          console.error(`Failed to open external URL: ${url}`);
-        }
-      });
-    }
+    exec(gdbusCommand, (error) => {
+      if (error) {
+        // Fallback to xdg-open
+        exec(`xdg-open "${url}"`, (fallbackError) => {
+          if (fallbackError) {
+            reject(new ExternalUrlError("Failed to open external URL", url, fallbackError));
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
 /**
  * Opens a URL on macOS using the open command.
  */
-function openOnMac(url: string): void {
-  exec(`open "${url}"`, (error) => {
-    if (error) {
-      console.error(`Failed to open external URL: ${url}`);
-    }
+function openOnMac(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    exec(`open "${url}"`, (error) => {
+      if (error) {
+        reject(new ExternalUrlError("Failed to open external URL", url, error));
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
 /**
  * Opens a URL on Windows using the start command.
  */
-function openOnWindows(url: string): void {
-  // The empty string "" is for the window title (required for start command when URL has special chars)
-  exec(`start "" "${url}"`, (error) => {
-    if (error) {
-      console.error(`Failed to open external URL: ${url}`);
-    }
+function openOnWindows(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // The empty string "" is for the window title (required for start command when URL has special chars)
+    exec(`start "" "${url}"`, (error) => {
+      if (error) {
+        reject(new ExternalUrlError("Failed to open external URL", url, error));
+      } else {
+        resolve();
+      }
+    });
   });
 }

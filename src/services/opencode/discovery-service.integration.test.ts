@@ -22,10 +22,11 @@ describe("DiscoveryService integration with ProcessTreeProvider", () => {
   let processTree: ProcessTreeProvider;
   let mockPortManager: PortManager;
   let mockInstanceProbe: InstanceProbe;
+  const logger = createSilentLogger();
 
   beforeEach(() => {
     // Use the factory to create the provider (platform-appropriate)
-    processTree = createProcessTreeProvider(createSilentLogger());
+    processTree = createProcessTreeProvider(logger);
 
     // Create mock dependencies
     mockPortManager = {
@@ -43,7 +44,7 @@ describe("DiscoveryService integration with ProcessTreeProvider", () => {
       portManager: mockPortManager,
       processTree,
       instanceProbe: mockInstanceProbe,
-      logger: createSilentLogger(),
+      logger,
     };
 
     discoveryService = new DiscoveryService(deps);
@@ -113,7 +114,7 @@ describe("DiscoveryService integration with ProcessTreeProvider", () => {
       portManager: mockPortManager,
       processTree: mockProcessTree,
       instanceProbe: mockInstanceProbe,
-      logger: createSilentLogger(),
+      logger,
     };
 
     const service = new DiscoveryService(deps);
@@ -153,7 +154,7 @@ describe("DiscoveryService integration with ProcessTreeProvider", () => {
       portManager: mockPortManager,
       processTree: mockProcessTree,
       instanceProbe: mockProbe,
-      logger: createSilentLogger(),
+      logger,
     };
 
     const service = new DiscoveryService(deps);
@@ -195,7 +196,7 @@ describe("DiscoveryService integration with ProcessTreeProvider", () => {
       portManager: mockPortManager,
       processTree: mockProcessTree,
       instanceProbe: mockProbe,
-      logger: createSilentLogger(),
+      logger,
     };
 
     const service = new DiscoveryService(deps);

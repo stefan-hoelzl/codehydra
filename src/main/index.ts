@@ -333,7 +333,8 @@ async function startServices(): Promise<void> {
       } catch {
         // Log but don't throw - deletion continues even if UI disconnected
       }
-    }
+    },
+    loggingService.createLogger("api")
   );
 
   // Register API handlers
@@ -637,7 +638,6 @@ app
     const appLogger = loggingService.createLogger("app");
     const message = error instanceof Error ? error.message : String(error);
     appLogger.error("Fatal error", { error: message }, error instanceof Error ? error : undefined);
-    console.error(error);
   });
 
 app.on("window-all-closed", () => {
@@ -648,7 +648,15 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (windowManager === null) {
-    void bootstrap().catch(console.error);
+    void bootstrap().catch((error: unknown) => {
+      const appLogger = loggingService.createLogger("app");
+      const message = error instanceof Error ? error.message : String(error);
+      appLogger.error(
+        "Bootstrap failed on activate",
+        { error: message },
+        error instanceof Error ? error : undefined
+      );
+    });
   }
 });
 

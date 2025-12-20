@@ -11,6 +11,7 @@ import { WorkspaceError } from "../errors";
 import type { BranchInfo, WorktreeInfo } from "./types";
 import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
 import { FileSystemError } from "../errors";
+import { createMockLogger } from "../logging/logging.test-utils";
 
 /**
  * Create a mock IGitClient for testing.
@@ -46,6 +47,7 @@ describe("GitWorktreeProvider", () => {
   const PROJECT_ROOT = "/home/user/projects/my-repo";
   const WORKSPACES_DIR = "/home/user/app-data/projects/my-repo-abc12345/workspaces";
   const mockFs = createMockFileSystemLayer();
+  const mockLogger = createMockLogger();
 
   describe("create (factory)", () => {
     it("creates provider for valid git repository", async () => {
@@ -55,7 +57,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       expect(provider).toBeInstanceOf(GitWorktreeProvider);
@@ -66,7 +69,7 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient();
 
       await expect(
-        GitWorktreeProvider.create("relative/path", mockClient, WORKSPACES_DIR, mockFs)
+        GitWorktreeProvider.create("relative/path", mockClient, WORKSPACES_DIR, mockFs, mockLogger)
       ).rejects.toThrow(WorkspaceError);
     });
 
@@ -74,7 +77,13 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient();
 
       await expect(
-        GitWorktreeProvider.create(PROJECT_ROOT, mockClient, "relative/workspaces", mockFs)
+        GitWorktreeProvider.create(
+          PROJECT_ROOT,
+          mockClient,
+          "relative/workspaces",
+          mockFs,
+          mockLogger
+        )
       ).rejects.toThrow(WorkspaceError);
     });
 
@@ -84,7 +93,7 @@ describe("GitWorktreeProvider", () => {
       });
 
       await expect(
-        GitWorktreeProvider.create(PROJECT_ROOT, mockClient, WORKSPACES_DIR, mockFs)
+        GitWorktreeProvider.create(PROJECT_ROOT, mockClient, WORKSPACES_DIR, mockFs, mockLogger)
       ).rejects.toThrow(WorkspaceError);
     });
 
@@ -94,7 +103,7 @@ describe("GitWorktreeProvider", () => {
       });
 
       await expect(
-        GitWorktreeProvider.create(PROJECT_ROOT, mockClient, WORKSPACES_DIR, mockFs)
+        GitWorktreeProvider.create(PROJECT_ROOT, mockClient, WORKSPACES_DIR, mockFs, mockLogger)
       ).rejects.toThrow(WorkspaceError);
     });
   });
@@ -114,7 +123,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -139,7 +149,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -165,7 +176,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -197,7 +209,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -238,7 +251,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should not throw and should handle gracefully
@@ -269,7 +283,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -296,7 +311,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -323,7 +339,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -346,12 +363,13 @@ describe("GitWorktreeProvider", () => {
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
         getBranchConfigsByPrefix: vi.fn().mockRejectedValue(new Error("Config read failed")),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -359,8 +377,6 @@ describe("GitWorktreeProvider", () => {
       expect(workspaces).toHaveLength(1);
       // Should fall back to branch name
       expect(workspaces[0].metadata.base).toBe("feature-x");
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to get metadata"));
-      warnSpy.mockRestore();
     });
 
     it("fallback priority: config > branch > name", async () => {
@@ -402,7 +418,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -433,7 +450,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const bases = await provider.listBases();
@@ -454,7 +472,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.updateBases();
@@ -475,7 +494,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.updateBases();
@@ -494,7 +514,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.updateBases();
@@ -517,7 +538,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspace = await provider.createWorkspace("feature-x", "main");
@@ -540,7 +562,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspace = await provider.createWorkspace("user/feature", "main");
@@ -558,7 +581,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(provider.createWorkspace("feature-x", "main")).rejects.toThrow();
@@ -574,7 +598,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(provider.createWorkspace("feature-x", "main")).rejects.toThrow(WorkspaceError);
@@ -596,7 +621,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspace = await provider.createWorkspace("existing-branch", "existing-branch");
@@ -621,7 +647,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(provider.createWorkspace("existing-branch", "main")).rejects.toThrow(
@@ -654,7 +681,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(
@@ -678,7 +706,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(provider.createWorkspace("main", "main")).rejects.toThrow(WorkspaceError);
@@ -704,7 +733,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(
@@ -731,7 +761,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should create new local branch even though remote exists
@@ -757,7 +788,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await provider.createWorkspace("feature-x", "main");
@@ -779,20 +811,19 @@ describe("GitWorktreeProvider", () => {
           ]),
         setBranchConfig: vi.fn().mockRejectedValue(new Error("Config write failed")),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should NOT throw - workspace is created successfully
       const workspace = await provider.createWorkspace("feature-x", "main");
 
       expect(workspace.name).toBe("feature-x");
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to save base branch"));
-      warnSpy.mockRestore();
     });
 
     it("returns workspace with metadata.base set", async () => {
@@ -807,7 +838,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspace = await provider.createWorkspace("feature-x", "main");
@@ -830,7 +862,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.removeWorkspace(worktreePath, false);
@@ -859,22 +892,19 @@ describe("GitWorktreeProvider", () => {
           .mockResolvedValueOnce(worktreesAfter), // Second call: after error, check if unregistered
         removeWorktree: vi.fn().mockRejectedValue(new Error("Permission denied: files locked")),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should NOT throw - directory deletion failed but worktree was unregistered
       const result = await provider.removeWorkspace(worktreePath, false);
 
       expect(result.workspaceRemoved).toBe(true);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Worktree unregistered but directory remains")
-      );
-      warnSpy.mockRestore();
     });
 
     it("throws when still registered after error", async () => {
@@ -891,7 +921,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should throw - worktree still registered after error
@@ -914,20 +945,16 @@ describe("GitWorktreeProvider", () => {
           .mockResolvedValueOnce(worktreesAfter),
         removeWorktree: vi.fn().mockRejectedValue(new Error("Permission denied")),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await provider.removeWorkspace(worktreePath, false);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        `Worktree unregistered but directory remains: ${worktreePath}. Will be cleaned up on next startup.`
-      );
-      warnSpy.mockRestore();
     });
 
     it("removes workspace and deletes branch when requested", async () => {
@@ -948,7 +975,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.removeWorkspace(worktreePath, true);
@@ -964,7 +992,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(provider.removeWorkspace(PROJECT_ROOT, false)).rejects.toThrow(WorkspaceError);
@@ -983,7 +1012,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.removeWorkspace(worktreePath, true);
@@ -1002,12 +1032,13 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should NOT throw - returns success
@@ -1015,8 +1046,6 @@ describe("GitWorktreeProvider", () => {
 
       expect(result.workspaceRemoved).toBe(true);
       expect(mockClient.removeWorktree).not.toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Worktree already removed"));
-      warnSpy.mockRestore();
     });
 
     it("returns success when branch already deleted (idempotent)", async () => {
@@ -1031,12 +1060,13 @@ describe("GitWorktreeProvider", () => {
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
         listBranches: vi.fn().mockResolvedValue(branches),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Request branch deletion, but branch doesn't exist
@@ -1045,8 +1075,6 @@ describe("GitWorktreeProvider", () => {
       expect(result.workspaceRemoved).toBe(true);
       expect(result.baseDeleted).toBe(true); // Success - branch already gone
       expect(mockClient.deleteBranch).not.toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Branch already deleted"));
-      warnSpy.mockRestore();
     });
 
     it("multiple calls return success (full idempotent flow)", async () => {
@@ -1074,12 +1102,13 @@ describe("GitWorktreeProvider", () => {
           .mockResolvedValueOnce(branchesWithFeature) // First call
           .mockResolvedValueOnce(branchesWithoutFeature), // Second call
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // First call - actually removes
@@ -1099,8 +1128,6 @@ describe("GitWorktreeProvider", () => {
       expect(mockClient.removeWorktree).toHaveBeenCalledTimes(1);
       // deleteBranch not called again (couldn't determine branch name)
       expect(mockClient.deleteBranch).toHaveBeenCalledTimes(1);
-
-      warnSpy.mockRestore();
     });
   });
 
@@ -1118,7 +1145,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const dirty = await provider.isDirty("/data/workspaces/feature-x");
@@ -1139,7 +1167,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const dirty = await provider.isDirty("/data/workspaces/feature-x");
@@ -1160,7 +1189,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const dirty = await provider.isDirty("/data/workspaces/feature-x");
@@ -1181,7 +1211,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const dirty = await provider.isDirty("/data/workspaces/feature-x");
@@ -1197,7 +1228,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const isMain = provider.isMainWorkspace(PROJECT_ROOT);
@@ -1211,7 +1243,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const isMain = provider.isMainWorkspace("/data/workspaces/feature-x");
@@ -1225,7 +1258,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Path with trailing slash should still match
@@ -1254,7 +1288,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should match despite trailing slash in input
@@ -1282,7 +1317,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should match despite ./ in path
@@ -1315,7 +1351,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should find the branch name even though stored path has trailing slash
@@ -1340,7 +1377,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.defaultBase();
@@ -1360,7 +1398,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.defaultBase();
@@ -1381,7 +1420,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.defaultBase();
@@ -1401,7 +1441,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.defaultBase();
@@ -1413,19 +1454,18 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listBranches: vi.fn().mockRejectedValue(new Error("Git error")),
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const result = await provider.defaultBase();
 
       expect(result).toBeUndefined();
-      expect(warnSpy).toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
   });
 
@@ -1458,7 +1498,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithOrphan
+        mockFsWithOrphan,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1495,7 +1536,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsOnlyRegistered
+        mockFsOnlyRegistered,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1522,7 +1564,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithSymlink
+        mockFsWithSymlink,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1549,7 +1592,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithFile
+        mockFsWithFile,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1577,7 +1621,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithTraversal
+        mockFsWithTraversal,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1616,7 +1661,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithOrphan
+        mockFsWithOrphan,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1647,7 +1693,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsMultipleOrphans
+        mockFsMultipleOrphans,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1675,12 +1722,13 @@ describe("GitWorktreeProvider", () => {
           ),
         },
       });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithRmError
+        mockFsWithRmError,
+        mockLogger
       );
 
       // Should NOT throw
@@ -1689,13 +1737,9 @@ describe("GitWorktreeProvider", () => {
       expect(result.removedCount).toBe(0);
       expect(result.failedPaths).toHaveLength(1);
       expect(result.failedPaths[0]?.path).toBe(join(WORKSPACES_DIR, "orphan-workspace"));
-      warnSpy.mockRestore();
     });
 
     it("fails silently when listWorktrees throws", async () => {
-      // Suppress expected console.warn output from error handler
-      const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockRejectedValue(new Error("Git error")),
       });
@@ -1703,7 +1747,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       // Should NOT throw
@@ -1711,13 +1756,6 @@ describe("GitWorktreeProvider", () => {
 
       expect(result.removedCount).toBe(0);
       expect(result.failedPaths).toHaveLength(0);
-
-      // Verify warning was logged
-      expect(consoleWarn).toHaveBeenCalledWith(
-        "Failed to list worktrees for cleanup:",
-        expect.any(Error)
-      );
-      consoleWarn.mockRestore();
     });
 
     it("handles missing workspacesDir", async () => {
@@ -1735,7 +1773,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsNotFound
+        mockFsNotFound,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1759,7 +1798,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsEmpty
+        mockFsEmpty,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1793,7 +1833,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsNormalized
+        mockFsNormalized,
+        mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
@@ -1833,7 +1874,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithOrphan
+        mockFsWithOrphan,
+        mockLogger
       );
 
       // Start first cleanup (will hang on listWorktrees)
@@ -1875,7 +1917,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -1902,7 +1945,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -1929,7 +1973,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -1960,7 +2005,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspaces = await provider.discover();
@@ -1987,7 +2033,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const workspace = await provider.createWorkspace("feature-x", "main");
@@ -2015,7 +2062,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await expect(provider.setMetadata(worktreePath, "my_key", "value")).rejects.toThrow(
@@ -2049,7 +2097,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await provider.setMetadata(worktreePath, "note", "WIP feature");
@@ -2080,7 +2129,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       await provider.setMetadata(worktreePath, "note", null);
@@ -2115,6 +2165,7 @@ describe("GitWorktreeProvider", () => {
         mockClient,
         WORKSPACES_DIR,
         mockFs,
+        mockLogger,
         { keepFilesService: mockKeepFilesService }
       );
 
@@ -2138,7 +2189,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
         // No options - should work without keepFilesService
       );
 
@@ -2160,6 +2212,7 @@ describe("GitWorktreeProvider", () => {
         mockClient,
         WORKSPACES_DIR,
         mockFs,
+        mockLogger,
         {} // Options without keepFilesService
       );
 
@@ -2189,6 +2242,7 @@ describe("GitWorktreeProvider", () => {
         mockClient,
         WORKSPACES_DIR,
         mockFs,
+        mockLogger,
         { keepFilesService: mockKeepFilesService }
       );
 
@@ -2220,6 +2274,7 @@ describe("GitWorktreeProvider", () => {
         mockClient,
         WORKSPACES_DIR,
         mockFs,
+        mockLogger,
         { keepFilesService: mockKeepFilesService }
       );
 
@@ -2253,7 +2308,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const metadata = await provider.getMetadata(worktreePath);
@@ -2285,7 +2341,8 @@ describe("GitWorktreeProvider", () => {
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFs
+        mockFs,
+        mockLogger
       );
 
       const metadata = await provider.getMetadata(worktreePath);

@@ -24,7 +24,7 @@ function createBoundaryProcessRunner(): ProcessRunner {
   const result: ProcessResult = { exitCode: 0, stdout: "", stderr: "" };
   const proc: SpawnedProcess = {
     pid: 12345,
-    kill: () => true,
+    kill: () => Promise.resolve({ success: true, reason: "SIGTERM" as const }),
     wait: () => Promise.resolve(result),
   };
   return {
@@ -58,7 +58,6 @@ describe("VscodeSetupService.setupBinDirectory (boundary)", () => {
     const service = new VscodeSetupService(
       createBoundaryProcessRunner(),
       pathProvider,
-      "/mock/code-server",
       fs,
       createMockPlatformInfo({ platform: "linux" })
     );
@@ -88,7 +87,6 @@ describe("VscodeSetupService.setupBinDirectory (boundary)", () => {
     const service = new VscodeSetupService(
       createBoundaryProcessRunner(),
       pathProvider,
-      "/mock/code-server",
       fs,
       createMockPlatformInfo({ platform: "linux" })
     );
@@ -117,7 +115,6 @@ describe("VscodeSetupService.setupBinDirectory (boundary)", () => {
     const service = new VscodeSetupService(
       createBoundaryProcessRunner(),
       pathProvider,
-      "/mock/code-server",
       fs,
       createMockPlatformInfo({ platform: "linux" })
     );
@@ -144,7 +141,6 @@ describe("VscodeSetupService.setupBinDirectory (boundary)", () => {
     const service = new VscodeSetupService(
       createBoundaryProcessRunner(),
       pathProvider,
-      "C:/mock/code-server",
       fs,
       createMockPlatformInfo({ platform: "win32" })
     );

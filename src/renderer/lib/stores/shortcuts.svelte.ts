@@ -8,6 +8,7 @@
  */
 
 import * as api from "$lib/api";
+import { createLogger } from "$lib/logging";
 import type { UIModeChangedEvent } from "@shared/ipc";
 import { openCreateDialog, openRemoveDialog } from "./dialogs.svelte";
 import {
@@ -39,6 +40,9 @@ import {
 
 // Re-export for existing consumers
 export { uiMode, shortcutModeActive };
+
+// Create logger for this module
+const logger = createLogger("ui");
 
 // ============ Actions ============
 
@@ -84,7 +88,9 @@ export function exitShortcutMode(): void {
  * Logs workspace switch errors with consistent formatting.
  */
 function logWorkspaceSwitchError(action: string, error: unknown): void {
-  console.error(`Failed to ${action}:`, error);
+  logger.error(`Failed to ${action}`, {
+    error: error instanceof Error ? error.message : String(error),
+  });
 }
 
 /**
@@ -112,7 +118,7 @@ export function handleKeyDown(event: KeyboardEvent): void {
  */
 export function handleShortcutKey(key: ShortcutKey): void {
   if (!isShortcutKey(key)) {
-    console.warn("Unknown shortcut key:", key);
+    logger.warn("Unknown shortcut key", { key });
     return;
   }
 

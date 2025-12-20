@@ -144,7 +144,8 @@ export type { GitWorktreeProviderOptions } from "./git/git-worktree-provider";
  * @param workspacesDir Directory where worktrees will be created. Callers must obtain this
  *   from `PathProvider.getProjectWorkspacesDir(projectRoot)` to ensure consistent worktree placement.
  * @param fileSystemLayer FileSystemLayer for cleanup operations
- * @param logger Logger for git operations
+ * @param gitLogger Logger for git client operations (typically "git")
+ * @param worktreeLogger Logger for worktree provider operations (typically "worktree")
  * @param options Optional configuration including keepFilesService
  * @returns Promise resolving to an IWorkspaceProvider
  * @throws WorkspaceError if path is invalid or not a git repository
@@ -153,18 +154,20 @@ export async function createGitWorktreeProvider(
   projectRoot: string,
   workspacesDir: string,
   fileSystemLayer: import("./platform/filesystem").FileSystemLayer,
-  logger: import("./logging").Logger,
+  gitLogger: import("./logging").Logger,
+  worktreeLogger: import("./logging").Logger,
   options?: import("./git/git-worktree-provider").GitWorktreeProviderOptions
 ): Promise<import("./git/workspace-provider").IWorkspaceProvider> {
   const { GitWorktreeProvider } = await import("./git/git-worktree-provider");
   const { SimpleGitClient } = await import("./git/simple-git-client");
 
-  const gitClient = new SimpleGitClient(logger);
+  const gitClient = new SimpleGitClient(gitLogger);
   return GitWorktreeProvider.create(
     projectRoot,
     gitClient,
     workspacesDir,
     fileSystemLayer,
+    worktreeLogger,
     options
   );
 }

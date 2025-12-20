@@ -242,7 +242,12 @@ export class ViewManager implements IViewManager {
 
     // Configure window open handler to open external URLs
     view.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
-      openExternal(targetUrl);
+      openExternal(targetUrl).catch((error: unknown) => {
+        this.logger.warn("Failed to open external URL", {
+          url: targetUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
       return { action: "deny" };
     });
 
@@ -251,7 +256,12 @@ export class ViewManager implements IViewManager {
       const codeServerOrigin = `http://localhost:${this.codeServerPort}`;
       if (!navigationUrl.startsWith(codeServerOrigin)) {
         event.preventDefault();
-        openExternal(navigationUrl);
+        openExternal(navigationUrl).catch((error: unknown) => {
+          this.logger.warn("Failed to open external URL", {
+            url: navigationUrl,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
       }
     });
 
@@ -650,7 +660,11 @@ export class ViewManager implements IViewManager {
       try {
         callback(event);
       } catch (error) {
-        console.error("Error in mode change callback:", error);
+        this.logger.error(
+          "Error in mode change callback",
+          { mode: newMode },
+          error instanceof Error ? error : undefined
+        );
       }
     }
   }

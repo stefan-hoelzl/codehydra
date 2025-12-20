@@ -29,6 +29,7 @@ export type LoggerName =
   | "network" // DefaultNetworkLayer - HTTP, ports
   | "fs" // DefaultFileSystemLayer - filesystem operations
   | "git" // SimpleGitClient - git operations
+  | "worktree" // GitWorktreeProvider - worktree operations
   | "opencode" // OpenCodeClient - OpenCode SDK
   | "code-server" // CodeServerManager - code-server process
   | "pidtree" // PidtreeProvider - process tree lookups

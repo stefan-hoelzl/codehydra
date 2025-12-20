@@ -33,6 +33,7 @@ import type {
   IVscodeSetup,
   SetupStep as ServiceSetupStep,
 } from "../../services/vscode-setup/types";
+import { createSilentLogger, type Logger } from "../../services/logging";
 import { generateProjectId } from "./id-utils";
 
 type EventHandler<T = unknown> = (event: T) => void;
@@ -69,6 +70,9 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
   // Cleanup function for ViewManager mode change subscription
   private readonly unsubscribeViewManagerModeChange: Unsubscribe;
 
+  // Logger for API operations
+  private readonly logger: Logger;
+
   constructor(
     private readonly appState: AppState,
     viewManager: IViewManager,
@@ -76,7 +80,8 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     app: typeof Electron.app,
     vscodeSetup?: IVscodeSetup,
     existingLifecycleApi?: ILifecycleApi,
-    emitDeletionProgress?: DeletionProgressCallback
+    emitDeletionProgress?: DeletionProgressCallback,
+    logger?: Logger
   ) {
     this.viewManager = viewManager;
     this.dialog = dialog;
@@ -84,6 +89,8 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     this.vscodeSetup = vscodeSetup;
     // Default to no-op if not provided
     this.emitDeletionProgress = emitDeletionProgress ?? (() => {});
+    // Default to silent logger if not provided
+    this.logger = logger ?? createSilentLogger();
 
     // Initialize domain APIs
     this.projects = this.createProjectApi();
@@ -127,7 +134,11 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
       try {
         (handler as ApiEvents[E])(payload as never);
       } catch (error) {
-        console.error(`Error in event handler for ${event}:`, error);
+        this.logger.error(
+          "Error in event handler",
+          { event },
+          error instanceof Error ? error : undefined
+        );
       }
     }
   }
@@ -392,7 +403,11 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
       }
     } catch (error) {
       // Unexpected error - always emit completion so UI isn't stuck in limbo
-      console.error("Unexpected error during workspace deletion:", error);
+      this.logger.error(
+        "Unexpected error during workspace deletion",
+        { workspacePath, workspaceName },
+        error instanceof Error ? error : undefined
+      );
       const message = error instanceof Error ? error.message : "Deletion failed";
 
       // Mark any in-progress operation as error
@@ -495,7 +510,11 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
       const updatedBases = await provider.listBases();
       this.emit("project:bases-updated", { projectId, bases: updatedBases });
     } catch (error) {
-      console.error(`Failed to fetch bases for project ${projectId}:`, error);
+      this.logger.error(
+        "Failed to fetch bases for project",
+        { projectId },
+        error instanceof Error ? error : undefined
+      );
     }
   }
 

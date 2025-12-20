@@ -17,13 +17,11 @@ vi.mock("node:child_process", () => ({
 }));
 
 // Import after mocking
-import { openExternal, ALLOWED_SCHEMES } from "./external-url";
+import { openExternal, ALLOWED_SCHEMES, ExternalUrlError } from "./external-url";
 
 describe("external-url", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Suppress console.error in tests
-    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -46,44 +44,53 @@ describe("external-url", () => {
 
   describe("openExternal", () => {
     describe("scheme validation", () => {
-      it("allows http:// URLs", () => {
-        expect(() => openExternal("http://example.com")).not.toThrow();
+      it("allows http:// URLs", async () => {
+        mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
+          if (callback) callback(null, "", "");
+        });
+        await expect(openExternal("http://example.com")).resolves.toBeUndefined();
       });
 
-      it("allows https:// URLs", () => {
-        expect(() => openExternal("https://example.com")).not.toThrow();
+      it("allows https:// URLs", async () => {
+        mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
+          if (callback) callback(null, "", "");
+        });
+        await expect(openExternal("https://example.com")).resolves.toBeUndefined();
       });
 
-      it("allows mailto: URLs", () => {
-        expect(() => openExternal("mailto:test@example.com")).not.toThrow();
+      it("allows mailto: URLs", async () => {
+        mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
+          if (callback) callback(null, "", "");
+        });
+        await expect(openExternal("mailto:test@example.com")).resolves.toBeUndefined();
       });
 
-      it("throws for file:// scheme", () => {
-        expect(() => openExternal("file:///etc/passwd")).toThrow(
+      it("throws for file:// scheme", async () => {
+        await expect(openExternal("file:///etc/passwd")).rejects.toThrow(
           "URL scheme 'file:' is not allowed"
         );
       });
 
-      it("throws for javascript: scheme", () => {
-        expect(() => openExternal("javascript:alert(1)")).toThrow(
+      it("throws for javascript: scheme", async () => {
+        await expect(openExternal("javascript:alert(1)")).rejects.toThrow(
           "URL scheme 'javascript:' is not allowed"
         );
       });
 
-      it("throws for data: scheme", () => {
-        expect(() => openExternal("data:text/html,<script>alert(1)</script>")).toThrow(
+      it("throws for data: scheme", async () => {
+        await expect(openExternal("data:text/html,<script>alert(1)</script>")).rejects.toThrow(
           "URL scheme 'data:' is not allowed"
         );
       });
 
-      it("throws for vbscript: scheme", () => {
-        expect(() => openExternal("vbscript:alert")).toThrow(
+      it("throws for vbscript: scheme", async () => {
+        await expect(openExternal("vbscript:alert")).rejects.toThrow(
           "URL scheme 'vbscript:' is not allowed"
         );
       });
 
-      it("throws for invalid URLs", () => {
-        expect(() => openExternal("not-a-url")).toThrow("Invalid URL");
+      it("throws for invalid URLs", async () => {
+        await expect(openExternal("not-a-url")).rejects.toThrow("Invalid URL");
       });
     });
 
@@ -98,20 +105,20 @@ describe("external-url", () => {
         Object.defineProperty(process, "platform", { value: originalPlatform });
       });
 
-      it("tries gdbus portal first", () => {
+      it("tries gdbus portal first", async () => {
         // Simulate success
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(null, "", "");
         });
 
-        openExternal("https://example.com");
+        await openExternal("https://example.com");
 
         expect(mockExec).toHaveBeenCalledTimes(1);
         expect(mockExec.mock.calls[0]?.[0]).toMatch(/^gdbus call.*OpenURI/);
         expect(mockExec.mock.calls[0]?.[0]).toContain("https://example.com");
       });
 
-      it("falls back to xdg-open when gdbus fails", () => {
+      it("falls back to xdg-open when gdbus fails", async () => {
         // First call (gdbus) fails, second call (xdg-open) succeeds
         mockExec
           .mockImplementationOnce((_command: string, callback?: ExecCallback) => {
@@ -121,22 +128,21 @@ describe("external-url", () => {
             if (callback) callback(null, "", "");
           });
 
-        openExternal("https://example.com");
+        await openExternal("https://example.com");
 
         expect(mockExec).toHaveBeenCalledTimes(2);
         expect(mockExec.mock.calls[1]?.[0]).toBe('xdg-open "https://example.com"');
       });
 
-      it("logs error when all Linux openers fail", () => {
+      it("rejects with ExternalUrlError when all Linux openers fail", async () => {
         // Both gdbus and xdg-open fail
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(new Error("failed") as ExecException, "", "");
         });
 
-        openExternal("https://example.com");
-
-        expect(console.error).toHaveBeenCalledWith(
-          expect.stringContaining("Failed to open external URL")
+        await expect(openExternal("https://example.com")).rejects.toThrow(ExternalUrlError);
+        await expect(openExternal("https://example.com")).rejects.toThrow(
+          "Failed to open external URL"
         );
       });
     });
@@ -152,27 +158,23 @@ describe("external-url", () => {
         Object.defineProperty(process, "platform", { value: originalPlatform });
       });
 
-      it("uses open command", () => {
+      it("uses open command", async () => {
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(null, "", "");
         });
 
-        openExternal("https://example.com");
+        await openExternal("https://example.com");
 
         expect(mockExec).toHaveBeenCalledTimes(1);
         expect(mockExec.mock.calls[0]?.[0]).toBe('open "https://example.com"');
       });
 
-      it("logs error when open fails", () => {
+      it("rejects with ExternalUrlError when open fails", async () => {
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(new Error("failed") as ExecException, "", "");
         });
 
-        openExternal("https://example.com");
-
-        expect(console.error).toHaveBeenCalledWith(
-          expect.stringContaining("Failed to open external URL")
-        );
+        await expect(openExternal("https://example.com")).rejects.toThrow(ExternalUrlError);
       });
     });
 
@@ -187,38 +189,34 @@ describe("external-url", () => {
         Object.defineProperty(process, "platform", { value: originalPlatform });
       });
 
-      it("uses start command", () => {
+      it("uses start command", async () => {
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(null, "", "");
         });
 
-        openExternal("https://example.com");
+        await openExternal("https://example.com");
 
         expect(mockExec).toHaveBeenCalledTimes(1);
         expect(mockExec.mock.calls[0]?.[0]).toBe('start "" "https://example.com"');
       });
 
-      it("logs error when start fails", () => {
+      it("rejects with ExternalUrlError when start fails", async () => {
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(new Error("failed") as ExecException, "", "");
         });
 
-        openExternal("https://example.com");
-
-        expect(console.error).toHaveBeenCalledWith(
-          expect.stringContaining("Failed to open external URL")
-        );
+        await expect(openExternal("https://example.com")).rejects.toThrow(ExternalUrlError);
       });
     });
 
     describe("URL escaping", () => {
-      it("properly escapes URLs with special characters", () => {
+      it("properly escapes URLs with special characters", async () => {
         Object.defineProperty(process, "platform", { value: "darwin" });
         mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
           if (callback) callback(null, "", "");
         });
 
-        openExternal("https://example.com/path?query=value&other=test");
+        await openExternal("https://example.com/path?query=value&other=test");
 
         expect(mockExec.mock.calls[0]?.[0]).toBe(
           'open "https://example.com/path?query=value&other=test"'
@@ -233,15 +231,44 @@ describe("external-url", () => {
         Object.defineProperty(process, "platform", { value: originalPlatform });
       });
 
-      it("logs error for unsupported platform", () => {
+      it("rejects with ExternalUrlError for unsupported platform", async () => {
         Object.defineProperty(process, "platform", { value: "freebsd" });
 
-        openExternal("https://example.com");
-
-        expect(console.error).toHaveBeenCalledWith(
-          "Failed to open external URL: unsupported platform 'freebsd'"
+        await expect(openExternal("https://example.com")).rejects.toThrow(ExternalUrlError);
+        await expect(openExternal("https://example.com")).rejects.toThrow(
+          "Unsupported platform 'freebsd'"
         );
         expect(mockExec).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("ExternalUrlError", () => {
+      it("includes URL in error", async () => {
+        Object.defineProperty(process, "platform", { value: "freebsd" });
+
+        try {
+          await openExternal("https://example.com");
+          expect.fail("should have thrown");
+        } catch (error) {
+          expect(error).toBeInstanceOf(ExternalUrlError);
+          expect((error as ExternalUrlError).url).toBe("https://example.com");
+        }
+      });
+
+      it("includes cause when platform command fails", async () => {
+        Object.defineProperty(process, "platform", { value: "darwin" });
+        const causeError = new Error("failed") as ExecException;
+        mockExec.mockImplementation((_command: string, callback?: ExecCallback) => {
+          if (callback) callback(causeError, "", "");
+        });
+
+        try {
+          await openExternal("https://example.com");
+          expect.fail("should have thrown");
+        } catch (error) {
+          expect(error).toBeInstanceOf(ExternalUrlError);
+          expect((error as ExternalUrlError).cause).toBe(causeError);
+        }
       });
     });
   });

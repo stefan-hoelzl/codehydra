@@ -13,6 +13,7 @@ import {
   type Workspace,
   type FileSystemLayer,
   type LoggingService,
+  type Logger,
   urlForFolder,
 } from "../services";
 import type { IViewManager } from "./managers/view-manager.interface";
@@ -40,6 +41,7 @@ export class AppState {
   private readonly codeServerPort: number;
   private readonly fileSystemLayer: FileSystemLayer;
   private readonly loggingService: LoggingService;
+  private readonly logger: Logger;
   private readonly openProjects: Map<string, OpenProject> = new Map();
   private readonly lastBaseBranches: Map<string, string> = new Map();
   private discoveryService: DiscoveryService | null = null;
@@ -59,6 +61,7 @@ export class AppState {
     this.codeServerPort = codeServerPort;
     this.fileSystemLayer = fileSystemLayer;
     this.loggingService = loggingService;
+    this.logger = loggingService.createLogger("app");
   }
 
   /**
@@ -123,8 +126,10 @@ export class AppState {
     try {
       return await provider.defaultBase();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.warn(`Failed to get default base branch: ${message}`);
+      this.logger.warn("Failed to get default base branch", {
+        projectPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return undefined;
     }
   }
@@ -149,13 +154,18 @@ export class AppState {
       workspacesDir,
       this.fileSystemLayer,
       this.loggingService.createLogger("git"),
+      this.loggingService.createLogger("worktree"),
       { keepFilesService }
     );
 
     // Run cleanup non-blocking (fire and forget)
     if (provider.cleanupOrphanedWorkspaces) {
       void provider.cleanupOrphanedWorkspaces().catch((err: unknown) => {
-        console.error("Workspace cleanup failed:", err);
+        this.logger.error(
+          "Workspace cleanup failed",
+          { projectPath },
+          err instanceof Error ? err : undefined
+        );
       });
     }
 

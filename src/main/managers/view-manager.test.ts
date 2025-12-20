@@ -93,7 +93,7 @@ const {
       };
     },
     createdViews,
-    mockOpenExternal: vi.fn(),
+    mockOpenExternal: vi.fn().mockResolvedValue(undefined),
     mockSession,
     mockFromPartition,
   };

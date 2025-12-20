@@ -11,6 +11,7 @@ import { sanitizeWorkspaceName } from "../platform/paths";
 import { isValidMetadataKey } from "../../shared/api/types";
 import type { FileSystemLayer } from "../platform/filesystem";
 import type { IKeepFilesService } from "../keepfiles";
+import type { Logger } from "../logging";
 
 /**
  * Options for GitWorktreeProvider.
@@ -36,6 +37,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
   private readonly workspacesDir: string;
   private readonly fileSystemLayer: FileSystemLayer;
   private readonly keepFilesService: IKeepFilesService | undefined;
+  private readonly logger: Logger;
   private cleanupInProgress = false;
 
   /**
@@ -58,12 +60,14 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     gitClient: IGitClient,
     workspacesDir: string,
     fileSystemLayer: FileSystemLayer,
+    logger: Logger,
     options?: GitWorktreeProviderOptions
   ) {
     this.projectRoot = projectRoot;
     this.gitClient = gitClient;
     this.workspacesDir = workspacesDir;
     this.fileSystemLayer = fileSystemLayer;
+    this.logger = logger;
     this.keepFilesService = options?.keepFilesService;
   }
 
@@ -100,6 +104,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
    * @param gitClient Git client to use for operations
    * @param workspacesDir Directory where worktrees will be created (from PathProvider.getProjectWorkspacesDir)
    * @param fileSystemLayer FileSystemLayer for cleanup operations
+   * @param logger Logger for worktree operations
    * @param options Optional configuration including keepFilesService
    * @returns Promise resolving to a new GitWorktreeProvider
    * @throws WorkspaceError if path is invalid or not a git repository
@@ -109,6 +114,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     gitClient: IGitClient,
     workspacesDir: string,
     fileSystemLayer: FileSystemLayer,
+    logger: Logger,
     options?: GitWorktreeProviderOptions
   ): Promise<GitWorktreeProvider> {
     // Validate absolute path
@@ -135,7 +141,14 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       throw new WorkspaceError(`Failed to validate repository: ${message}`);
     }
 
-    return new GitWorktreeProvider(projectRoot, gitClient, workspacesDir, fileSystemLayer, options);
+    return new GitWorktreeProvider(
+      projectRoot,
+      gitClient,
+      workspacesDir,
+      fileSystemLayer,
+      logger,
+      options
+    );
   }
 
   async discover(): Promise<readonly Workspace[]> {
@@ -160,7 +173,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
         metadata = this.applyBaseFallback({ ...configs }, wt.branch, wt.name);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        console.warn(`Failed to get metadata config for ${wt.name}: ${message}`);
+        this.logger.warn("Failed to get metadata config", { workspace: wt.name, error: message });
         // Use fallback on error - only base key
         metadata = { base: wt.branch ?? wt.name };
       }
@@ -270,7 +283,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      console.warn(`Failed to save base branch config for ${name}: ${message}`);
+      this.logger.warn("Failed to save base branch config", { branch: name, error: message });
     }
 
     // Copy keep files from project root to new workspace (if service configured)
@@ -325,17 +338,17 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
         }
 
         // Unregistered but directory remains - log and continue
-        console.warn(
-          `Worktree unregistered but directory remains: ${workspacePath}. ` +
-            `Will be cleaned up on next startup.`
-        );
+        this.logger.warn("Worktree unregistered but directory remains", {
+          path: workspacePath,
+          note: "Will be cleaned up on next startup",
+        });
       }
 
       // Prune stale worktree entries
       await this.gitClient.pruneWorktrees(this.projectRoot);
     } else {
       // Worktree already removed - log and continue (idempotent)
-      console.warn(`Worktree already removed, skipping: ${workspacePath}`);
+      this.logger.debug("Worktree already removed, skipping", { path: workspacePath });
     }
 
     // Optionally delete the branch (idempotent - check if exists first)
@@ -356,7 +369,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
         }
       } else {
         // Branch already deleted - treat as success (idempotent)
-        console.warn(`Branch already deleted, skipping: ${branchName}`);
+        this.logger.debug("Branch already deleted, skipping", { branch: branchName });
         baseDeleted = true;
       }
     }
@@ -398,7 +411,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       return undefined;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      console.warn(`Failed to get default base branch: ${message}`);
+      this.logger.warn("Failed to get default base branch", { error: message });
       return undefined;
     }
   }
@@ -440,7 +453,8 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       worktrees = await this.gitClient.listWorktrees(this.projectRoot);
     } catch (error) {
       // Cannot determine registered worktrees - abort cleanup silently
-      console.warn("Failed to list worktrees for cleanup:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Failed to list worktrees for cleanup", { error: message });
       return emptyResult;
     }
 
@@ -503,10 +517,14 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       // Delete the orphaned directory
       try {
         await this.fileSystemLayer.rm(fullPath, { recursive: true, force: true });
+        this.logger.info("Removed orphaned workspace", { path: fullPath });
         removedCount++;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.warn(`Failed to remove orphaned workspace ${fullPath}:`, errorMessage);
+        this.logger.warn("Failed to remove orphaned workspace", {
+          path: fullPath,
+          error: errorMessage,
+        });
         failedPaths.push({ path: fullPath, error: errorMessage });
       }
     }

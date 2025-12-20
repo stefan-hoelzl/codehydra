@@ -23,6 +23,7 @@ describe("GitWorktreeProvider integration", () => {
   let cleanupWorkspacesDir: () => Promise<void>;
   let gitClient: SimpleGitClient;
   let fs: DefaultFileSystemLayer;
+  const worktreeLogger = createSilentLogger();
 
   beforeEach(async () => {
     const repo = await createTestGitRepo();
@@ -44,7 +45,13 @@ describe("GitWorktreeProvider integration", () => {
 
   describe("metadata.base persistence", () => {
     it("creates workspace with metadata.base and retrieves via discover()", async () => {
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
 
       // Create workspace with base branch "main"
       const created = await provider.createWorkspace("feature-x", "main");
@@ -58,11 +65,23 @@ describe("GitWorktreeProvider integration", () => {
 
     it("metadata.base survives provider instance recreation", async () => {
       // Create with first provider instance
-      const provider1 = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider1 = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       await provider1.createWorkspace("feature-x", "main");
 
       // Create new provider instance and verify metadata.base persists
-      const provider2 = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider2 = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const discovered = await provider2.discover();
 
       expect(discovered).toHaveLength(1);
@@ -77,7 +96,13 @@ describe("GitWorktreeProvider integration", () => {
       await git.raw(["worktree", "add", worktreePath, "legacy-branch"]);
 
       // Discover should fall back to branch name
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const discovered = await provider.discover();
 
       expect(discovered).toHaveLength(1);
@@ -85,7 +110,13 @@ describe("GitWorktreeProvider integration", () => {
     });
 
     it("handles mixed state workspaces", async () => {
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
 
       // Create workspace with config
       await provider.createWorkspace("feature-with-config", "main");
@@ -108,7 +139,13 @@ describe("GitWorktreeProvider integration", () => {
     });
 
     it("stores metadata.base in git config", async () => {
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       await provider.createWorkspace("feature-x", "main");
 
       // Verify config was set using git command (codehydra.base is the namespaced key)
@@ -120,7 +157,13 @@ describe("GitWorktreeProvider integration", () => {
 
   describe("metadata setMetadata/getMetadata", () => {
     it("setMetadata persists and getMetadata retrieves", async () => {
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const workspace = await provider.createWorkspace("feature-x", "main");
 
       await provider.setMetadata(workspace.path, "note", "WIP feature");
@@ -131,11 +174,23 @@ describe("GitWorktreeProvider integration", () => {
     });
 
     it("metadata survives provider recreation", async () => {
-      const provider1 = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider1 = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const workspace = await provider1.createWorkspace("feature-x", "main");
       await provider1.setMetadata(workspace.path, "note", "test note");
 
-      const provider2 = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider2 = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const metadata = await provider2.getMetadata(workspace.path);
 
       expect(metadata.note).toBe("test note");
@@ -149,7 +204,13 @@ describe("GitWorktreeProvider integration", () => {
       const worktreePath = path.join(workspacesDir, "legacy-branch");
       await git.raw(["worktree", "add", worktreePath, "legacy-branch"]);
 
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const metadata = await provider.getMetadata(worktreePath);
 
       // Should fall back to branch name
@@ -157,7 +218,13 @@ describe("GitWorktreeProvider integration", () => {
     });
 
     it("invalid key format throws WorkspaceError with INVALID_METADATA_KEY code", async () => {
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const workspace = await provider.createWorkspace("feature-x", "main");
 
       const { WorkspaceError } = await import("../errors");
@@ -171,7 +238,13 @@ describe("GitWorktreeProvider integration", () => {
     });
 
     it("setMetadata with null deletes the key", async () => {
-      const provider = await GitWorktreeProvider.create(repoPath, gitClient, workspacesDir, fs);
+      const provider = await GitWorktreeProvider.create(
+        repoPath,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger
+      );
       const workspace = await provider.createWorkspace("feature-x", "main");
 
       await provider.setMetadata(workspace.path, "note", "test note");
@@ -194,6 +267,7 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
   let projectRoot: string;
   let workspacesDir: string;
   let fs: DefaultFileSystemLayer;
+  const worktreeLogger = createSilentLogger();
 
   /**
    * Initialize a git repository in the given directory.
@@ -245,9 +319,16 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
 
       const gitClient = new SimpleGitClient(createSilentLogger());
       const keepFilesService = new KeepFilesService(fs, createSilentLogger());
-      const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
-        keepFilesService,
-      });
+      const provider = await GitWorktreeProvider.create(
+        projectRoot,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger,
+        {
+          keepFilesService,
+        }
+      );
 
       // Create workspace
       const workspace = await provider.createWorkspace("feature-test", "main");
@@ -275,9 +356,16 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
 
       const gitClient = new SimpleGitClient(createSilentLogger());
       const keepFilesService = new KeepFilesService(fs, createSilentLogger());
-      const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
-        keepFilesService,
-      });
+      const provider = await GitWorktreeProvider.create(
+        projectRoot,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger,
+        {
+          keepFilesService,
+        }
+      );
 
       // Should not throw
       const workspace = await provider.createWorkspace("feature-error-test", "main");
@@ -298,9 +386,16 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
 
       const gitClient = new SimpleGitClient(createSilentLogger());
       const keepFilesService = new KeepFilesService(fs, createSilentLogger());
-      const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
-        keepFilesService,
-      });
+      const provider = await GitWorktreeProvider.create(
+        projectRoot,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger,
+        {
+          keepFilesService,
+        }
+      );
 
       // Create two workspaces in parallel
       const [workspace1, workspace2] = await Promise.all([
@@ -331,9 +426,16 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
       // Spy on copyToWorkspace to verify timing
       const copyToWorkspaceSpy = vi.spyOn(keepFilesService, "copyToWorkspace");
 
-      const provider = await GitWorktreeProvider.create(projectRoot, gitClient, workspacesDir, fs, {
-        keepFilesService,
-      });
+      const provider = await GitWorktreeProvider.create(
+        projectRoot,
+        gitClient,
+        workspacesDir,
+        fs,
+        worktreeLogger,
+        {
+          keepFilesService,
+        }
+      );
 
       const workspace = await provider.createWorkspace("feature-timing", "main");
 
