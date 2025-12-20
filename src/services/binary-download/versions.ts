@@ -41,7 +41,7 @@ function getCodeServerUrl(platform: SupportedPlatform, arch: SupportedArch): str
     if (arch !== "x64") {
       throw new Error(`Windows code-server builds only support x64, got: ${arch}`);
     }
-    return `https://github.com/${CODEHYDRA_REPO}/releases/download/code-server-windows-v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-win32-x64.zip`;
+    return `https://github.com/${CODEHYDRA_REPO}/releases/download/code-server-windows-v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-win32-x64.tar.gz`;
   }
   const os = platform === "darwin" ? "macos" : "linux";
   const archName = CODE_SERVER_ARCH[arch];

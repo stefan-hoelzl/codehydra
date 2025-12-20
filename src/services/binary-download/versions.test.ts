@@ -50,7 +50,7 @@ describe("code-server URL generation", () => {
   it("generates correct URL for win32-x64", () => {
     const url = config.getUrl("win32", "x64");
     expect(url).toBe(
-      `https://github.com/stefanhoelzl/codehydra/releases/download/code-server-windows-v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-win32-x64.zip`
+      `https://github.com/stefanhoelzl/codehydra/releases/download/code-server-windows-v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-win32-x64.tar.gz`
     );
   });
 
