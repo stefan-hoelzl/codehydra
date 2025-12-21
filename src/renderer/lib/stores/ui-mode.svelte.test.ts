@@ -48,31 +48,56 @@ describe("ui-mode store", () => {
   });
 
   describe("computeDesiredMode pure function", () => {
-    it("modeFromMain='shortcut' takes priority even when dialogOpen=true and sidebarExpanded=true", () => {
-      expect(computeDesiredMode("shortcut", true, true)).toBe("shortcut");
+    // Parameterized tests for all mode priority combinations
+    describe("mode priority: shortcut > dialog > hover > workspace", () => {
+      it.each([
+        // Base cases
+        ["shortcut", false, false, "shortcut"],
+        ["workspace", true, false, "dialog"],
+        ["workspace", false, true, "hover"],
+        ["workspace", false, false, "workspace"],
+        // Priority: shortcut > all
+        ["shortcut", true, true, "shortcut"],
+        ["shortcut", true, false, "shortcut"],
+        ["shortcut", false, true, "shortcut"],
+        // Priority: dialog > hover
+        ["workspace", true, true, "dialog"],
+        // modeFromMain non-shortcut values don't affect result (only shortcut takes priority)
+        ["dialog", false, false, "workspace"],
+        ["hover", false, false, "workspace"],
+        ["dialog", true, false, "dialog"],
+        ["hover", false, true, "hover"],
+      ] as const)(
+        "computeDesiredMode(%s, %s, %s) returns %s",
+        (modeFromMain, dialogOpen, sidebarExpanded, expected) => {
+          expect(computeDesiredMode(modeFromMain, dialogOpen, sidebarExpanded)).toBe(expected);
+        }
+      );
     });
 
-    it("dialogOpen=true results in desiredMode='dialog'", () => {
+    // Named individual tests for clarity
+    it("returns 'shortcut' when modeFromMain is shortcut", () => {
+      expect(computeDesiredMode("shortcut", false, false)).toBe("shortcut");
+    });
+
+    it("returns 'dialog' when dialogOpen is true", () => {
       expect(computeDesiredMode("workspace", true, false)).toBe("dialog");
     });
 
-    it("sidebarExpanded=true results in desiredMode='dialog'", () => {
-      expect(computeDesiredMode("workspace", false, true)).toBe("dialog");
+    it("returns 'hover' when sidebarExpanded is true and dialogOpen is false", () => {
+      expect(computeDesiredMode("workspace", false, true)).toBe("hover");
     });
 
-    it("both dialogOpen=true and sidebarExpanded=true results in desiredMode='dialog'", () => {
-      expect(computeDesiredMode("workspace", true, true)).toBe("dialog");
-    });
-
-    it("all inputs false/workspace results in desiredMode='workspace'", () => {
+    it("returns 'workspace' when all flags are false", () => {
       expect(computeDesiredMode("workspace", false, false)).toBe("workspace");
     });
 
-    it("modeFromMain='dialog' with dialogOpen=false still results in 'workspace'", () => {
-      // When main process says dialog mode (e.g., from another source),
-      // but our dialogOpen is false, we use the dialogOpen/sidebarExpanded logic
-      // which results in workspace. The modeFromMain is just for shortcut priority.
-      expect(computeDesiredMode("dialog", false, false)).toBe("workspace");
+    it("returns 'dialog' when both dialogOpen AND sidebarExpanded are true (priority test)", () => {
+      expect(computeDesiredMode("workspace", true, true)).toBe("dialog");
+    });
+
+    it("returns 'shortcut' when shortcut AND dialog AND hover flags all true (priority test)", () => {
+      expect(computeDesiredMode("shortcut", true, true)).toBe("shortcut");
     });
   });
 
@@ -92,11 +117,11 @@ describe("ui-mode store", () => {
       expect(desiredMode.value).toBe("dialog");
     });
 
-    it("setSidebarExpanded(true) changes desiredMode to 'dialog'", () => {
+    it("setSidebarExpanded(true) changes desiredMode to 'hover'", () => {
       setSidebarExpanded(true);
       flushSync();
 
-      expect(desiredMode.value).toBe("dialog");
+      expect(desiredMode.value).toBe("hover");
     });
 
     it("modeFromMain transition from shortcut to workspace respects dialogOpen", () => {
@@ -132,22 +157,37 @@ describe("ui-mode store", () => {
       expect(mockApi.ui.setMode).toHaveBeenCalledWith("dialog");
     });
 
-    it("syncMode does NOT call api.ui.setMode when inputs change but desiredMode stays same", () => {
-      // Set dialog open - desiredMode is "dialog"
+    it("syncMode does NOT call api.ui.setMode when desiredMode stays same", () => {
+      // Set sidebarExpanded - desiredMode is "hover"
+      setSidebarExpanded(true);
+      flushSync();
+      syncMode();
+
+      expect(mockApi.ui.setMode).toHaveBeenCalledWith("hover");
+      mockApi.ui.setMode.mockClear();
+
+      // Calling syncMode again without change - desiredMode still "hover"
+      syncMode();
+
+      // Should NOT have called setMode again (deduplication)
+      expect(mockApi.ui.setMode).not.toHaveBeenCalled();
+    });
+
+    it("syncMode transitions from hover to dialog when dialog opens", () => {
+      // Set sidebarExpanded - desiredMode is "hover"
+      setSidebarExpanded(true);
+      flushSync();
+      syncMode();
+
+      expect(mockApi.ui.setMode).toHaveBeenCalledWith("hover");
+      mockApi.ui.setMode.mockClear();
+
+      // Open dialog while sidebar is expanded - desiredMode becomes "dialog" (dialog > hover)
       setDialogOpen(true);
       flushSync();
       syncMode();
 
       expect(mockApi.ui.setMode).toHaveBeenCalledWith("dialog");
-      mockApi.ui.setMode.mockClear();
-
-      // Change sidebarExpanded - desiredMode still "dialog"
-      setSidebarExpanded(true);
-      flushSync();
-      syncMode();
-
-      // Should NOT have called setMode again (deduplication)
-      expect(mockApi.ui.setMode).not.toHaveBeenCalled();
     });
 
     it("syncMode passes correct mode value to api.ui.setMode", () => {

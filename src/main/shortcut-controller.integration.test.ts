@@ -66,10 +66,11 @@ function createMockWebContents(): WebContents & {
 
 /**
  * Creates mock dependencies for ShortcutController with setMode API.
+ * Supports all UIMode values: workspace, shortcut, dialog, hover
  */
-function createMockDeps() {
+function createMockDeps(initialMode: UIMode = "workspace") {
   const mockUIWebContents = createMockWebContents();
-  let currentMode: UIMode = "workspace";
+  let currentMode: UIMode = initialMode;
   const deps = {
     focusUI: vi.fn(),
     getUIWebContents: vi.fn(() => mockUIWebContents),
@@ -114,6 +115,105 @@ describe("ShortcutController Integration", () => {
   afterEach(() => {
     controller.dispose();
     vi.useRealTimers();
+  });
+
+  describe("hover-mode-ipc-flow", () => {
+    it("Alt+X activates shortcut mode when mode is 'hover'", () => {
+      // Create a fresh controller with initial mode as "hover"
+      // This simulates the state after renderer sends "hover" mode via IPC
+      const hoverDeps = createMockDeps("hover");
+      const hoverController = new ShortcutController(mockWindow, hoverDeps);
+
+      try {
+        // 1. Register a workspace view
+        const workspaceWebContents = createMockWebContents();
+        hoverController.registerView(workspaceWebContents);
+
+        // 2. Get the before-input-event handler
+        const inputHandler = workspaceWebContents.on.mock.calls.find(
+          (call: unknown[]) => call[0] === "before-input-event"
+        )?.[1] as (event: ElectronEvent, input: Input) => void;
+        expect(inputHandler).toBeDefined();
+
+        // 3. Simulate Alt+X keyboard sequence
+        inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyDown"));
+        inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
+
+        // 4. setMode is deferred, flush timers
+        vi.runAllTimers();
+
+        // 5. Verify Alt+X is ALLOWED in hover mode - setMode("shortcut") should be called
+        expect(hoverDeps.setMode).toHaveBeenCalledTimes(1);
+        expect(hoverDeps.setMode).toHaveBeenCalledWith("shortcut");
+      } finally {
+        hoverController.dispose();
+      }
+    });
+
+    it("Alt+X is blocked when mode is 'dialog'", () => {
+      // Create a fresh controller with initial mode as "dialog"
+      // This simulates the state when a dialog is open
+      const dialogDeps = createMockDeps("dialog");
+      const dialogController = new ShortcutController(mockWindow, dialogDeps);
+
+      try {
+        // 1. Register a workspace view
+        const workspaceWebContents = createMockWebContents();
+        dialogController.registerView(workspaceWebContents);
+
+        // 2. Get the before-input-event handler
+        const inputHandler = workspaceWebContents.on.mock.calls.find(
+          (call: unknown[]) => call[0] === "before-input-event"
+        )?.[1] as (event: ElectronEvent, input: Input) => void;
+        expect(inputHandler).toBeDefined();
+
+        // 3. Simulate Alt+X keyboard sequence
+        inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyDown"));
+        inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
+
+        // 4. Flush timers
+        vi.runAllTimers();
+
+        // 5. Verify Alt+X is BLOCKED in dialog mode - setMode should NOT be called
+        expect(dialogDeps.setMode).not.toHaveBeenCalled();
+      } finally {
+        dialogController.dispose();
+      }
+    });
+
+    it("transitions from hover to shortcut mode correctly", () => {
+      // This test verifies the full flow:
+      // 1. Renderer sends "hover" mode via IPC (simulated by initial mode)
+      // 2. User presses Alt+X
+      // 3. Mode changes from "hover" to "shortcut"
+
+      const hoverDeps = createMockDeps("hover");
+      const hoverController = new ShortcutController(mockWindow, hoverDeps);
+
+      try {
+        const workspaceWebContents = createMockWebContents();
+        hoverController.registerView(workspaceWebContents);
+
+        const inputHandler = workspaceWebContents.on.mock.calls.find(
+          (call: unknown[]) => call[0] === "before-input-event"
+        )?.[1] as (event: ElectronEvent, input: Input) => void;
+
+        // Verify initial mode is "hover"
+        expect(hoverDeps.getMode()).toBe("hover");
+
+        // Trigger Alt+X
+        inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyDown"));
+        inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
+        vi.runAllTimers();
+
+        // Verify transition to "shortcut" mode
+        expect(hoverDeps.setMode).toHaveBeenCalledWith("shortcut");
+        // After setMode, the mock updates currentMode, so getMode returns "shortcut"
+        expect(hoverDeps.getMode()).toBe("shortcut");
+      } finally {
+        hoverController.dispose();
+      }
+    });
   });
 
   describe("keyboard-wiring-roundtrip", () => {

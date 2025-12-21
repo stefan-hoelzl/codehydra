@@ -22,6 +22,11 @@ describe("UIMode types", () => {
     expect(mode).toBe("shortcut");
   });
 
+  it("UIMode type accepts 'hover' value", () => {
+    const mode: UIMode = "hover";
+    expect(mode).toBe("hover");
+  });
+
   it("UIModeChangedEvent has mode and previousMode", () => {
     const event: UIModeChangedEvent = {
       mode: "shortcut",

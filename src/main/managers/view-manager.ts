@@ -542,11 +542,11 @@ export class ViewManager implements IViewManager {
         this.detachView(previousPath);
       }
 
-      // Maintain z-order if in dialog or shortcut mode
+      // Maintain z-order if in dialog, shortcut, or hover mode
       // The new workspace view was just attached to the top, so we need to
       // re-add the UI layer to keep it on top. Must directly manipulate z-order
       // since setMode is idempotent and won't re-apply if mode hasn't changed.
-      if (this.mode === "dialog" || this.mode === "shortcut") {
+      if (this.mode === "dialog" || this.mode === "shortcut" || this.mode === "hover") {
         try {
           const window = this.windowManager.getWindow();
           if (!window.isDestroyed()) {
@@ -642,11 +642,17 @@ export class ViewManager implements IViewManager {
           this.focusUI();
           break;
 
+        case "hover":
         case "dialog":
           // Move UI to top (adding existing child moves it to end = top)
           contentView.addChildView(this.uiView);
-          // Do NOT change focus - dialog component will manage focus
+          // Do NOT change focus - hover/dialog component will manage focus
           break;
+
+        default: {
+          const _exhaustive: never = newMode;
+          this.logger.warn("Unhandled UI mode", { mode: _exhaustive });
+        }
       }
     } catch {
       // Ignore errors during mode change - window may be closing

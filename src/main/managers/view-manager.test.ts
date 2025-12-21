@@ -2341,6 +2341,96 @@ describe("ViewManager", () => {
 
       manager.setMode("dialog");
       expect(manager.getMode()).toBe("dialog");
+
+      manager.setMode("hover");
+      expect(manager.getMode()).toBe("hover");
+    });
+
+    it("setMode-hover-zindex: sets z-index to top", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        createSilentLogger()
+      );
+
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      manager.setMode("hover");
+
+      const uiView = MockWebContentsViewClass.mock.results[0]?.value;
+      // Should be called without index parameter (adds to end = top)
+      expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(uiView);
+    });
+
+    it("setMode-hover-no-focus-change: does not change focus", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        createSilentLogger()
+      );
+
+      // Create and activate workspace
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project"
+      );
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      const uiView = MockWebContentsViewClass.mock.results[0]?.value;
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      uiView?.webContents.focus.mockClear();
+      workspaceView?.webContents.focus.mockClear();
+
+      manager.setMode("hover");
+
+      // Should NOT call focus on either UI or workspace (no focus change)
+      expect(uiView?.webContents.focus).not.toHaveBeenCalled();
+      expect(workspaceView?.webContents.focus).not.toHaveBeenCalled();
+    });
+
+    it("setActiveWorkspace-hover-mode-zorder: UI stays on top when in hover mode", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        createSilentLogger()
+      );
+      const uiView = MockWebContentsViewClass.mock.results[0]?.value;
+
+      manager.createWorkspaceView(
+        "/path/to/workspace1",
+        "http://localhost:8080/?folder=/path1",
+        "/path/to/project"
+      );
+      manager.createWorkspaceView(
+        "/path/to/workspace2",
+        "http://localhost:8080/?folder=/path2",
+        "/path/to/project"
+      );
+
+      // Enable hover mode
+      manager.setMode("hover");
+
+      // Activate first workspace
+      manager.setActiveWorkspace("/path/to/workspace1");
+
+      // Clear calls
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      // Switch workspace while in hover mode
+      manager.setActiveWorkspace("/path/to/workspace2");
+
+      // UI layer should be re-added to top (hover mode maintains z-order)
+      expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(uiView);
     });
   });
 

@@ -16,7 +16,7 @@
  * - Components update inputs via setModeFromMain(), setDialogOpen(), setSidebarExpanded()
  * - App.svelte calls syncMode() in an $effect to sync with main process
  *
- * Priority: shortcut > (dialog | sidebarExpanded) > workspace
+ * Priority: shortcut > dialog > hover > workspace
  */
 
 import * as api from "$lib/api";
@@ -35,10 +35,12 @@ let _lastEmittedMode: UIMode | null = null;
 
 /**
  * Compute desired UI mode from inputs.
- * Priority: shortcut > (dialog | sidebarExpanded) > workspace
+ * Priority: shortcut > dialog > hover > workspace
  *
- * Note: Both dialog and sidebarExpanded map to "dialog" for IPC purposes
- * because they both need the UI layer on top of workspace views.
+ * - "shortcut": Shortcut mode active (from main process)
+ * - "dialog": Modal dialog open (blocks Alt+X)
+ * - "hover": Sidebar expanded on hover (allows Alt+X)
+ * - "workspace": Normal editing mode
  */
 export function computeDesiredMode(
   modeFromMain: UIMode,
@@ -46,7 +48,8 @@ export function computeDesiredMode(
   sidebarExpanded: boolean
 ): UIMode {
   if (modeFromMain === "shortcut") return "shortcut";
-  if (dialogOpen || sidebarExpanded) return "dialog";
+  if (dialogOpen) return "dialog";
+  if (sidebarExpanded) return "hover";
   return "workspace";
 }
 

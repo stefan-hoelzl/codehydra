@@ -135,9 +135,10 @@ export interface AgentStatusChangedEvent {
  * UI mode for the application.
  * - "workspace": Normal mode, workspace view has focus, UI behind workspace
  * - "shortcut": Shortcut mode active, UI on top, shows keyboard hints
- * - "dialog": Dialog open, UI on top, dialog has focus
+ * - "dialog": Dialog open, UI on top, dialog has focus (blocks Alt+X)
+ * - "hover": UI overlay active (sidebar hover), UI on top, no focus change (allows Alt+X)
  */
-export type UIMode = "workspace" | "dialog" | "shortcut";
+export type UIMode = "workspace" | "dialog" | "shortcut" | "hover";
 
 /**
  * Event payload for UI mode changes.

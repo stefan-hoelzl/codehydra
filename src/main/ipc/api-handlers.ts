@@ -91,7 +91,7 @@ function validateBoolean(value: unknown, field: string, defaultValue: boolean): 
 /**
  * Valid UI modes.
  */
-const VALID_UI_MODES: readonly UIMode[] = ["workspace", "dialog", "shortcut"];
+const VALID_UI_MODES: readonly UIMode[] = ["workspace", "dialog", "shortcut", "hover"];
 
 /**
  * Validate that a value is a valid UIMode.

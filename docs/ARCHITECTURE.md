@@ -742,13 +742,14 @@ See [VS Code Setup](#vs-code-setup) for the main process side of this flow.
 
 ### UI Mode System
 
-The application uses a unified UI mode system with three modes:
+The application uses a unified UI mode system with four modes:
 
-| Mode        | UI Z-Order | Focus          | Description              |
-| ----------- | ---------- | -------------- | ------------------------ |
-| `workspace` | Behind     | Workspace view | Normal editing mode      |
-| `shortcut`  | On top     | UI layer       | Shortcut overlay visible |
-| `dialog`    | On top     | Dialog (no-op) | Modal dialog open        |
+| Mode        | UI Z-Order | Focus          | Description                              |
+| ----------- | ---------- | -------------- | ---------------------------------------- |
+| `workspace` | Behind     | Workspace view | Normal editing mode                      |
+| `shortcut`  | On top     | UI layer       | Shortcut overlay visible                 |
+| `dialog`    | On top     | Dialog (no-op) | Modal dialog open (blocks Alt+X)         |
+| `hover`     | On top     | No change      | Sidebar expanded on hover (allows Alt+X) |
 
 ```
 WORKSPACE MODE (normal):
@@ -772,19 +773,31 @@ SHORTCUT/DIALOG MODE (overlay):
 
 **Mode Transitions:**
 
-| Trigger        | Mode Change          |
-| -------------- | -------------------- |
-| Alt+X pressed  | workspace → shortcut |
-| Alt released   | shortcut → workspace |
-| Escape pressed | shortcut → workspace |
-| Dialog opens   | any → dialog         |
-| Dialog closes  | dialog → workspace   |
+| Trigger              | Mode Change          |
+| -------------------- | -------------------- |
+| Alt+X pressed        | workspace → shortcut |
+| Alt+X pressed        | hover → shortcut     |
+| Alt released         | shortcut → workspace |
+| Escape pressed       | shortcut → workspace |
+| Dialog opens         | any → dialog         |
+| Dialog closes        | dialog → workspace   |
+| Sidebar hover starts | workspace → hover    |
+| Sidebar hover stops  | hover → workspace    |
+| Dialog opens (hover) | hover → dialog       |
+
+**Alt+X Blocking:**
+
+Alt+X is blocked when `mode === "dialog"` but allowed for all other modes including `"hover"`. This allows:
+
+- Activating shortcut mode while hovering over the expanded sidebar
+- Blocking shortcut mode when a modal dialog is open (focus trap is active)
 
 **API:** `api.ui.setMode(mode)` - unified method that handles z-order and focus:
 
 - `setMode("workspace")`: UI behind workspaces, focus active workspace
 - `setMode("shortcut")`: UI on top, focus UI layer
 - `setMode("dialog")`: UI on top, no focus change (dialog manages its own)
+- `setMode("hover")`: UI on top, no focus change (sidebar hover)
 
 Mode transitions are idempotent - calling `setMode()` with the current mode is a no-op.
 

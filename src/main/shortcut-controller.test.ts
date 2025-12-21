@@ -81,7 +81,7 @@ function createMockDeps() {
     },
     setMode: vi.fn(),
     getMode: vi.fn(() => "workspace") as ReturnType<typeof vi.fn> & {
-      mockReturnValue: (value: "workspace" | "dialog" | "shortcut") => void;
+      mockReturnValue: (value: "workspace" | "dialog" | "shortcut" | "hover") => void;
     },
     // Shortcut key callback
     onShortcut: vi.fn() as ReturnType<typeof vi.fn> & {
@@ -486,6 +486,24 @@ describe("ShortcutController", () => {
       inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
 
       expect(mockDeps.setMode).not.toHaveBeenCalled();
+    });
+
+    it("Alt+X when mode is hover calls setMode('shortcut')", () => {
+      const webContents = createMockWebContents();
+      controller.registerView(webContents);
+
+      const inputHandler = getInputHandler(webContents);
+
+      // Mode is hover (sidebar expanded on hover)
+      mockDeps.getMode.mockReturnValue("hover");
+
+      // Alt down, then X down
+      inputHandler(createMockElectronEvent(), createMockElectronInput("Alt", "keyDown"));
+      inputHandler(createMockElectronEvent(), createMockElectronInput("x", "keyDown"));
+
+      // setMode is deferred via setImmediate, flush timers to execute it
+      vi.runAllTimers();
+      expect(mockDeps.setMode).toHaveBeenCalledWith("shortcut");
     });
 
     it("Rapid Alt+X press/release handles correctly", () => {

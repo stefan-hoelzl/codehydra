@@ -40,6 +40,7 @@ function createMockApi(): ICodeHydraApi {
     workspaces: {
       create: vi.fn(),
       remove: vi.fn().mockResolvedValue({ branchDeleted: false }),
+      forceRemove: vi.fn().mockResolvedValue(undefined),
       get: vi.fn(),
       getStatus: vi.fn().mockResolvedValue({ isDirty: false, agent: { type: "none" } }),
       setMetadata: vi.fn(),
@@ -457,6 +458,13 @@ describe("UI API handlers", () => {
       await handler({}, { mode: "shortcut" });
 
       expect(mockApi.ui.setMode).toHaveBeenCalledWith("shortcut");
+    });
+
+    it("accepts 'hover' mode", async () => {
+      const handler = getHandler("api:ui:set-mode");
+      await handler({}, { mode: "hover" });
+
+      expect(mockApi.ui.setMode).toHaveBeenCalledWith("hover");
     });
 
     it("throws validation error for missing mode", async () => {
