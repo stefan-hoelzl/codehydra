@@ -98,6 +98,12 @@ export class PluginServer {
   private readonly connections = new Map<string, TypedSocket>();
 
   /**
+   * Callbacks to invoke when a client connects.
+   * Each callback receives the normalized workspace path.
+   */
+  private readonly connectCallbacks = new Set<(workspacePath: string) => void>();
+
+  /**
    * Create a new PluginServer instance.
    *
    * @param portManager - Port manager for finding free ports
@@ -221,6 +227,32 @@ export class PluginServer {
   }
 
   /**
+   * Register a callback to be invoked when a client connects.
+   *
+   * The callback is invoked AFTER connection validation succeeds.
+   * Rejected connections do not trigger the callback.
+   *
+   * @param callback - Function to call with normalized workspace path
+   * @returns Unsubscribe function to remove the callback
+   *
+   * @example
+   * ```typescript
+   * const unsubscribe = server.onConnect((workspacePath) => {
+   *   console.log(`Workspace connected: ${workspacePath}`);
+   * });
+   *
+   * // Later, to stop receiving notifications:
+   * unsubscribe();
+   * ```
+   */
+  onConnect(callback: (workspacePath: string) => void): () => void {
+    this.connectCallbacks.add(callback);
+    return () => {
+      this.connectCallbacks.delete(callback);
+    };
+  }
+
+  /**
    * Close the server and disconnect all clients.
    */
   async close(): Promise<void> {
@@ -305,6 +337,20 @@ export class PluginServer {
         workspace: workspacePath,
         socketId: socket.id,
       });
+
+      // Invoke connect callbacks
+      for (const callback of this.connectCallbacks) {
+        try {
+          callback(workspacePath);
+        } catch (error) {
+          // Log error but don't crash server or prevent other callbacks
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error("Connect callback error", {
+            workspace: workspacePath,
+            error: message,
+          });
+        }
+      }
 
       // Handle disconnection
       socket.on("disconnect", (reason) => {

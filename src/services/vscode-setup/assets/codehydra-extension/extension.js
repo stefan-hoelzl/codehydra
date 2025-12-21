@@ -100,22 +100,10 @@ function connectToPluginServer(port, workspacePath) {
  * @param {vscode.ExtensionContext} _context
  */
 async function activate(_context) {
-  // Wait briefly for VS Code UI to stabilize
-  setTimeout(async () => {
-    try {
-      // Hide sidebars to maximize editor space
-      await vscode.commands.executeCommand("workbench.action.closeSidebar");
-      await vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar");
-      // Open OpenCode terminal automatically for AI workflow
-      await vscode.commands.executeCommand("opencode.openTerminal");
-      // Unlock the editor group so files open in the same tab group
-      await vscode.commands.executeCommand("workbench.action.unlockEditorGroup");
-      // Clean up empty editor groups created by terminal opening
-      await vscode.commands.executeCommand("workbench.action.closeEditorsInOtherGroups");
-    } catch (err) {
-      logError("Startup commands error:", err);
-    }
-  }, 100);
+  // NOTE: Startup commands (close sidebars, open terminal, etc.) are now handled
+  // by CodeHydra main process via PluginServer.onConnect() callback when this
+  // extension connects. See src/main/index.ts startServices() and
+  // src/services/plugin-server/startup-commands.ts for implementation.
 
   // Get plugin port from environment
   const pluginPortStr = process.env.CODEHYDRA_PLUGIN_PORT;

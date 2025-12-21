@@ -1236,6 +1236,20 @@ CodeHydra and VS Code extensions communicate via Socket.IO WebSocket connection.
 5. **Server validates** auth and stores connection by normalized path
 6. **Commands sent** with acknowledgment callbacks (10s timeout)
 
+### Startup Commands
+
+When an extension connects to PluginServer, CodeHydra automatically sends startup commands to configure the workspace layout:
+
+| Command                                      | Purpose                                    |
+| -------------------------------------------- | ------------------------------------------ |
+| `workbench.action.closeSidebar`              | Hide left sidebar to maximize editor space |
+| `workbench.action.closeAuxiliaryBar`         | Hide right sidebar (auxiliary bar)         |
+| `opencode.openTerminal`                      | Open OpenCode terminal for AI workflow     |
+| `workbench.action.unlockEditorGroup`         | Unlock editor group for tab reuse          |
+| `workbench.action.closeEditorsInOtherGroups` | Clean up empty editor groups               |
+
+Commands are sent sequentially after a brief delay (100ms) for UI stabilization. Failures are non-fatal and logged as warnings with `[plugin]` logger.
+
 ### Environment Variable
 
 | Variable                | Purpose                                  |

@@ -288,4 +288,127 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       expect(server.isConnected("/test/workspace")).toBe(true);
     });
   });
+
+  describe("onConnect callbacks", () => {
+    it("invokes callback with normalized workspace path on valid connection", async () => {
+      let callbackWorkspacePath: string | null = null;
+      server.onConnect((workspacePath) => {
+        callbackWorkspacePath = workspacePath;
+      });
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      expect(callbackWorkspacePath).toBe("/test/workspace");
+    });
+
+    it("does not invoke callback for invalid auth (rejected connection)", async () => {
+      let callbackCalled = false;
+      server.onConnect(() => {
+        callbackCalled = true;
+      });
+
+      // Client with empty workspace path (should be rejected)
+      const client = createTestClient(port, { workspacePath: "" });
+      clients.push(client);
+
+      client.connect();
+
+      // Wait for potential callback
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(callbackCalled).toBe(false);
+    });
+
+    it("invokes multiple callbacks for single connection", async () => {
+      const calls: string[] = [];
+
+      server.onConnect((workspacePath) => {
+        calls.push(`callback1:${workspacePath}`);
+      });
+
+      server.onConnect((workspacePath) => {
+        calls.push(`callback2:${workspacePath}`);
+      });
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Give callbacks time to execute
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(calls).toHaveLength(2);
+      expect(calls).toContain("callback1:/test/workspace");
+      expect(calls).toContain("callback2:/test/workspace");
+    });
+
+    it("exception in one callback does not prevent other callbacks", async () => {
+      const calls: string[] = [];
+
+      server.onConnect(() => {
+        throw new Error("Intentional error in callback");
+      });
+
+      server.onConnect((workspacePath) => {
+        calls.push(`callback2:${workspacePath}`);
+      });
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Give callbacks time to execute
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Second callback should still be called despite first throwing
+      expect(calls).toContain("callback2:/test/workspace");
+    });
+
+    it("unsubscribe removes callback", async () => {
+      const calls: string[] = [];
+
+      const unsubscribe = server.onConnect((workspacePath) => {
+        calls.push(workspacePath);
+      });
+
+      // Unsubscribe before connecting
+      unsubscribe();
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Give potential callback time to execute
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Callback should not have been called
+      expect(calls).toHaveLength(0);
+    });
+
+    it("concurrent connections each trigger callbacks", async () => {
+      const connectedWorkspaces: string[] = [];
+
+      server.onConnect((workspacePath) => {
+        connectedWorkspaces.push(workspacePath);
+      });
+
+      const client1 = createClient("/workspace/one");
+      const client2 = createClient("/workspace/two");
+      const client3 = createClient("/workspace/three");
+
+      // Connect all clients concurrently
+      await Promise.all([
+        waitForConnect(client1),
+        waitForConnect(client2),
+        waitForConnect(client3),
+      ]);
+
+      // Give callbacks time to execute
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // All three workspaces should trigger callbacks
+      expect(connectedWorkspaces).toHaveLength(3);
+      expect(connectedWorkspaces).toContain("/workspace/one");
+      expect(connectedWorkspaces).toContain("/workspace/two");
+      expect(connectedWorkspaces).toContain("/workspace/three");
+    });
+  });
 });

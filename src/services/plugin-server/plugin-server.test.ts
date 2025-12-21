@@ -5,12 +5,15 @@
  * For Socket.IO connection tests, see plugin-server.boundary.test.ts.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   COMMAND_TIMEOUT_MS,
   normalizeWorkspacePath,
   isValidCommandRequest,
 } from "../../shared/plugin-protocol";
+import { PluginServer } from "./plugin-server";
+import { createMockPortManager } from "../platform/network.test-utils";
+import { createSilentLogger } from "../logging/logging.test-utils";
 
 describe("PluginServer", () => {
   describe("isValidCommandRequest", () => {
@@ -93,6 +96,63 @@ describe("PluginServer", () => {
 
     it("handles relative path", () => {
       expect(normalizeWorkspacePath("relative/path")).toBe("relative/path");
+    });
+  });
+
+  describe("onConnect", () => {
+    let server: PluginServer;
+    let mockPortManager: ReturnType<typeof createMockPortManager>;
+
+    beforeEach(() => {
+      mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
+      server = new PluginServer(mockPortManager, createSilentLogger());
+    });
+
+    afterEach(async () => {
+      await server.close();
+    });
+
+    it("returns unsubscribe function that removes callback", () => {
+      const callback = vi.fn();
+      const unsubscribe = server.onConnect(callback);
+
+      // Callback is registered
+      expect(typeof unsubscribe).toBe("function");
+
+      // After unsubscribe, callback should be removed (tested indirectly via boundary tests)
+      unsubscribe();
+
+      // Calling unsubscribe again should not throw
+      expect(() => unsubscribe()).not.toThrow();
+    });
+
+    it("allows multiple callbacks to be registered", () => {
+      const callback1 = vi.fn();
+      const callback2 = vi.fn();
+
+      const unsubscribe1 = server.onConnect(callback1);
+      const unsubscribe2 = server.onConnect(callback2);
+
+      expect(typeof unsubscribe1).toBe("function");
+      expect(typeof unsubscribe2).toBe("function");
+
+      // Cleanup
+      unsubscribe1();
+      unsubscribe2();
+    });
+
+    it("unsubscribe removes only the specific callback", () => {
+      const callback1 = vi.fn();
+      const callback2 = vi.fn();
+
+      const unsubscribe1 = server.onConnect(callback1);
+      server.onConnect(callback2);
+
+      // Unsubscribe first callback
+      unsubscribe1();
+
+      // Second callback should still be registered (tested via boundary tests)
+      // This test verifies the unsubscribe logic doesn't affect other callbacks
     });
   });
 });

@@ -3,3 +3,4 @@
  */
 
 export { PluginServer } from "./plugin-server";
+export { STARTUP_COMMANDS, sendStartupCommands, type StartupCommand } from "./startup-commands";

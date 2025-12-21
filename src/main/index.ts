@@ -28,7 +28,7 @@ import {
 } from "../services/binary-download";
 import { createProcessTreeProvider } from "../services/platform/process-tree";
 import { DiscoveryService, AgentStatusManager, HttpInstanceProbe } from "../services/opencode";
-import { PluginServer } from "../services/plugin-server";
+import { PluginServer, sendStartupCommands } from "../services/plugin-server";
 import { WindowManager } from "./managers/window-manager";
 import { ViewManager } from "./managers/view-manager";
 import { AppState } from "./app-state";
@@ -245,9 +245,15 @@ async function startServices(): Promise<void> {
   // Start PluginServer BEFORE code-server so port is available for environment variable
   // Graceful degradation: if PluginServer fails, log warning and continue (plugin is optional)
   try {
-    pluginServer = new PluginServer(networkLayer, loggingService.createLogger("plugin"));
+    const pluginLogger = loggingService.createLogger("plugin");
+    pluginServer = new PluginServer(networkLayer, pluginLogger);
     const pluginPort = await pluginServer.start();
     loggingService.createLogger("app").info("PluginServer started", { port: pluginPort });
+
+    // Wire up startup commands - sent when workspace extension connects
+    pluginServer.onConnect((workspacePath) => {
+      void sendStartupCommands(pluginServer!, workspacePath, pluginLogger);
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     loggingService.createLogger("app").warn("PluginServer start failed", { error: message });
