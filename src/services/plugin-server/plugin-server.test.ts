@@ -3,15 +3,16 @@
  *
  * Tests pure logic without real Socket.IO connections.
  * For Socket.IO connection tests, see plugin-server.boundary.test.ts.
+ * For protocol type tests, see plugin-protocol.test.ts.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { PluginServer, type ApiCallHandlers } from "./plugin-server";
 import {
-  COMMAND_TIMEOUT_MS,
-  normalizeWorkspacePath,
   isValidCommandRequest,
+  normalizeWorkspacePath,
+  COMMAND_TIMEOUT_MS,
 } from "../../shared/plugin-protocol";
-import { PluginServer } from "./plugin-server";
 import { createMockPortManager } from "../platform/network.test-utils";
 import { createSilentLogger } from "../logging/logging.test-utils";
 
@@ -155,6 +156,60 @@ describe("PluginServer", () => {
 
       // Second callback should still be registered (tested via boundary tests)
       // This test verifies the unsubscribe logic doesn't affect other callbacks
+    });
+  });
+
+  describe("onApiCall", () => {
+    let server: PluginServer;
+    let mockPortManager: ReturnType<typeof createMockPortManager>;
+
+    beforeEach(() => {
+      mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
+      server = new PluginServer(mockPortManager, createSilentLogger());
+    });
+
+    afterEach(async () => {
+      await server.close();
+    });
+
+    it("accepts handler registration without throwing", () => {
+      const handlers: ApiCallHandlers = {
+        getStatus: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: { isDirty: false, agent: { type: "none" } } }),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+
+      // Should not throw
+      expect(() => server.onApiCall(handlers)).not.toThrow();
+    });
+
+    it("allows handlers to be replaced", () => {
+      const handlers1: ApiCallHandlers = {
+        getStatus: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: { isDirty: false, agent: { type: "none" } } }),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+
+      const handlers2: ApiCallHandlers = {
+        getStatus: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            isDirty: true,
+            agent: { type: "busy", counts: { idle: 0, busy: 1, total: 1 } },
+          },
+        }),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: { note: "test" } }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+
+      server.onApiCall(handlers1);
+      server.onApiCall(handlers2);
+
+      // No error - second registration replaces first
     });
   });
 });

@@ -1303,6 +1303,56 @@ Events logged:
 - Client connect/disconnect (workspace path, reason)
 - Command execution (command, success/error)
 
+### Plugin API (for Third-Party Extensions)
+
+Third-party VS Code extensions can call CodeHydra API methods through the codehydra extension's exports.
+
+**Accessing the API:**
+
+```javascript
+const ext = vscode.extensions.getExtension("codehydra.codehydra");
+const api = ext?.exports?.codehydra;
+if (!api) {
+  throw new Error("codehydra extension not available");
+}
+
+// Wait for connection to CodeHydra
+await api.whenReady();
+
+// Now you can use the workspace API
+const status = await api.workspace.getStatus();
+const metadata = await api.workspace.getMetadata();
+await api.workspace.setMetadata("my-key", "my-value");
+```
+
+**Available Methods:**
+
+| Method                             | Returns                          | Description                           |
+| ---------------------------------- | -------------------------------- | ------------------------------------- |
+| `whenReady()`                      | `Promise<void>`                  | Resolves when connected to CodeHydra  |
+| `workspace.getStatus()`            | `Promise<WorkspaceStatus>`       | Get current workspace status          |
+| `workspace.getMetadata()`          | `Promise<Record<string,string>>` | Get all workspace metadata            |
+| `workspace.setMetadata(key,value)` | `Promise<void>`                  | Set metadata (null value deletes key) |
+
+**Type Declarations:**
+
+For TypeScript support, copy the type declarations from:
+`src/services/vscode-setup/assets/codehydra-extension/api.d.ts`
+
+**Error Handling:**
+
+All methods return rejected Promises on failure (not thrown exceptions). The rejection reason is a string error message.
+
+```javascript
+try {
+  await api.workspace.setMetadata("key", "value");
+} catch (error) {
+  console.error("Failed to set metadata:", error);
+}
+```
+
+**Timeout:** All API calls have a 10-second timeout.
+
 ## Development Workflow
 
 - **Features**: Efficient coverage - implement with tests, batch validate at end

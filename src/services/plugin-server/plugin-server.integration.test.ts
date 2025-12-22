@@ -1,10 +1,12 @@
 /**
- * Integration tests for PluginServer with startup commands.
+ * Integration tests for PluginServer with startup commands and wirePluginApi.
  *
- * Tests the full flow: PluginServer start → onConnect registration → connection → sendStartupCommands called
+ * Tests the full flow:
+ * - PluginServer start → onConnect registration → connection → sendStartupCommands called
+ * - wirePluginApi: Client → PluginServer → API handlers → ICodeHydraApi → result
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PluginServer } from "./plugin-server";
 import { STARTUP_COMMANDS, sendStartupCommands } from "./startup-commands";
 import { DefaultNetworkLayer } from "../platform/network";
@@ -15,6 +17,9 @@ import {
   createMockCommandHandler,
   type TestClientSocket,
 } from "./plugin-server.test-utils";
+import { wirePluginApi, type WorkspaceResolver } from "../../main/api/wire-plugin-api";
+import type { ICodeHydraApi } from "../../shared/api/interfaces";
+import type { WorkspaceStatus } from "../../shared/api/types";
 
 // Longer timeout for integration tests
 const TEST_TIMEOUT = 15000;
@@ -175,6 +180,196 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
       // Commands should be the same for both workspaces
       expect(workspace1Commands).toEqual([...STARTUP_COMMANDS]);
       expect(workspace2Commands).toEqual([...STARTUP_COMMANDS]);
+    });
+  });
+});
+
+/**
+ * Integration tests for wirePluginApi.
+ *
+ * Tests the full round-trip: Client → PluginServer → wirePluginApi → ICodeHydraApi → result
+ */
+describe("wirePluginApi (integration)", { timeout: TEST_TIMEOUT }, () => {
+  let server: PluginServer;
+  let networkLayer: DefaultNetworkLayer;
+  let port: number;
+  let clients: TestClientSocket[] = [];
+  let mockApi: ICodeHydraApi;
+  let mockWorkspaceResolver: WorkspaceResolver;
+
+  beforeEach(async () => {
+    networkLayer = new DefaultNetworkLayer(createSilentLogger());
+    server = new PluginServer(networkLayer, createSilentLogger(), { transports: ["polling"] });
+    port = await server.start();
+
+    // Create mock ICodeHydraApi
+    mockApi = {
+      projects: {} as ICodeHydraApi["projects"],
+      workspaces: {
+        create: vi.fn(),
+        remove: vi.fn(),
+        forceRemove: vi.fn(),
+        get: vi.fn(),
+        getStatus: vi.fn(),
+        setMetadata: vi.fn(),
+        getMetadata: vi.fn(),
+      },
+      ui: {} as ICodeHydraApi["ui"],
+      lifecycle: {} as ICodeHydraApi["lifecycle"],
+      on: vi.fn(() => () => {}),
+      dispose: vi.fn(),
+    };
+
+    // Create mock workspace resolver that finds workspaces
+    mockWorkspaceResolver = {
+      findProjectForWorkspace: vi.fn((workspacePath: string) => {
+        // Return a project for known workspace paths
+        if (workspacePath.startsWith("/projects/myproject/")) {
+          return { path: "/projects/myproject" };
+        }
+        return undefined;
+      }),
+    };
+
+    // Wire up the plugin API
+    wirePluginApi(server, mockApi, mockWorkspaceResolver, createSilentLogger());
+  });
+
+  afterEach(async () => {
+    // Disconnect all clients
+    for (const client of clients) {
+      if (client.connected) {
+        client.disconnect();
+      }
+    }
+    clients = [];
+
+    // Close server
+    if (server) {
+      await server.close();
+    }
+  });
+
+  // Helper to create and track clients
+  function createClient(workspacePath: string): TestClientSocket {
+    const client = createTestClient(port, { workspacePath });
+    clients.push(client);
+    return client;
+  }
+
+  describe("getStatus", () => {
+    it("returns workspace status through full round-trip", async () => {
+      const expectedStatus: WorkspaceStatus = {
+        isDirty: true,
+        agent: { type: "busy", counts: { idle: 1, busy: 2, total: 3 } },
+      };
+      vi.mocked(mockApi.workspaces.getStatus).mockResolvedValue(expectedStatus);
+
+      const client = createClient("/projects/myproject/workspaces/feature-x");
+      await waitForConnect(client);
+
+      const result = await new Promise<{
+        success: boolean;
+        data?: WorkspaceStatus;
+        error?: string;
+      }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(expectedStatus);
+      expect(mockApi.workspaces.getStatus).toHaveBeenCalled();
+    });
+  });
+
+  describe("getMetadata", () => {
+    it("returns workspace metadata through full round-trip", async () => {
+      const expectedMetadata = { base: "main", note: "working on feature" };
+      vi.mocked(mockApi.workspaces.getMetadata).mockResolvedValue(expectedMetadata);
+
+      const client = createClient("/projects/myproject/workspaces/feature-x");
+      await waitForConnect(client);
+
+      const result = await new Promise<{
+        success: boolean;
+        data?: Record<string, string>;
+        error?: string;
+      }>((resolve) => {
+        client.emit("api:workspace:getMetadata", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(expectedMetadata);
+      expect(mockApi.workspaces.getMetadata).toHaveBeenCalled();
+    });
+  });
+
+  describe("setMetadata", () => {
+    it("updates workspace metadata through full round-trip", async () => {
+      vi.mocked(mockApi.workspaces.setMetadata).mockResolvedValue(undefined);
+
+      const client = createClient("/projects/myproject/workspaces/feature-x");
+      await waitForConnect(client);
+
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:setMetadata", { key: "note", value: "my note" }, (res) =>
+          resolve(res)
+        );
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockApi.workspaces.setMetadata).toHaveBeenCalledWith(
+        expect.any(String), // projectId
+        expect.any(String), // workspaceName
+        "note",
+        "my note"
+      );
+    });
+  });
+
+  describe("error handling", () => {
+    it("returns error when workspace not found", async () => {
+      // Connect with unknown workspace path (not under /projects/myproject/)
+      const client = createClient("/unknown/workspace/path");
+      await waitForConnect(client);
+
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Workspace not found");
+      // API should not be called when workspace not found
+      expect(mockApi.workspaces.getStatus).not.toHaveBeenCalled();
+    });
+
+    it("returns error when API throws exception", async () => {
+      vi.mocked(mockApi.workspaces.getStatus).mockRejectedValue(new Error("Database unavailable"));
+
+      const client = createClient("/projects/myproject/workspaces/feature-x");
+      await waitForConnect(client);
+
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Database unavailable");
+    });
+
+    it("returns error when metadata key is invalid", async () => {
+      const client = createClient("/projects/myproject/workspaces/feature-x");
+      await waitForConnect(client);
+
+      // Empty key should be rejected at validation (before reaching API)
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:setMetadata", { key: "", value: "test" }, (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("cannot be empty");
+      // API should not be called for invalid requests
+      expect(mockApi.workspaces.setMetadata).not.toHaveBeenCalled();
     });
   });
 });

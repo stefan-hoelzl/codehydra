@@ -29,6 +29,7 @@ import {
 import { createProcessTreeProvider } from "../services/platform/process-tree";
 import { DiscoveryService, AgentStatusManager, HttpInstanceProbe } from "../services/opencode";
 import { PluginServer, sendStartupCommands, sendShutdownCommand } from "../services/plugin-server";
+import { wirePluginApi } from "./api/wire-plugin-api";
 import { WindowManager } from "./managers/window-manager";
 import { ViewManager } from "./managers/view-manager";
 import { BadgeManager } from "./managers/badge-manager";
@@ -398,6 +399,11 @@ async function startServices(): Promise<void> {
 
   // Register API handlers
   registerApiHandlers(codeHydraApi, loggingService.createLogger("api"));
+
+  // Wire PluginServer to CodeHydraApi (if PluginServer is running)
+  if (pluginServer) {
+    wirePluginApi(pluginServer, codeHydraApi, appState, loggingService.createLogger("plugin"));
+  }
 
   // Default window title (used when no workspace is active)
   const defaultTitle = formatWindowTitle(undefined, undefined, buildInfo.gitBranch);

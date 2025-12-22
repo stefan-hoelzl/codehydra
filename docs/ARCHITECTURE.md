@@ -1165,6 +1165,178 @@ Sessions waiting for user permission are displayed as "idle" (green indicator) r
 - **Concurrent Scans**: Mutex flag prevents overlapping scan operations
 - **Resource Cleanup**: `IDisposable` pattern ensures proper cleanup on shutdown
 
+## Plugin Interface
+
+CodeHydra and VS Code extensions communicate via Socket.IO WebSocket connection. The protocol supports bidirectional communication:
+
+- **Server → Client**: CodeHydra sends VS Code commands to extensions
+- **Client → Server**: Extensions call CodeHydra API methods
+
+### Architecture Overview
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│                      CodeHydra (Electron Main)                            │
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │  PluginServer                                                       │  │
+│  │                                                                     │  │
+│  │  connections: Map<workspacePath, Socket>                            │  │
+│  │                                                                     │  │
+│  │  Server → Client:                                                   │  │
+│  │  ───► "command" (execute VS Code commands)                          │  │
+│  │                                                                     │  │
+│  │  Client → Server:                                                   │  │
+│  │  ◄─── "api:workspace:getStatus" → PluginResult<WorkspaceStatus>     │  │
+│  │  ◄─── "api:workspace:getMetadata" → PluginResult<Record<...>>       │  │
+│  │  ◄─── "api:workspace:setMetadata" → PluginResult<void>              │  │
+│  │                                                                     │  │
+│  │  API handlers registered via onApiCall() callback pattern           │  │
+│  │  (PluginServer remains agnostic to API layer)                       │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                           ▲                               │
+│                                           │ wirePluginApi() registers     │
+│                                           │ handlers in startServices()   │
+│  ┌────────────────────────────────────────┴────────────────────────────┐  │
+│  │  wirePluginApi() - src/main/index.ts                                │  │
+│  │                                                                     │  │
+│  │  Workspace path resolution:                                         │  │
+│  │  1. appState.findProjectForWorkspace(workspacePath)                 │  │
+│  │  2. generateProjectId(project.path)                                 │  │
+│  │  3. path.basename(workspacePath) as WorkspaceName                   │  │
+│  │  4. If not found → return { success: false, error: "..." }          │  │
+│  │                                                                     │  │
+│  │  Delegates to ICodeHydraApi after resolution                        │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────┘
+                    │ WebSocket (localhost only)
+                    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                    codehydra extension (code-server)                      │
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │  extension.js                                                       │  │
+│  │                                                                     │  │
+│  │  // Socket.IO client                                                │  │
+│  │  socket.on("command", handler)           // inbound: execute cmd    │  │
+│  │  socket.emit("api:workspace:...", ack)   // outbound: API calls     │  │
+│  │                                                                     │  │
+│  │  // Connection state management                                     │  │
+│  │  let connected = false;                                             │  │
+│  │  let pendingReady = [];  // queue for whenReady()                   │  │
+│  │                                                                     │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │  exports.codehydra = {                                              │  │
+│  │    whenReady(): Promise<void>             // resolves when connected│  │
+│  │    workspace: {                                                     │  │
+│  │      getStatus(): Promise<WorkspaceStatus>                          │  │
+│  │      getMetadata(): Promise<Record<string, string>>                 │  │
+│  │      setMetadata(key, value): Promise<void>                         │  │
+│  │    }                                                                │  │
+│  │  }                                                                  │  │
+│  │                                                                     │  │
+│  │  Error handling: Returns rejected Promise with clear message        │  │
+│  │  (matches PluginResult pattern - no throwing)                       │  │
+│  │                                                                     │  │
+│  │  Timeout: 10s (matches COMMAND_TIMEOUT_MS)                          │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────┘
+                    │
+                    │ vscode.extensions.getExtension()
+                    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                    Third-party extension                                  │
+│                                                                           │
+│  const ext = vscode.extensions.getExtension('codehydra.codehydra');       │
+│  const api = ext?.exports?.codehydra;                                     │
+│  if (!api) throw new Error('codehydra extension not available');          │
+│                                                                           │
+│  await api.whenReady();  // wait for connection                           │
+│  const status = await api.workspace.getStatus();                          │
+│  const metadata = await api.workspace.getMetadata();                      │
+│  await api.workspace.setMetadata('note', 'Working on feature X');         │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### Protocol Messages
+
+**Server → Client (Commands):**
+
+| Event     | Payload          | Response                | Description             |
+| --------- | ---------------- | ----------------------- | ----------------------- |
+| `command` | `CommandRequest` | `PluginResult<unknown>` | Execute VS Code command |
+
+**Client → Server (API Calls):**
+
+| Event                       | Payload              | Response                              | Description                      |
+| --------------------------- | -------------------- | ------------------------------------- | -------------------------------- |
+| `api:workspace:getStatus`   | (none)               | `PluginResult<WorkspaceStatus>`       | Get workspace dirty/agent status |
+| `api:workspace:getMetadata` | (none)               | `PluginResult<Record<string,string>>` | Get all workspace metadata       |
+| `api:workspace:setMetadata` | `SetMetadataRequest` | `PluginResult<void>`                  | Set or delete metadata key       |
+
+**Types:**
+
+```typescript
+interface CommandRequest {
+  readonly command: string;
+  readonly args?: readonly unknown[];
+}
+
+interface SetMetadataRequest {
+  readonly key: string; // Must match /^[A-Za-z][A-Za-z0-9-]*$/
+  readonly value: string | null; // null deletes the key
+}
+
+type PluginResult<T> = { success: true; data: T } | { success: false; error: string };
+```
+
+### Connection Lifecycle
+
+1. **PluginServer starts** on dynamic port in main process
+2. **code-server spawns** with `CODEHYDRA_PLUGIN_PORT` env var
+3. **Extension activates** and reads env var
+4. **Extension connects** with `auth: { workspacePath }` (normalized path)
+5. **Server validates** auth and stores connection by normalized path
+6. **Bidirectional communication** begins with acknowledgment callbacks
+
+### API Wiring
+
+The `wirePluginApi()` function in `src/main/index.ts` connects PluginServer to the CodeHydra API:
+
+```typescript
+function wirePluginApi(pluginServer: PluginServer, api: ICodeHydraApi, appState: AppState): void {
+  pluginServer.onApiCall({
+    getStatus: async (workspacePath) => {
+      // 1. Resolve workspace path to projectId + workspaceName
+      // 2. Call api.workspaces.getStatus(projectId, workspaceName)
+      // 3. Return PluginResult
+    },
+    getMetadata: async (workspacePath) => {
+      /* similar */
+    },
+    setMetadata: async (workspacePath, key, value) => {
+      /* similar */
+    },
+  });
+}
+```
+
+### Error Handling
+
+- **Unknown workspace**: Returns `{ success: false, error: "Workspace not found" }`
+- **Invalid metadata key**: Returns `{ success: false, error: "Invalid key format" }`
+- **API exceptions**: Caught and mapped to `{ success: false, error: message }`
+- **Timeout**: 10 seconds per request (client-side)
+
+### Type Declarations for Third-Party Extensions
+
+TypeScript declarations for the API are in:
+`src/services/vscode-setup/assets/codehydra-extension/api.d.ts`
+
+Third-party extension developers should copy this file into their project for type safety.
+
 ## External URL Handling
 
 All URLs opened from code-server → external system browser:

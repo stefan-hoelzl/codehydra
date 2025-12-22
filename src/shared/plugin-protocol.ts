@@ -6,6 +6,8 @@
  */
 
 import path from "node:path";
+import type { WorkspaceStatus } from "./api/types";
+import { METADATA_KEY_REGEX, isValidMetadataKey } from "./api/types";
 
 // ============================================================================
 // Path Normalization
@@ -88,13 +90,102 @@ export interface ServerToClientEvents {
   command: (request: CommandRequest, ack: (result: PluginResult<unknown>) => void) => void;
 }
 
+// ============================================================================
+// API Request Types
+// ============================================================================
+
+/**
+ * Request payload for setting workspace metadata.
+ */
+export interface SetMetadataRequest {
+  /** Metadata key (must match METADATA_KEY_REGEX) */
+  readonly key: string;
+  /** Metadata value (string to set, null to delete) */
+  readonly value: string | null;
+}
+
+/**
+ * Runtime validation for SetMetadataRequest.
+ * Validates structure and key format against METADATA_KEY_REGEX.
+ *
+ * @param payload - The payload to validate
+ * @returns Object with valid boolean and optional error message
+ */
+export function validateSetMetadataRequest(
+  payload: unknown
+): { valid: true } | { valid: false; error: string } {
+  if (typeof payload !== "object" || payload === null) {
+    return { valid: false, error: "Request must be an object" };
+  }
+
+  const request = payload as Record<string, unknown>;
+
+  if (!("key" in request)) {
+    return { valid: false, error: "Missing required field: key" };
+  }
+
+  if (typeof request.key !== "string") {
+    return { valid: false, error: "Field 'key' must be a string" };
+  }
+
+  if (request.key.length === 0) {
+    return { valid: false, error: "Field 'key' cannot be empty" };
+  }
+
+  if (!isValidMetadataKey(request.key)) {
+    return {
+      valid: false,
+      error: `Invalid key format: must match ${METADATA_KEY_REGEX.toString()}`,
+    };
+  }
+
+  if (!("value" in request)) {
+    return { valid: false, error: "Missing required field: value" };
+  }
+
+  if (request.value !== null && typeof request.value !== "string") {
+    return { valid: false, error: "Field 'value' must be a string or null" };
+  }
+
+  return { valid: true };
+}
+
+// ============================================================================
+// Socket.IO Event Types
+// ============================================================================
+
 /**
  * Client to Server events (Extension -> CodeHydra).
- * Currently empty - reserved for future API calls.
- * Uses Record<string, never> to indicate an intentionally empty interface
- * that will be extended in future versions.
+ * Provides workspace-scoped API methods for extensions.
  */
-export type ClientToServerEvents = Record<string, never>;
+export interface ClientToServerEvents {
+  /**
+   * Get the current status of the connected workspace.
+   *
+   * @param ack - Acknowledgment callback with workspace status
+   */
+  "api:workspace:getStatus": (ack: (result: PluginResult<WorkspaceStatus>) => void) => void;
+
+  /**
+   * Get all metadata for the connected workspace.
+   *
+   * @param ack - Acknowledgment callback with metadata record
+   */
+  "api:workspace:getMetadata": (
+    ack: (result: PluginResult<Record<string, string>>) => void
+  ) => void;
+
+  /**
+   * Set or delete a metadata key for the connected workspace.
+   *
+   * @param request - The metadata key/value to set (value: null to delete)
+   * @param ack - Acknowledgment callback with void result
+   */
+  "api:workspace:setMetadata": (
+    request: SetMetadataRequest,
+    ack: (result: PluginResult<void>) => void
+  ) => void;
+}
 
 /**
  * Socket metadata set from auth on connect.

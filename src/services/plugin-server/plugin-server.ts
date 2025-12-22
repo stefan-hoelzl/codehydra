@@ -21,9 +21,12 @@ import {
   type SocketData,
   type CommandRequest,
   type PluginResult,
+  type SetMetadataRequest,
   COMMAND_TIMEOUT_MS,
   normalizeWorkspacePath,
+  validateSetMetadataRequest,
 } from "../../shared/plugin-protocol";
+import type { WorkspaceStatus } from "../../shared/api/types";
 
 // ============================================================================
 // Types
@@ -38,6 +41,38 @@ type TypedServer = Server<ClientToServerEvents, ServerToClientEvents, object, So
  * Socket.IO Socket type with typed events.
  */
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents, object, SocketData>;
+
+// ============================================================================
+// API Callback Types
+// ============================================================================
+
+/**
+ * Callback handlers for workspace API calls.
+ * Each handler receives the workspace path and returns a PluginResult.
+ */
+export interface ApiCallHandlers {
+  /**
+   * Handle getStatus request.
+   * @param workspacePath - Normalized workspace path
+   * @returns Status result or error
+   */
+  getStatus(workspacePath: string): Promise<PluginResult<WorkspaceStatus>>;
+
+  /**
+   * Handle getMetadata request.
+   * @param workspacePath - Normalized workspace path
+   * @returns Metadata record or error
+   */
+  getMetadata(workspacePath: string): Promise<PluginResult<Record<string, string>>>;
+
+  /**
+   * Handle setMetadata request.
+   * @param workspacePath - Normalized workspace path
+   * @param request - The validated set metadata request
+   * @returns Void result or error
+   */
+  setMetadata(workspacePath: string, request: SetMetadataRequest): Promise<PluginResult<void>>;
+}
 
 // ============================================================================
 // PluginServer
@@ -102,6 +137,11 @@ export class PluginServer {
    * Each callback receives the normalized workspace path.
    */
   private readonly connectCallbacks = new Set<(workspacePath: string) => void>();
+
+  /**
+   * API call handlers registered via onApiCall().
+   */
+  private apiHandlers: ApiCallHandlers | null = null;
 
   /**
    * Create a new PluginServer instance.
@@ -253,6 +293,39 @@ export class PluginServer {
   }
 
   /**
+   * Register handlers for workspace API calls from extensions.
+   *
+   * This method must be called before any clients connect to enable API handling.
+   * Only one set of handlers can be registered; subsequent calls replace previous handlers.
+   *
+   * The PluginServer routes incoming API events to these handlers, passing the
+   * workspace path from the socket connection. The handlers are responsible for
+   * resolving workspace identifiers and delegating to the appropriate API layer.
+   *
+   * @param handlers - Object containing handler functions for each API method
+   *
+   * @example
+   * ```typescript
+   * server.onApiCall({
+   *   async getStatus(workspacePath) {
+   *     // Resolve workspace and return status
+   *     return { success: true, data: { isDirty: false, agent: { type: 'none' } } };
+   *   },
+   *   async getMetadata(workspacePath) {
+   *     return { success: true, data: { base: 'main', note: 'test' } };
+   *   },
+   *   async setMetadata(workspacePath, request) {
+   *     // Update metadata in git config
+   *     return { success: true, data: undefined };
+   *   },
+   * });
+   * ```
+   */
+  onApiCall(handlers: ApiCallHandlers): void {
+    this.apiHandlers = handlers;
+  }
+
+  /**
    * Close the server and disconnect all clients.
    */
   async close(): Promise<void> {
@@ -365,6 +438,123 @@ export class PluginServer {
           });
         }
       });
+
+      // Set up API event handlers
+      this.setupApiHandlers(socket, workspacePath);
+    });
+  }
+
+  /**
+   * Set up API event handlers for a connected socket.
+   *
+   * @param socket - The connected socket
+   * @param workspacePath - Normalized workspace path for this connection
+   */
+  private setupApiHandlers(socket: TypedSocket, workspacePath: string): void {
+    // Handle api:workspace:getStatus
+    socket.on("api:workspace:getStatus", (ack) => {
+      if (!this.apiHandlers) {
+        this.logger.warn("API call without handlers registered", {
+          event: "api:workspace:getStatus",
+          workspace: workspacePath,
+        });
+        ack({ success: false, error: "API handlers not registered" });
+        return;
+      }
+
+      this.logger.debug("API call", { event: "api:workspace:getStatus", workspace: workspacePath });
+
+      this.apiHandlers
+        .getStatus(workspacePath)
+        .then((result) => {
+          ack(result);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error("API handler error", {
+            event: "api:workspace:getStatus",
+            workspace: workspacePath,
+            error: message,
+          });
+          ack({ success: false, error: message });
+        });
+    });
+
+    // Handle api:workspace:getMetadata
+    socket.on("api:workspace:getMetadata", (ack) => {
+      if (!this.apiHandlers) {
+        this.logger.warn("API call without handlers registered", {
+          event: "api:workspace:getMetadata",
+          workspace: workspacePath,
+        });
+        ack({ success: false, error: "API handlers not registered" });
+        return;
+      }
+
+      this.logger.debug("API call", {
+        event: "api:workspace:getMetadata",
+        workspace: workspacePath,
+      });
+
+      this.apiHandlers
+        .getMetadata(workspacePath)
+        .then((result) => {
+          ack(result);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error("API handler error", {
+            event: "api:workspace:getMetadata",
+            workspace: workspacePath,
+            error: message,
+          });
+          ack({ success: false, error: message });
+        });
+    });
+
+    // Handle api:workspace:setMetadata
+    socket.on("api:workspace:setMetadata", (request, ack) => {
+      if (!this.apiHandlers) {
+        this.logger.warn("API call without handlers registered", {
+          event: "api:workspace:setMetadata",
+          workspace: workspacePath,
+        });
+        ack({ success: false, error: "API handlers not registered" });
+        return;
+      }
+
+      // Validate request before invoking handler
+      const validation = validateSetMetadataRequest(request);
+      if (!validation.valid) {
+        this.logger.warn("API call validation failed", {
+          event: "api:workspace:setMetadata",
+          workspace: workspacePath,
+          error: validation.error,
+        });
+        ack({ success: false, error: validation.error });
+        return;
+      }
+
+      this.logger.debug("API call", {
+        event: "api:workspace:setMetadata",
+        workspace: workspacePath,
+        key: request.key,
+      });
+
+      this.apiHandlers
+        .setMetadata(workspacePath, request)
+        .then((result) => {
+          ack(result);
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error("API handler error", {
+            event: "api:workspace:setMetadata",
+            workspace: workspacePath,
+            error: message,
+          });
+          ack({ success: false, error: message });
+        });
     });
   }
 

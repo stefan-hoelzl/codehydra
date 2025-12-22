@@ -4,9 +4,10 @@
  * Tests real Socket.IO client-server communication.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { io as ioClient } from "socket.io-client";
 import { PluginServer } from "./plugin-server";
+import type { ApiCallHandlers } from "./plugin-server";
 import { DefaultNetworkLayer } from "../platform/network";
 import { createSilentLogger } from "../logging/logging.test-utils";
 import {
@@ -14,8 +15,10 @@ import {
   waitForConnect,
   waitForDisconnect,
   createMockCommandHandler,
+  createMockApiHandlers,
   type TestClientSocket,
 } from "./plugin-server.test-utils";
+import type { WorkspaceStatus } from "../../shared/api/types";
 
 // Longer timeout for CI environments
 const TEST_TIMEOUT = 15000;
@@ -286,6 +289,311 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       const client = createClient("/test/workspace");
       await waitForConnect(client);
       expect(server.isConnected("/test/workspace")).toBe(true);
+    });
+  });
+
+  describe("API calls", () => {
+    it("getStatus round-trip via real Socket.IO", async () => {
+      const handlers = createMockApiHandlers({
+        getStatus: {
+          isDirty: true,
+          agent: { type: "busy", counts: { idle: 0, busy: 1, total: 1 } },
+        },
+      });
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Emit API call and wait for response
+      const result = await new Promise<{
+        success: boolean;
+        data?: WorkspaceStatus;
+        error?: string;
+      }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({
+        isDirty: true,
+        agent: { type: "busy", counts: { idle: 0, busy: 1, total: 1 } },
+      });
+      expect(handlers.getStatus).toHaveBeenCalledWith("/test/workspace");
+    });
+
+    it("getMetadata round-trip via real Socket.IO", async () => {
+      const handlers = createMockApiHandlers({
+        getMetadata: { base: "develop", note: "testing" },
+      });
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{
+        success: boolean;
+        data?: Record<string, string>;
+        error?: string;
+      }>((resolve) => {
+        client.emit("api:workspace:getMetadata", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ base: "develop", note: "testing" });
+      expect(handlers.getMetadata).toHaveBeenCalledWith("/test/workspace");
+    });
+
+    it("setMetadata round-trip via real Socket.IO", async () => {
+      const handlers = createMockApiHandlers();
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:setMetadata", { key: "note", value: "my note" }, (res) =>
+          resolve(res)
+        );
+      });
+
+      expect(result.success).toBe(true);
+      expect(handlers.setMetadata).toHaveBeenCalledWith("/test/workspace", {
+        key: "note",
+        value: "my note",
+      });
+    });
+
+    it("setMetadata validates request before calling handler", async () => {
+      const handlers = createMockApiHandlers();
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Send invalid request (empty key)
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:setMetadata", { key: "", value: "test" }, (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("cannot be empty");
+      // Handler should NOT be called for invalid requests
+      expect(handlers.setMetadata).not.toHaveBeenCalled();
+    });
+
+    it("returns error when no handlers registered", async () => {
+      // Note: NOT calling server.onApiCall()
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("API handlers not registered");
+    });
+
+    it("passes workspace path from socket.data to callback", async () => {
+      const handlers = createMockApiHandlers();
+      server.onApiCall(handlers);
+
+      // Connect with specific workspace path
+      const client = createClient("/my/special/workspace");
+      await waitForConnect(client);
+
+      await new Promise<{ success: boolean }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(handlers.getStatus).toHaveBeenCalledWith("/my/special/workspace");
+    });
+
+    it("handles concurrent API calls from different workspaces", async () => {
+      const handlers = createMockApiHandlers();
+      server.onApiCall(handlers);
+
+      const client1 = createClient("/workspace/one");
+      const client2 = createClient("/workspace/two");
+
+      await Promise.all([waitForConnect(client1), waitForConnect(client2)]);
+
+      // Make concurrent calls
+      const [result1, result2] = await Promise.all([
+        new Promise<{ success: boolean }>((resolve) => {
+          client1.emit("api:workspace:getStatus", (res) => resolve(res));
+        }),
+        new Promise<{ success: boolean }>((resolve) => {
+          client2.emit("api:workspace:getStatus", (res) => resolve(res));
+        }),
+      ]);
+
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+      expect(handlers.getStatus).toHaveBeenCalledTimes(2);
+      expect(handlers.getStatus).toHaveBeenCalledWith("/workspace/one");
+      expect(handlers.getStatus).toHaveBeenCalledWith("/workspace/two");
+    });
+
+    it("handles rapid sequential calls from same workspace", async () => {
+      let callCount = 0;
+      const handlers: ApiCallHandlers = {
+        getStatus: vi.fn().mockImplementation(() => {
+          callCount++;
+          return Promise.resolve({
+            success: true,
+            data: { isDirty: false, agent: { type: "none" } },
+          });
+        }),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Make rapid sequential calls
+      const results = await Promise.all([
+        new Promise<{ success: boolean }>((resolve) => {
+          client.emit("api:workspace:getStatus", (res) => resolve(res));
+        }),
+        new Promise<{ success: boolean }>((resolve) => {
+          client.emit("api:workspace:getStatus", (res) => resolve(res));
+        }),
+        new Promise<{ success: boolean }>((resolve) => {
+          client.emit("api:workspace:getStatus", (res) => resolve(res));
+        }),
+      ]);
+
+      expect(results.every((r) => r.success)).toBe(true);
+      expect(callCount).toBe(3);
+    });
+
+    it("handles handler exception gracefully", async () => {
+      const handlers: ApiCallHandlers = {
+        getStatus: vi.fn().mockRejectedValue(new Error("Database error")),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Database error");
+    });
+
+    it("handles socket disconnect mid-request", async () => {
+      // Create a handler that delays long enough for us to disconnect
+      const handlers: ApiCallHandlers = {
+        getStatus: vi.fn().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              // This will never resolve before disconnect
+              setTimeout(() => {
+                resolve({ success: true, data: { isDirty: false, agent: { type: "none" } } });
+              }, 5000);
+            })
+        ),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Start the API call (we don't need to track the result - we'll disconnect before it completes)
+      client.emit("api:workspace:getStatus", () => {
+        // Ack callback - may or may not be called depending on timing
+      });
+
+      // Wait a bit for the request to be in-flight
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Disconnect while request is pending
+      client.disconnect();
+
+      // Wait for disconnect to complete
+      await waitForDisconnect(client);
+
+      // The ack may or may not be called depending on timing
+      // The key behavior is that the server handles disconnect gracefully without crashing
+      // and that subsequent operations work correctly
+
+      // Verify server is still operational by connecting a new client
+      const newClient = createClient("/test/workspace2");
+      clients.push(newClient);
+      await waitForConnect(newClient);
+
+      // Server should still be able to handle new requests
+      // Handlers are server-wide, so they should still work
+
+      const newResult = await new Promise<{ success: boolean }>((resolve) => {
+        newClient.emit("api:workspace:getStatus", (res) => resolve(res));
+      });
+
+      // New request should work (handler will time out from first call, but that's expected)
+      expect(newResult.success).toBe(true);
+
+      // Note: resultReceived may or may not be true depending on Socket.IO's behavior
+      // The important thing is the server didn't crash
+    });
+
+    it("handles request timeout", async () => {
+      // Create a handler that never responds (simulates a hanging API call)
+      const handlers: ApiCallHandlers = {
+        getStatus: vi.fn().mockImplementation(
+          () =>
+            new Promise(() => {
+              // Never resolves - simulates a hung operation
+            })
+        ),
+        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+      };
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Set a custom timeout for this test by using Socket.IO's built-in timeout
+      // Note: The client-side timeout should trigger - we configure a short timeout
+      const startTime = Date.now();
+
+      // Use withTimeout pattern since Socket.IO emit with ack doesn't have built-in timeout
+      const result = await Promise.race([
+        new Promise<{ success: boolean; error?: string }>((resolve) => {
+          client.emit("api:workspace:getStatus", (res) => resolve(res));
+        }),
+        new Promise<{ success: boolean; error: string }>((resolve) => {
+          setTimeout(() => {
+            resolve({ success: false, error: "Client-side timeout" });
+          }, 2000); // 2 second timeout
+        }),
+      ]);
+
+      const elapsed = Date.now() - startTime;
+
+      // Should timeout (either client-side or server never responds)
+      // The test verifies that the system handles non-responsive handlers gracefully
+      expect(elapsed).toBeGreaterThanOrEqual(2000);
+      expect(elapsed).toBeLessThan(5000); // Sanity check - shouldn't take too long
+
+      // Result indicates timeout (either from our Promise.race or no response)
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Client-side timeout");
+
+      // Handler was called
+      expect(handlers.getStatus).toHaveBeenCalled();
     });
   });
 

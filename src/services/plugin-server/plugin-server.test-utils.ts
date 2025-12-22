@@ -12,6 +12,8 @@ import type {
   PluginResult,
   CommandRequest,
 } from "../../shared/plugin-protocol";
+import type { WorkspaceStatus } from "../../shared/api/types";
+import type { ApiCallHandlers } from "./plugin-server";
 
 // ============================================================================
 // Mock Socket Types
@@ -171,4 +173,85 @@ export function createMockCommandHandler(
       ack(result);
     }
   });
+}
+
+// ============================================================================
+// Mock API Handlers
+// ============================================================================
+
+/**
+ * Options for creating mock API handlers.
+ */
+export interface MockApiHandlersOptions {
+  /** Status to return from getStatus. Default: { isDirty: false, agent: { type: 'none' } } */
+  readonly getStatus?: WorkspaceStatus | PluginResult<WorkspaceStatus>;
+  /** Metadata to return from getMetadata. Default: { base: 'main' } */
+  readonly getMetadata?: Record<string, string> | PluginResult<Record<string, string>>;
+  /** Result to return from setMetadata. Default: { success: true, data: undefined } */
+  readonly setMetadata?: PluginResult<void>;
+}
+
+/**
+ * Create mock API handlers for testing PluginServer API functionality.
+ *
+ * Each handler is a vi.Mock that returns a Promise resolving to a PluginResult.
+ * You can customize the return values via options or access the mocks directly.
+ *
+ * @param options - Optional return value overrides
+ * @returns Object with mock handler functions
+ *
+ * @example
+ * ```typescript
+ * // Default behavior
+ * const handlers = createMockApiHandlers();
+ * server.onApiCall(handlers);
+ *
+ * // Custom status
+ * const handlers = createMockApiHandlers({
+ *   getStatus: { isDirty: true, agent: { type: 'busy', counts: { idle: 0, busy: 1, total: 1 } } },
+ * });
+ *
+ * // Error response
+ * const handlers = createMockApiHandlers({
+ *   getStatus: { success: false, error: 'Not found' },
+ * });
+ *
+ * // Check calls
+ * expect(handlers.getStatus).toHaveBeenCalledWith('/workspace/path');
+ * ```
+ */
+export function createMockApiHandlers(options?: MockApiHandlersOptions): ApiCallHandlers {
+  const defaultStatus: WorkspaceStatus = { isDirty: false, agent: { type: "none" } };
+  const defaultMetadata: Record<string, string> = { base: "main" };
+
+  // Helper to check if value is already a PluginResult
+  function isPluginResult<T>(value: T | PluginResult<T> | undefined): value is PluginResult<T> {
+    return value !== undefined && typeof value === "object" && value !== null && "success" in value;
+  }
+
+  // Convert to PluginResult if not already
+  let statusResult: PluginResult<WorkspaceStatus>;
+  if (isPluginResult(options?.getStatus)) {
+    statusResult = options.getStatus;
+  } else {
+    statusResult = { success: true, data: options?.getStatus ?? defaultStatus };
+  }
+
+  let metadataResult: PluginResult<Record<string, string>>;
+  if (isPluginResult(options?.getMetadata)) {
+    metadataResult = options.getMetadata;
+  } else {
+    metadataResult = { success: true, data: options?.getMetadata ?? defaultMetadata };
+  }
+
+  const setMetadataResult: PluginResult<void> = options?.setMetadata ?? {
+    success: true,
+    data: undefined,
+  };
+
+  return {
+    getStatus: vi.fn().mockResolvedValue(statusResult),
+    getMetadata: vi.fn().mockResolvedValue(metadataResult),
+    setMetadata: vi.fn(() => Promise.resolve(setMetadataResult)),
+  };
 }
