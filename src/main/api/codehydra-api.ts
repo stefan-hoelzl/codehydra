@@ -27,6 +27,7 @@ import type {
   SetupStep as ApiSetupStep,
   DeletionProgress,
   DeletionOperation,
+  DeletionOperationId,
 } from "../../shared/api/types";
 import type { WorkspacePath } from "../../shared/ipc";
 import type {
@@ -42,6 +43,12 @@ type EventHandler<T = unknown> = (event: T) => void;
  * Callback for emitting deletion progress events.
  */
 export type DeletionProgressCallback = (progress: DeletionProgress) => void;
+
+/**
+ * Callback for killing terminals before workspace deletion.
+ * Called with workspace path, should be best-effort (never throw).
+ */
+export type KillTerminalsCallback = (workspacePath: string) => Promise<void>;
 
 /**
  * Implementation of the CodeHydra API.
@@ -64,6 +71,9 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
   // Deletion progress callback (injected for IPC emission)
   private readonly emitDeletionProgress: DeletionProgressCallback;
 
+  // Kill terminals callback (injected for workspace cleanup before view destruction)
+  private readonly killTerminalsCallback: KillTerminalsCallback | undefined;
+
   // Track in-progress deletions to prevent double-deletion
   private readonly inProgressDeletions: Set<string> = new Set();
 
@@ -81,6 +91,7 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     vscodeSetup?: IVscodeSetup,
     existingLifecycleApi?: ILifecycleApi,
     emitDeletionProgress?: DeletionProgressCallback,
+    killTerminalsCallback?: KillTerminalsCallback,
     logger?: Logger
   ) {
     this.viewManager = viewManager;
@@ -89,6 +100,8 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     this.vscodeSetup = vscodeSetup;
     // Default to no-op if not provided
     this.emitDeletionProgress = emitDeletionProgress ?? (() => {});
+    // Store callback (undefined if not provided)
+    this.killTerminalsCallback = killTerminalsCallback;
     // Default to silent logger if not provided
     this.logger = logger ?? createSilentLogger();
 
@@ -295,8 +308,9 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
   ): Promise<void> {
     // Build mutable operations array for tracking
     const operations: DeletionOperation[] = [
-      { id: "cleanup-vscode", label: "Cleanup VS Code", status: "pending" },
-      { id: "cleanup-workspace", label: "Cleanup workspace", status: "pending" },
+      { id: "kill-terminals", label: "Terminating processes", status: "pending" },
+      { id: "cleanup-vscode", label: "Closing VS Code view", status: "pending" },
+      { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
     ];
 
     // Helper to emit full state
@@ -314,7 +328,7 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
 
     // Helper to update operation status
     const updateOp = (
-      id: "cleanup-vscode" | "cleanup-workspace",
+      id: DeletionOperationId,
       status: "pending" | "in-progress" | "done" | "error",
       error?: string
     ): void => {
@@ -338,7 +352,29 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
       // This ensures immediate switch to next workspace for better UX.
 
       // ======================================================================
-      // Operation 1: Cleanup VS Code (view destruction)
+      // Operation 1: Kill terminals (best-effort)
+      // ======================================================================
+      updateOp("kill-terminals", "in-progress");
+      emitProgress(false, false);
+
+      if (this.killTerminalsCallback) {
+        try {
+          await this.killTerminalsCallback(workspacePath);
+          updateOp("kill-terminals", "done");
+        } catch (error) {
+          // Best-effort: log and continue, mark as done (not error)
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          this.logger.warn("Kill terminals failed", { workspacePath, error: errorMessage });
+          updateOp("kill-terminals", "done");
+        }
+      } else {
+        // No callback provided, skip gracefully
+        updateOp("kill-terminals", "done");
+      }
+      emitProgress(false, false);
+
+      // ======================================================================
+      // Operation 2: Cleanup VS Code (view destruction)
       // ======================================================================
       updateOp("cleanup-vscode", "in-progress");
       emitProgress(false, false);
@@ -355,7 +391,7 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
       }
 
       // ======================================================================
-      // Operation 2: Cleanup workspace (git worktree removal)
+      // Operation 3: Cleanup workspace (git worktree removal)
       // ======================================================================
       updateOp("cleanup-workspace", "in-progress");
       emitProgress(

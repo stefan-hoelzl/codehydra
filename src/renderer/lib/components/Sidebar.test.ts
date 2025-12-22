@@ -1081,10 +1081,19 @@ describe("Sidebar component", () => {
       projectId: "test-12345678" as ProjectId,
       keepBranch: false,
       operations: [
-        { id: "cleanup-vscode" as const, label: "Cleanup VS Code", status: "pending" as const },
+        {
+          id: "kill-terminals" as const,
+          label: "Terminating processes",
+          status: "pending" as const,
+        },
+        {
+          id: "cleanup-vscode" as const,
+          label: "Closing VS Code view",
+          status: "pending" as const,
+        },
         {
           id: "cleanup-workspace" as const,
-          label: "Cleanup workspace",
+          label: "Removing workspace",
           status: "pending" as const,
         },
       ],

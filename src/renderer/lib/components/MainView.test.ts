@@ -914,8 +914,9 @@ describe("MainView component", () => {
         projectId: asProjectId("test-project-12345678"),
         keepBranch: false,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "pending" },
-          { id: "cleanup-workspace", label: "Cleanup workspace", status: "pending" },
+          { id: "kill-terminals", label: "Terminating processes", status: "pending" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "pending" },
+          { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
         ],
         completed: false,
         hasErrors: false,
@@ -987,7 +988,8 @@ describe("MainView component", () => {
       callback!(createDeletionProgress("/test/.worktrees/feature"));
 
       await waitFor(() => {
-        expect(screen.getByText("Removing workspace")).toBeInTheDocument();
+        // Use heading role to distinguish from operation label with same text
+        expect(screen.getByRole("heading", { name: "Removing workspace" })).toBeInTheDocument();
         expect(screen.getByText(/"feature"/)).toBeInTheDocument();
       });
     });

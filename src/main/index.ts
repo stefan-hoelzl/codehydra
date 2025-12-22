@@ -28,7 +28,7 @@ import {
 } from "../services/binary-download";
 import { createProcessTreeProvider } from "../services/platform/process-tree";
 import { DiscoveryService, AgentStatusManager, HttpInstanceProbe } from "../services/opencode";
-import { PluginServer, sendStartupCommands } from "../services/plugin-server";
+import { PluginServer, sendStartupCommands, sendShutdownCommand } from "../services/plugin-server";
 import { WindowManager } from "./managers/window-manager";
 import { ViewManager } from "./managers/view-manager";
 import { BadgeManager } from "./managers/badge-manager";
@@ -366,6 +366,15 @@ async function startServices(): Promise<void> {
   // Reuse the existing lifecycleApi from bootstrap() if available
   // Capture viewManager for deletion progress emission
   const viewManagerForDeletion = viewManager;
+
+  // Create killTerminalsCallback if PluginServer is available
+  const pluginLogger = loggingService.createLogger("plugin");
+  const killTerminalsCallback = pluginServer
+    ? async (workspacePath: string) => {
+        await sendShutdownCommand(pluginServer!, workspacePath, pluginLogger);
+      }
+    : undefined;
+
   codeHydraApi = new CodeHydraApiImpl(
     appState,
     viewManager,
@@ -383,6 +392,7 @@ async function startServices(): Promise<void> {
         // Log but don't throw - deletion continues even if UI disconnected
       }
     },
+    killTerminalsCallback,
     loggingService.createLogger("api")
   );
 

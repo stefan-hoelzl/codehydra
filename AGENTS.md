@@ -1252,6 +1252,22 @@ When an extension connects to PluginServer, CodeHydra automatically sends startu
 
 Commands are sent sequentially after a brief delay (100ms) for UI stabilization. Failures are non-fatal and logged as warnings with `[plugin]` logger.
 
+### Shutdown Commands
+
+Before a workspace view is destroyed during deletion, CodeHydra sends a shutdown command to terminate running terminal processes:
+
+| Command                             | Purpose                                      |
+| ----------------------------------- | -------------------------------------------- |
+| `workbench.action.terminal.killAll` | Kill all terminal processes in the workspace |
+
+This prevents orphaned processes from continuing to run after the workspace is closed. The command is best-effort:
+
+- If the workspace is not connected (extension disconnected), the step is skipped with debug logging
+- If the command times out (5s) or fails, the step is marked as done and deletion continues
+- Errors are logged as warnings but do not block workspace deletion
+
+The shutdown command is sent via `sendShutdownCommand()` from `src/services/plugin-server/shutdown-commands.ts`.
+
 ### Environment Variable
 
 | Variable                | Purpose                                  |

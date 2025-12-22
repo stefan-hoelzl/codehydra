@@ -4,3 +4,8 @@
 
 export { PluginServer } from "./plugin-server";
 export { STARTUP_COMMANDS, sendStartupCommands, type StartupCommand } from "./startup-commands";
+export {
+  SHUTDOWN_COMMAND,
+  SHUTDOWN_COMMAND_TIMEOUT_MS,
+  sendShutdownCommand,
+} from "./shutdown-commands";

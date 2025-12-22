@@ -15,9 +15,16 @@
 import * as nodePath from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CodeHydraApiImpl } from "./codehydra-api";
+import { generateProjectId } from "./id-utils";
 import type { AppState } from "../app-state";
 import type { IViewManager } from "../managers/view-manager.interface";
-import type { ProjectId, WorkspaceName } from "../../shared/api/types";
+import type {
+  ProjectId,
+  WorkspaceName,
+  DeletionProgress,
+  DeletionOperationId,
+} from "../../shared/api/types";
+import type { DeletionProgressCallback, KillTerminalsCallback } from "./codehydra-api";
 import type { Project as InternalProject, ProjectPath, BaseInfo } from "../../shared/ipc";
 import type { IVscodeSetup } from "../../services/vscode-setup/types";
 import type { IWorkspaceProvider } from "../../services/git/workspace-provider";
@@ -368,6 +375,239 @@ describe("CodeHydraApiImpl Integration", () => {
       expect(errorHandler).toHaveBeenCalled();
       expect(normalHandler).toHaveBeenCalled();
       // Logging is an implementation detail - we just verify both handlers were called
+    });
+  });
+
+  describe("Workspace deletion with kill terminals", () => {
+    const projectPath = "/home/user/my-project";
+    const workspacePath = "/home/user/.worktrees/feature";
+
+    /**
+     * Helper to create a CodeHydraApiImpl with custom callbacks for deletion testing.
+     */
+    function createApiWithCallbacks(
+      appStateOverride: AppState,
+      viewManagerOverride: IViewManager,
+      emitDeletionProgress: DeletionProgressCallback,
+      killTerminalsCallback?: KillTerminalsCallback
+    ): CodeHydraApiImpl {
+      return new CodeHydraApiImpl(
+        appStateOverride,
+        viewManagerOverride,
+        createMockElectronDialog(),
+        createMockElectronApp(),
+        createMockVscodeSetup(),
+        undefined, // existingLifecycleApi
+        emitDeletionProgress,
+        killTerminalsCallback
+      );
+    }
+
+    it("deletion-full-flow-with-kill-terminals: should execute 3 operations in sequence with all progress events", async () => {
+      // Setup workspace in project
+      const workspaceObj: InternalWorkspace = {
+        name: "feature",
+        path: workspacePath,
+        branch: "feature",
+        metadata: { base: "main" },
+      };
+      const internalProject = createInternalProject(projectPath, [workspaceObj]);
+
+      // Track all progress events
+      const progressEvents: DeletionProgress[] = [];
+      const emitDeletionProgress = vi.fn((progress: DeletionProgress) => {
+        progressEvents.push(JSON.parse(JSON.stringify(progress))); // Deep copy
+      });
+
+      // Track when killTerminalsCallback is called
+      const killTerminalsCalls: string[] = [];
+      const killTerminalsCallback = vi.fn(async (path: string) => {
+        killTerminalsCalls.push(path);
+      });
+
+      // Setup AppState mock
+      const localAppState = createMockAppState({
+        getProject: vi.fn().mockReturnValue(internalProject),
+        getAllProjects: vi.fn().mockResolvedValue([internalProject]),
+        getWorkspaceProvider: vi.fn().mockReturnValue({
+          removeWorkspace: vi.fn().mockResolvedValue({ workspaceRemoved: true }),
+        }),
+        removeWorkspace: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Setup ViewManager mock
+      const localViewManager = createMockViewManager();
+      vi.mocked(localViewManager.destroyWorkspaceView).mockResolvedValue(undefined);
+
+      // Create API with callbacks
+      const localApi = createApiWithCallbacks(
+        localAppState,
+        localViewManager,
+        emitDeletionProgress,
+        killTerminalsCallback
+      );
+
+      // Generate the actual project ID from the path
+      const projectId = generateProjectId(projectPath);
+
+      try {
+        // Start deletion
+        const result = await localApi.workspaces.remove(
+          projectId,
+          "feature" as WorkspaceName,
+          true // keepBranch
+        );
+
+        expect(result).toEqual({ started: true });
+
+        // Wait for async deletion to complete
+        await vi.waitFor(() => {
+          const lastProgress = progressEvents[progressEvents.length - 1];
+          expect(lastProgress?.completed).toBe(true);
+        });
+
+        // Verify killTerminalsCallback was called with correct path
+        expect(killTerminalsCallback).toHaveBeenCalledWith(workspacePath);
+        expect(killTerminalsCalls).toEqual([workspacePath]);
+
+        // Verify all 3 operations in correct order
+        expect(progressEvents.length).toBeGreaterThanOrEqual(5); // At least: initial, kill-in-progress, kill-done, vscode-in-progress, vscode-done, workspace-in-progress, workspace-done, final
+
+        // Verify operation sequence through progress events
+        // Find the first progress event for each operation in-progress state
+        const killInProgress = progressEvents.find(
+          (p) => p.operations.find((op) => op.id === "kill-terminals")?.status === "in-progress"
+        );
+        const vscodeInProgress = progressEvents.find(
+          (p) => p.operations.find((op) => op.id === "cleanup-vscode")?.status === "in-progress"
+        );
+        const workspaceInProgress = progressEvents.find(
+          (p) => p.operations.find((op) => op.id === "cleanup-workspace")?.status === "in-progress"
+        );
+
+        expect(killInProgress).toBeDefined();
+        expect(vscodeInProgress).toBeDefined();
+        expect(workspaceInProgress).toBeDefined();
+
+        // Verify operation order: when cleanup-vscode is in-progress, kill-terminals should be done
+        const vscodeInProgressOps = vscodeInProgress!.operations;
+        expect(vscodeInProgressOps.find((op) => op.id === "kill-terminals")?.status).toBe("done");
+
+        // Verify operation order: when cleanup-workspace is in-progress, both previous should be done
+        const workspaceInProgressOps = workspaceInProgress!.operations;
+        expect(workspaceInProgressOps.find((op) => op.id === "kill-terminals")?.status).toBe(
+          "done"
+        );
+        expect(workspaceInProgressOps.find((op) => op.id === "cleanup-vscode")?.status).toBe(
+          "done"
+        );
+
+        // Verify final state
+        const finalProgress = progressEvents[progressEvents.length - 1]!;
+        expect(finalProgress.completed).toBe(true);
+        expect(finalProgress.hasErrors).toBe(false);
+        expect(finalProgress.operations).toHaveLength(3);
+        expect(finalProgress.operations.map((op) => op.id)).toEqual([
+          "kill-terminals",
+          "cleanup-vscode",
+          "cleanup-workspace",
+        ] as DeletionOperationId[]);
+        finalProgress.operations.forEach((op) => {
+          expect(op.status).toBe("done");
+        });
+      } finally {
+        localApi.dispose();
+      }
+    });
+
+    it("deletion-concurrent-attempt: should return started:true without starting new deletion", async () => {
+      // Setup workspace in project
+      const workspaceObj: InternalWorkspace = {
+        name: "feature",
+        path: workspacePath,
+        branch: "feature",
+        metadata: { base: "main" },
+      };
+      const internalProject = createInternalProject(projectPath, [workspaceObj]);
+
+      // Track progress events
+      const progressEvents: DeletionProgress[] = [];
+      const emitDeletionProgress = vi.fn((progress: DeletionProgress) => {
+        progressEvents.push(JSON.parse(JSON.stringify(progress)));
+      });
+
+      // Create a slow killTerminalsCallback that we can control
+      let resolveKillTerminals: () => void;
+      const killTerminalsPromise = new Promise<void>((resolve) => {
+        resolveKillTerminals = resolve;
+      });
+      let killTerminalsCallCount = 0;
+      const killTerminalsCallback = vi.fn(async () => {
+        killTerminalsCallCount++;
+        await killTerminalsPromise;
+      });
+
+      // Setup AppState mock
+      const localAppState = createMockAppState({
+        getProject: vi.fn().mockReturnValue(internalProject),
+        getAllProjects: vi.fn().mockResolvedValue([internalProject]),
+        getWorkspaceProvider: vi.fn().mockReturnValue({
+          removeWorkspace: vi.fn().mockResolvedValue({ workspaceRemoved: true }),
+        }),
+        removeWorkspace: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Setup ViewManager mock
+      const localViewManager = createMockViewManager();
+      vi.mocked(localViewManager.destroyWorkspaceView).mockResolvedValue(undefined);
+
+      // Create API with callbacks
+      const localApi = createApiWithCallbacks(
+        localAppState,
+        localViewManager,
+        emitDeletionProgress,
+        killTerminalsCallback
+      );
+
+      // Generate the actual project ID from the path
+      const projectId = generateProjectId(projectPath);
+
+      try {
+        // Start first deletion - this will be slow because of killTerminalsCallback
+        const result1 = await localApi.workspaces.remove(projectId, "feature" as WorkspaceName);
+        expect(result1).toEqual({ started: true });
+
+        // Wait for kill-terminals to be in-progress
+        await vi.waitFor(() => {
+          const hasKillInProgress = progressEvents.some(
+            (p) => p.operations.find((op) => op.id === "kill-terminals")?.status === "in-progress"
+          );
+          expect(hasKillInProgress).toBe(true);
+        });
+
+        // Try to delete the same workspace again while first is still running
+        const result2 = await localApi.workspaces.remove(projectId, "feature" as WorkspaceName);
+
+        // Should return started: true (idempotent)
+        expect(result2).toEqual({ started: true });
+
+        // Verify killTerminalsCallback was only called ONCE (not twice)
+        expect(killTerminalsCallCount).toBe(1);
+
+        // Now let the deletion complete
+        resolveKillTerminals!();
+
+        // Wait for completion
+        await vi.waitFor(() => {
+          const lastProgress = progressEvents[progressEvents.length - 1];
+          expect(lastProgress?.completed).toBe(true);
+        });
+
+        // Verify still only one call to killTerminalsCallback
+        expect(killTerminalsCallback).toHaveBeenCalledTimes(1);
+      } finally {
+        localApi.dispose();
+      }
     });
   });
 });

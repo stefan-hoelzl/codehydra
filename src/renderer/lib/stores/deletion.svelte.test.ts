@@ -28,8 +28,9 @@ describe("deletion store", () => {
     projectId: "test-project-12345678" as ProjectId,
     keepBranch: false,
     operations: [
-      { id: "cleanup-vscode", label: "Cleanup VS Code", status: "pending" },
-      { id: "cleanup-workspace", label: "Cleanup workspace", status: "pending" },
+      { id: "kill-terminals", label: "Terminating processes", status: "pending" },
+      { id: "cleanup-vscode", label: "Closing VS Code view", status: "pending" },
+      { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
     ],
     completed: false,
     hasErrors: false,

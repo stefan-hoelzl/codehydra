@@ -16,8 +16,9 @@ describe("DeletionProgressView", () => {
     projectId: "test-project-12345678" as ProjectId,
     keepBranch: false,
     operations: [
-      { id: "cleanup-vscode", label: "Cleanup VS Code", status: "pending" },
-      { id: "cleanup-workspace", label: "Cleanup workspace", status: "pending" },
+      { id: "kill-terminals", label: "Terminating processes", status: "pending" },
+      { id: "cleanup-vscode", label: "Closing VS Code view", status: "pending" },
+      { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
     ],
     completed: false,
     hasErrors: false,
@@ -53,7 +54,8 @@ describe("DeletionProgressView", () => {
       },
     });
 
-    expect(screen.getByText("Removing workspace")).toBeInTheDocument();
+    // Use heading role to distinguish from operation label with same text
+    expect(screen.getByRole("heading", { name: "Removing workspace" })).toBeInTheDocument();
   });
 
   describe("pending operations", () => {
@@ -66,11 +68,14 @@ describe("DeletionProgressView", () => {
         },
       });
 
-      expect(screen.getByText("Cleanup VS Code")).toBeInTheDocument();
-      expect(screen.getByText("Cleanup workspace")).toBeInTheDocument();
+      expect(screen.getByText("Terminating processes")).toBeInTheDocument();
+      expect(screen.getByText("Closing VS Code view")).toBeInTheDocument();
+      // "Removing workspace" appears both as title (h2) and operation label
+      // Check that both exist (title + operation label = 2 matches)
+      expect(screen.getAllByText("Removing workspace")).toHaveLength(2);
       // Screen reader text
       const pendingTexts = screen.getAllByText("Pending");
-      expect(pendingTexts.length).toBe(2);
+      expect(pendingTexts.length).toBe(3);
     });
   });
 
@@ -79,8 +84,9 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "in-progress" },
-          { id: "cleanup-workspace", label: "Cleanup workspace", status: "pending" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "in-progress" },
+          { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
         ],
       };
 
@@ -104,8 +110,9 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
-          { id: "cleanup-workspace", label: "Cleanup workspace", status: "in-progress" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
+          { id: "cleanup-workspace", label: "Removing workspace", status: "in-progress" },
         ],
       };
 
@@ -117,10 +124,12 @@ describe("DeletionProgressView", () => {
         },
       });
 
-      // Check for checkmark character
-      expect(screen.getByText("\u2713")).toBeInTheDocument();
+      // Check for checkmark characters (two done operations)
+      const checkmarks = screen.getAllByText("\u2713");
+      expect(checkmarks.length).toBe(2);
       // Screen reader text
-      expect(screen.getByText("Complete")).toBeInTheDocument();
+      const completeTexts = screen.getAllByText("Complete");
+      expect(completeTexts.length).toBe(2);
     });
   });
 
@@ -129,10 +138,11 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
           {
             id: "cleanup-workspace",
-            label: "Cleanup workspace",
+            label: "Removing workspace",
             status: "error",
             error: "git worktree remove failed",
           },
@@ -159,10 +169,11 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
           {
             id: "cleanup-workspace",
-            label: "Cleanup workspace",
+            label: "Removing workspace",
             status: "error",
             error: "git worktree remove failed",
           },
@@ -188,15 +199,16 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
           {
             id: "cleanup-vscode",
-            label: "Cleanup VS Code",
+            label: "Closing VS Code view",
             status: "error",
             error: "First error",
           },
           {
             id: "cleanup-workspace",
-            label: "Cleanup workspace",
+            label: "Removing workspace",
             status: "error",
             error: "Second error",
           },
@@ -223,8 +235,9 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
-          { id: "cleanup-workspace", label: "Cleanup workspace", status: "done" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
+          { id: "cleanup-workspace", label: "Removing workspace", status: "done" },
         ],
         completed: true,
         hasErrors: false,
@@ -246,8 +259,9 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "in-progress" },
-          { id: "cleanup-workspace", label: "Cleanup workspace", status: "pending" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "in-progress" },
+          { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
         ],
         completed: false,
         hasErrors: false,
@@ -269,10 +283,11 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
           {
             id: "cleanup-workspace",
-            label: "Cleanup workspace",
+            label: "Removing workspace",
             status: "error",
             error: "Failed",
           },
@@ -297,10 +312,11 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
           {
             id: "cleanup-workspace",
-            label: "Cleanup workspace",
+            label: "Removing workspace",
             status: "error",
             error: "Failed",
           },
@@ -329,10 +345,11 @@ describe("DeletionProgressView", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
-          { id: "cleanup-vscode", label: "Cleanup VS Code", status: "done" },
+          { id: "kill-terminals", label: "Terminating processes", status: "done" },
+          { id: "cleanup-vscode", label: "Closing VS Code view", status: "done" },
           {
             id: "cleanup-workspace",
-            label: "Cleanup workspace",
+            label: "Removing workspace",
             status: "error",
             error: "Failed",
           },
@@ -382,7 +399,25 @@ describe("DeletionProgressView", () => {
       });
 
       const items = screen.getAllByRole("listitem");
-      expect(items).toHaveLength(2);
+      expect(items).toHaveLength(3);
+    });
+  });
+
+  describe("three-operation rendering", () => {
+    it("renders all three operations in correct order with correct labels", () => {
+      render(DeletionProgressView, {
+        props: {
+          progress: defaultProgress,
+          onRetry,
+          onCloseAnyway,
+        },
+      });
+
+      const items = screen.getAllByRole("listitem");
+      expect(items).toHaveLength(3);
+      expect(items[0]).toHaveTextContent("Terminating processes");
+      expect(items[1]).toHaveTextContent("Closing VS Code view");
+      expect(items[2]).toHaveTextContent("Removing workspace");
     });
   });
 });

@@ -919,6 +919,175 @@ describe("CodeHydraApiImpl - IWorkspaceApi", () => {
         expect(removeWorkspaceCallCount).toBe(1);
       });
     });
+
+    describe("kill-terminals operation", () => {
+      it("should invoke killTerminalsCallback during deletion", async () => {
+        const killTerminalsCallback = vi.fn().mockResolvedValue(undefined);
+        const apiWithCallback = new CodeHydraApiImpl(
+          appState,
+          viewManager,
+          dialog,
+          app,
+          undefined, // vscodeSetup
+          undefined, // lifecycleApi
+          undefined, // deletionProgressCallback
+          killTerminalsCallback
+        );
+
+        const mockProvider = {
+          removeWorkspace: vi
+            .fn()
+            .mockResolvedValue({ workspaceRemoved: true, baseDeleted: false }),
+        } as unknown as IWorkspaceProvider;
+        const mockInternalProject = createInternalProject({
+          workspaces: [
+            { name: "feature-branch", path: TEST_WORKSPACE_PATH, branch: "feature-branch" },
+          ],
+        });
+        vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+        vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+        vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+        await apiWithCallback.workspaces.remove(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
+
+        // Wait for async deletion
+        await vi.waitFor(() => {
+          expect(killTerminalsCallback).toHaveBeenCalledWith(TEST_WORKSPACE_PATH);
+        });
+      });
+
+      it("should emit 3 operations with kill-terminals first", async () => {
+        const progressCallbacks: {
+          operations: { id: string; status: string }[];
+          completed: boolean;
+        }[] = [];
+        const deletionProgressCallback = vi.fn(
+          (progress: { operations: { id: string; status: string }[]; completed: boolean }) => {
+            progressCallbacks.push(progress);
+          }
+        );
+        const apiWithCallback = new CodeHydraApiImpl(
+          appState,
+          viewManager,
+          dialog,
+          app,
+          undefined,
+          undefined,
+          deletionProgressCallback
+        );
+
+        const mockProvider = {
+          removeWorkspace: vi
+            .fn()
+            .mockResolvedValue({ workspaceRemoved: true, baseDeleted: false }),
+        } as unknown as IWorkspaceProvider;
+        const mockInternalProject = createInternalProject({
+          workspaces: [
+            { name: "feature-branch", path: TEST_WORKSPACE_PATH, branch: "feature-branch" },
+          ],
+        });
+        vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+        vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+        vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+        await apiWithCallback.workspaces.remove(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
+
+        // Wait for async deletion to complete
+        await vi.waitFor(() => {
+          expect(deletionProgressCallback).toHaveBeenCalled();
+          const lastProgress = progressCallbacks[progressCallbacks.length - 1];
+          expect(lastProgress).toBeDefined();
+          expect(lastProgress?.completed).toBe(true);
+        });
+
+        // Check that operations include kill-terminals as first
+        const firstProgress = progressCallbacks[0]!;
+        expect(firstProgress.operations).toHaveLength(3);
+        expect(firstProgress.operations[0]!.id).toBe("kill-terminals");
+        expect(firstProgress.operations[1]!.id).toBe("cleanup-vscode");
+        expect(firstProgress.operations[2]!.id).toBe("cleanup-workspace");
+      });
+
+      it("should mark kill-terminals as done when callback is undefined", async () => {
+        const progressCallbacks: { operations: { id: string; status: string }[] }[] = [];
+        const deletionProgressCallback = vi.fn((progress) => {
+          progressCallbacks.push(progress);
+        });
+        // Create API without killTerminalsCallback
+        const apiWithoutCallback = new CodeHydraApiImpl(
+          appState,
+          viewManager,
+          dialog,
+          app,
+          undefined,
+          undefined,
+          deletionProgressCallback
+          // killTerminalsCallback NOT provided
+        );
+
+        const mockProvider = {
+          removeWorkspace: vi
+            .fn()
+            .mockResolvedValue({ workspaceRemoved: true, baseDeleted: false }),
+        } as unknown as IWorkspaceProvider;
+        const mockInternalProject = createInternalProject({
+          workspaces: [
+            { name: "feature-branch", path: TEST_WORKSPACE_PATH, branch: "feature-branch" },
+          ],
+        });
+        vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+        vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+        vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+        await apiWithoutCallback.workspaces.remove(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
+
+        // Wait for async deletion to complete
+        await vi.waitFor(() => {
+          const completed = progressCallbacks.find((p) => p.operations[0]?.status === "done");
+          expect(completed).toBeDefined();
+        });
+      });
+
+      it("should mark kill-terminals as done (not error) when callback throws", async () => {
+        const killTerminalsCallback = vi.fn().mockRejectedValue(new Error("Kill failed"));
+        const progressCallbacks: { operations: { id: string; status: string }[] }[] = [];
+        const deletionProgressCallback = vi.fn((progress) => {
+          progressCallbacks.push(progress);
+        });
+        const apiWithCallback = new CodeHydraApiImpl(
+          appState,
+          viewManager,
+          dialog,
+          app,
+          undefined,
+          undefined,
+          deletionProgressCallback,
+          killTerminalsCallback
+        );
+
+        const mockProvider = {
+          removeWorkspace: vi
+            .fn()
+            .mockResolvedValue({ workspaceRemoved: true, baseDeleted: false }),
+        } as unknown as IWorkspaceProvider;
+        const mockInternalProject = createInternalProject({
+          workspaces: [
+            { name: "feature-branch", path: TEST_WORKSPACE_PATH, branch: "feature-branch" },
+          ],
+        });
+        vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+        vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+        vi.mocked(appState.getWorkspaceProvider).mockReturnValue(mockProvider);
+
+        await apiWithCallback.workspaces.remove(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
+
+        // Wait for async deletion to complete
+        await vi.waitFor(() => {
+          const lastProgress = progressCallbacks[progressCallbacks.length - 1];
+          expect(lastProgress?.operations[0]?.status).toBe("done"); // NOT "error"
+        });
+      });
+    });
   });
 
   describe("forceRemove()", () => {

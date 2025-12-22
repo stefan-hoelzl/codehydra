@@ -183,6 +183,43 @@ Services are pure Node.js for testability without Electron:
 
 The Git Worktree Provider includes resilient deletion and orphaned workspace cleanup:
 
+**Workspace Deletion Sequence**: When a workspace is deleted, three operations run in sequence:
+
+1. **Kill terminals** (best-effort): Sends `workbench.action.terminal.killAll` via PluginServer to terminate running terminal processes. This must happen while the VS Code extension is still connected. If the workspace is not connected or the command times out (5s), the step is marked as done and deletion continues.
+
+2. **Close VS Code view**: Navigates to `about:blank`, clears session storage, and destroys the WebContentsView.
+
+3. **Remove worktree**: Executes `git worktree remove --force` to remove the git worktree.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Workspace Deletion Flow                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  remove() ──► switchToNextWorkspace() ──► executeDeletion()        │
+│                     │                           │                   │
+│                     ▼                           ▼                   │
+│              View detached          ┌───────────────────────┐       │
+│              (still exists)         │ Op 1: kill-terminals  │       │
+│                     │               │ "Terminating processes"│       │
+│                     │               │ (PluginServer command) │       │
+│                     │               └───────────┬───────────┘       │
+│                     │                           │                   │
+│                     │               ┌───────────────────────┐       │
+│                     │               │ Op 2: cleanup-vscode  │       │
+│                     │               │ "Closing VS Code view"│       │
+│                     │               │ (ViewManager destroy)  │       │
+│                     │               └───────────┬───────────┘       │
+│                     │                           │                   │
+│                     │               ┌───────────────────────┐       │
+│                     │               │ Op 3: cleanup-workspace│      │
+│                     │               │ "Removing workspace"  │       │
+│                     │               │ (git worktree remove)  │       │
+│                     │               └───────────────────────┘       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 **Resilient Deletion**: When `git worktree remove --force` fails but the worktree was successfully unregistered (e.g., due to locked files in code-server), the deletion is considered successful. The orphaned directory will be cleaned up on next startup.
 
 **Startup Cleanup**: On project open, `cleanupOrphanedWorkspaces()` runs non-blocking to remove directories in the workspaces folder that are not registered with git. This handles cases where previous deletions partially failed.
