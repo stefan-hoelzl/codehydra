@@ -38,6 +38,7 @@ Before reviewing, read these documentation files to understand what is currently
 | File                     | Purpose                                      | Must Update When...                                     |
 | ------------------------ | -------------------------------------------- | ------------------------------------------------------- |
 | `docs/ARCHITECTURE.md`   | System design, components, data flows        | Architecture, components, IPC, or data flows change     |
+| `docs/PATTERNS.md`       | Implementation patterns with code examples   | Pattern examples or code conventions change             |
 | `docs/USER_INTERFACE.md` | UI layout, user flows, dialogs, shortcuts    | UI behavior, dialogs, or keyboard shortcuts change      |
 | `AGENTS.md`              | AI agent instructions, patterns, conventions | New patterns, conventions, or project structure changes |
 

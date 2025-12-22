@@ -31,6 +31,13 @@ You are an expert in Svelte 5, CSS, HTML, and UI/UX design. You review feature p
 - @vscode-elements web components
 - User experience and usability patterns
 
+## Context
+
+Before reviewing, examine:
+
+- `docs/PATTERNS.md` - UI and VSCode Elements patterns
+- `AGENTS.md` - Critical rules and VSCode Elements requirements
+
 ## Review Focus
 
 ### 1. Svelte 5 Best Practices

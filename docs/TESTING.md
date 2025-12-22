@@ -4,6 +4,20 @@
 
 This document defines the testing strategy for CodeHydra. All tests use vitest.
 
+## Quick Reference
+
+| Task                   | Command                 | Section                                           |
+| ---------------------- | ----------------------- | ------------------------------------------------- |
+| Run all tests          | `npm test`              | [Test Commands](#test-commands)                   |
+| Run unit tests only    | `npm run test:unit`     | [Test Commands](#test-commands)                   |
+| Run boundary tests     | `npm run test:boundary` | [Test Commands](#test-commands)                   |
+| Pre-commit validation  | `npm run validate`      | [Test Commands](#test-commands)                   |
+| Decide which test type | See decision guide      | [Decision Guide](#decision-guide)                 |
+| Create test git repo   | `createTestGitRepo()`   | [Test Helpers](#test-helpers)                     |
+| Test async code        | Use fake timers         | [Async Testing Patterns](#async-testing-patterns) |
+
+---
+
 ## Efficient Coverage Workflow
 
 For AI agent implementation work, use efficient coverage instead of strict TDD to reduce token usage and execution time.

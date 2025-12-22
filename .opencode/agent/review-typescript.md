@@ -35,6 +35,13 @@ You are a TypeScript expert focused on code quality, type safety, maintainabilit
 - IPC (Inter-Process Communication) patterns
 - Cross-platform considerations (Linux, macOS, Windows)
 
+## Context
+
+Before reviewing, examine:
+
+- `docs/PATTERNS.md` - TypeScript patterns and examples
+- `AGENTS.md` - Critical rules and project conventions
+
 ## Review Focus
 
 ### 1. Type Safety

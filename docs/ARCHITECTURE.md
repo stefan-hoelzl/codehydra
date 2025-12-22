@@ -1,5 +1,20 @@
 # CodeHydra Architecture
 
+## Quick Navigation
+
+| Section                                           | Description                        |
+| ------------------------------------------------- | ---------------------------------- |
+| [System Overview](#system-overview)               | High-level architecture            |
+| [Core Concepts](#core-concepts)                   | Project, Workspace, Views          |
+| [Component Architecture](#component-architecture) | Main components and their roles    |
+| [API Layer](#api-layer-architecture)              | ICodeHydraApi design and contracts |
+| [Theming System](#theming-system)                 | CSS variables and VS Code theming  |
+| [Logging](#logging-system)                        | Log levels, files, and debugging   |
+
+For implementation patterns with code examples, see [docs/PATTERNS.md](PATTERNS.md).
+
+---
+
 ## System Overview
 
 ```

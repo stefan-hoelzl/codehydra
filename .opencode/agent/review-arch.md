@@ -39,6 +39,7 @@ You are a software architect reviewing system design, integration patterns, and 
 Before reviewing, examine:
 
 - `docs/ARCHITECTURE.md` - System design and component relationships
+- `docs/PATTERNS.md` - Implementation patterns to check for consistency
 - `AGENTS.md` - Project overview and goals
 - `package.json` - Existing dependencies
 

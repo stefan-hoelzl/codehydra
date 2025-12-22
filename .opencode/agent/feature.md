@@ -75,6 +75,17 @@ Specify thoroughness based on complexity:
 - Looking up specific API documentation
 - Simple fact-checking during discussion
 
+### Project Documentation
+
+Key documentation files for planning:
+
+| Document               | Purpose                                    | When to Read                               |
+| ---------------------- | ------------------------------------------ | ------------------------------------------ |
+| `AGENTS.md`            | Critical rules, essential patterns         | Always - contains rules you MUST follow    |
+| `docs/PATTERNS.md`     | Implementation patterns with code examples | When planning implementation details       |
+| `docs/ARCHITECTURE.md` | System design, component relationships     | When understanding how components interact |
+| `docs/TESTING.md`      | Testing strategy and utilities             | When planning test approach                |
+
 ### Invoking Exploration and Research
 
 When information gathering is needed (you identify the need during planning discussion):
