@@ -19,6 +19,9 @@ describe("CodeServerManager Integration", () => {
   beforeEach(() => {
     // Save original environment
     originalEnv = { ...process.env };
+    // Remove CODEHYDRA_PLUGIN_PORT to ensure test isolation
+    // (may be set by other tests running in parallel)
+    delete process.env.CODEHYDRA_PLUGIN_PORT;
   });
 
   afterEach(() => {

@@ -225,12 +225,13 @@ describe("normalizeWorkspacePath", () => {
     expect(normalizeWorkspacePath("/test//workspace")).toBe("/test/workspace");
   });
 
-  it("handles Windows-style paths", () => {
-    // path.normalize converts backslashes to forward slashes on POSIX
-    // but keeps them on Windows - we just verify it doesn't crash
-    const result = normalizeWorkspacePath("C:\\Users\\test\\workspace");
-    expect(result).toBeTruthy();
-    expect(result.length).toBeGreaterThan(0);
+  it("handles Windows-style paths by converting to forward slashes", () => {
+    // Windows backslashes are converted to forward slashes for cross-platform consistency
+    expect(normalizeWorkspacePath("C:\\Users\\test\\workspace")).toBe("C:/Users/test/workspace");
+  });
+
+  it("handles Windows paths with trailing backslash", () => {
+    expect(normalizeWorkspacePath("C:\\Users\\test\\workspace\\")).toBe("C:/Users/test/workspace");
   });
 
   it("handles empty string", () => {

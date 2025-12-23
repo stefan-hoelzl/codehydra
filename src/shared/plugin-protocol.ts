@@ -15,15 +15,24 @@ import { METADATA_KEY_REGEX, isValidMetadataKey } from "./api/types";
 
 /**
  * Normalize workspace path for consistent Map lookups across platforms.
- * Uses Node.js path.normalize() and strips trailing separators for consistency.
+ * Uses POSIX-style forward slashes for cross-platform consistency in
+ * socket communication. This ensures paths match regardless of OS.
  *
  * @param workspacePath - The workspace path to normalize
- * @returns Normalized path string without trailing separator (except for root)
+ * @returns Normalized path string with forward slashes, without trailing separator
  */
 export function normalizeWorkspacePath(workspacePath: string): string {
-  const normalized = path.normalize(workspacePath);
-  // Strip trailing separator, but preserve root path (/ or C:\)
-  if (normalized.length > 1 && normalized.endsWith(path.sep)) {
+  // First normalize using Node's path (handles .. and . segments, double separators)
+  let normalized = path.normalize(workspacePath);
+
+  // Convert Windows backslashes to forward slashes for cross-platform consistency
+  normalized = normalized.replace(/\\/g, "/");
+
+  // Collapse any remaining double forward slashes (edge case after conversion)
+  normalized = normalized.replace(/\/+/g, "/");
+
+  // Strip trailing separator, but preserve root path (/)
+  if (normalized.length > 1 && normalized.endsWith("/")) {
     return normalized.slice(0, -1);
   }
   return normalized;
