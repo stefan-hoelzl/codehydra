@@ -58,6 +58,7 @@ export function createMockPathProvider(overrides?: MockPathProviderOptions): Pat
     codeServerBinaryPath:
       overrides?.codeServerBinaryPath ?? join(codeServerDir, "bin", "code-server"),
     opencodeBinaryPath: overrides?.opencodeBinaryPath ?? join(opencodeDir, "opencode"),
+    bundledNodePath: overrides?.bundledNodePath ?? join(codeServerDir, "lib", "node"),
     getProjectWorkspacesDir: overrides?.getProjectWorkspacesDir ?? defaultGetProjectWorkspacesDir,
   };
 }

@@ -8,9 +8,13 @@
  * The generated scripts allow users to run `code` and `opencode`
  * from the integrated terminal without needing to know the full binary paths.
  *
- * The opencode wrapper script is "smart" - it checks if CodeHydra is managing
- * a server for the current workspace and attaches to it if so. Otherwise,
- * it falls back to standalone mode.
+ * The opencode wrapper consists of:
+ * - A cross-platform Node.js script (opencode.cjs) containing all logic
+ * - A thin platform-specific shell wrapper that invokes Node.js with the script
+ *
+ * The Node.js script checks if CodeHydra is managing a server for the current
+ * workspace and attaches to it. Unlike the previous implementation, there is
+ * no standalone fallback - the opencode command only works in managed workspaces.
  */
 
 import type { PlatformInfo } from "../platform/platform-info";
@@ -55,75 +59,119 @@ function generateWindowsScript(targetPath: string): string {
 }
 
 /**
- * Generate Unix opencode wrapper that uses managed server mode when available.
+ * Generate Unix thin wrapper that invokes Node.js with the opencode.cjs script.
  *
- * Logic:
- * 1. Find git root for current directory
- * 2. Read ports.json and look up port for this workspace
- * 3. If port found: run `opencode attach http://127.0.0.1:$PORT`
- * 4. If port not found: run `opencode "$@"` (standalone mode)
- *
- * The script runs `opencode attach` directly via exec. If the server isn't
- * available, the attach command will fail fast on its own.
- *
- * @param opencodeVersion - Version of opencode binary (e.g., "1.0.163")
+ * @param bundledNodePath - Absolute path to the bundled Node.js binary
+ * @param scriptPath - Absolute path to the opencode.cjs script
+ * @returns Shell script content
  */
-function generateUnixOpencodeScript(opencodeVersion: string): string {
+function generateUnixOpencodeWrapper(bundledNodePath: string, scriptPath: string): string {
+  // Escape single quotes in paths
+  const escapedNodePath = bundledNodePath.replace(/'/g, "'\\''");
+  const escapedScriptPath = scriptPath.replace(/'/g, "'\\''");
   return `#!/bin/sh
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-PORTS_FILE="$SCRIPT_DIR/../opencode/ports.json"
-OPENCODE_BIN="$SCRIPT_DIR/../opencode/${opencodeVersion}/opencode"
-
-GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-
-# If in a git repo and ports file exists, try managed mode
-if [ -n "$GIT_ROOT" ] && [ -f "$PORTS_FILE" ]; then
-    # Parse JSON to find port for this workspace
-    # Use grep/sed for portability (no jq dependency)
-    # Format: "path": { "port": 14001 }
-    PORT=$(grep -A1 "\\"$GIT_ROOT\\"" "$PORTS_FILE" 2>/dev/null | grep '"port"' | sed 's/.*: *\\([0-9]*\\).*/\\1/')
-
-    if [ -n "$PORT" ]; then
-        # Managed mode: connect to existing server
-        exec "$OPENCODE_BIN" attach "http://127.0.0.1:$PORT"
-    fi
-fi
-
-# Standalone mode: pass all args
-exec "$OPENCODE_BIN" "$@"
+exec '${escapedNodePath}' '${escapedScriptPath}'
 `;
 }
 
 /**
- * Generate Windows opencode wrapper that uses managed server mode when available.
+ * Generate Windows thin wrapper that invokes Node.js with the opencode.cjs script.
  *
- * Logic mirrors Unix version but uses Windows scripting.
- * Runs `opencode attach` directly - if server isn't available, attach fails fast.
+ * @param bundledNodePath - Absolute path to the bundled Node.js binary
+ * @param scriptPath - Absolute path to the opencode.cjs script
+ * @returns CMD script content
+ */
+function generateWindowsOpencodeWrapper(bundledNodePath: string, scriptPath: string): string {
+  // Convert forward slashes to backslashes for Windows paths
+  const windowsNodePath = bundledNodePath.replace(/\//g, "\\");
+  const windowsScriptPath = scriptPath.replace(/\//g, "\\");
+  return `@echo off
+"${windowsNodePath}" "${windowsScriptPath}" %*
+exit /b %ERRORLEVEL%
+`;
+}
+
+/**
+ * Generate the Node.js script that contains all opencode wrapper logic.
+ * This script is cross-platform and will be invoked by thin shell wrappers.
+ *
+ * The script:
+ * 1. Finds git root using execSync
+ * 2. Reads and parses ports.json
+ * 3. Looks up the port for the current workspace
+ * 4. Spawns opencode attach with the server URL
+ * 5. Propagates the exit code
+ *
+ * Uses CommonJS (.cjs) for explicit format and compatibility.
  *
  * @param opencodeVersion - Version of opencode binary (e.g., "1.0.163")
+ * @returns Generated Node.js script content
  */
-function generateWindowsOpencodeScript(opencodeVersion: string): string {
-  return `@echo off
-setlocal EnableDelayedExpansion
+export function generateOpencodeNodeScript(opencodeVersion: string): string {
+  // Note: We escape $ to prevent template literal interpolation in the generated script
+  return `// opencode.cjs - Generated CommonJS script
+const { execSync, spawnSync } = require("child_process");
+const { readFileSync, existsSync } = require("fs");
+const { join } = require("path");
 
-set "SCRIPT_DIR=%~dp0"
-set "PORTS_FILE=%SCRIPT_DIR%..\\opencode\\ports.json"
-set "OPENCODE_BIN=%SCRIPT_DIR%..\\opencode\\${opencodeVersion}\\opencode.exe"
+const OPENCODE_VERSION = "${opencodeVersion}";
+const isWindows = process.platform === "win32";
 
-for /f "tokens=*" %%i in ('git rev-parse --show-toplevel 2^>nul') do set "GIT_ROOT=%%i"
+// Paths relative to bin/ directory using path.join for cross-platform
+const PORTS_FILE = join(__dirname, "..", "opencode", "ports.json");
+const OPENCODE_BIN = join(
+  __dirname,
+  "..",
+  "opencode",
+  OPENCODE_VERSION,
+  isWindows ? "opencode.exe" : "opencode"
+);
 
-if defined GIT_ROOT if exist "%PORTS_FILE%" (
-    REM Use PowerShell to parse JSON (available on all modern Windows)
-    for /f "tokens=*" %%p in ('powershell -NoProfile -Command "(Get-Content '%PORTS_FILE%' | ConvertFrom-Json).workspaces.'%GIT_ROOT%'.port" 2^>nul') do set "PORT=%%p"
+// 1. Find git root
+let gitRoot;
+try {
+  gitRoot = execSync("git rev-parse --show-toplevel", {
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"], // Capture stderr
+  }).trim();
+} catch {
+  console.error("Error: Not in a git repository");
+  process.exit(1);
+}
 
-    if defined PORT (
-        REM Managed mode: connect to existing server
-        "%OPENCODE_BIN%" attach "http://127.0.0.1:!PORT!"
-        exit /b
-    )
-)
+// 2. Read ports.json
+if (!existsSync(PORTS_FILE)) {
+  console.error("Error: No opencode servers are running");
+  process.exit(1);
+}
 
-"%OPENCODE_BIN%" %*
+let ports;
+try {
+  const content = readFileSync(PORTS_FILE, "utf8");
+  ports = JSON.parse(content);
+} catch {
+  console.error("Error: Failed to read ports.json");
+  process.exit(1);
+}
+
+// 3. Look up port for workspace
+const workspaceInfo = ports.workspaces?.[gitRoot];
+if (!workspaceInfo?.port) {
+  console.error("Error: No opencode server found for workspace: " + gitRoot);
+  console.error("Make sure the workspace is open in CodeHydra.");
+  process.exit(1);
+}
+
+// 4. Spawn opencode attach
+const url = "http://127.0.0.1:" + workspaceInfo.port;
+const result = spawnSync(OPENCODE_BIN, ["attach", url], { stdio: "inherit" });
+
+// 5. Exit with child's exit code
+if (result.error) {
+  console.error("Error: Failed to start opencode: " + result.error.message);
+  process.exit(1);
+}
+process.exit(result.status ?? 1);
 `;
 }
 
@@ -156,29 +204,50 @@ export function generateScript(
 }
 
 /**
- * Generate the opencode wrapper script with managed/standalone mode logic.
+ * Generate the opencode wrapper scripts: a cross-platform Node.js script (.cjs)
+ * and a thin platform-specific shell wrapper.
  *
  * @param isWindows - Whether generating for Windows platform
  * @param opencodeVersion - Version of opencode binary (e.g., "1.0.163")
- * @returns Generated script with filename, content, and executable flag
+ * @param bundledNodePath - Absolute path to the bundled Node.js binary
+ * @param binDir - Absolute path to the bin directory where scripts are stored
+ * @returns Array of generated scripts: [opencode.cjs, platform wrapper]
  */
 export function generateOpencodeScript(
   isWindows: boolean,
-  opencodeVersion: string
-): GeneratedScript {
+  opencodeVersion: string,
+  bundledNodePath: string,
+  binDir: string
+): GeneratedScript[] {
+  const scripts: GeneratedScript[] = [];
+
+  // Generate the Node.js script (shared across platforms)
+  scripts.push({
+    filename: asScriptFilename("opencode.cjs"),
+    content: generateOpencodeNodeScript(opencodeVersion),
+    needsExecutable: false, // .cjs files don't need executable flag
+  });
+
+  // Generate platform-specific thin wrapper
+  const scriptPath = isWindows
+    ? `${binDir}\\opencode.cjs`.replace(/\//g, "\\")
+    : `${binDir}/opencode.cjs`;
+
   if (isWindows) {
-    return {
+    scripts.push({
       filename: asScriptFilename("opencode.cmd"),
-      content: generateWindowsOpencodeScript(opencodeVersion),
+      content: generateWindowsOpencodeWrapper(bundledNodePath, scriptPath),
       needsExecutable: false,
-    };
+    });
+  } else {
+    scripts.push({
+      filename: asScriptFilename("opencode"),
+      content: generateUnixOpencodeWrapper(bundledNodePath, scriptPath),
+      needsExecutable: true,
+    });
   }
 
-  return {
-    filename: asScriptFilename("opencode"),
-    content: generateUnixOpencodeScript(opencodeVersion),
-    needsExecutable: true,
-  };
+  return scripts;
 }
 
 /**
@@ -206,18 +275,21 @@ function extractOpencodeVersion(opencodePath: string): string | null {
  *
  * Scripts generated:
  * - `code` / `code.cmd` - Wrapper for code-server's remote-cli (VS Code CLI)
- * - `opencode` / `opencode.cmd` - Smart wrapper that uses managed mode when available
+ * - `opencode.cjs` - Node.js script with all opencode logic
+ * - `opencode` / `opencode.cmd` - Thin wrapper that invokes Node.js with opencode.cjs
  *
  * Note: code-server wrapper is not generated because we launch code-server
  * directly with an absolute path.
  *
  * @param platformInfo - Platform information (for determining script type)
  * @param targetPaths - Paths to target binaries
+ * @param binDir - Absolute path to the bin directory where scripts are stored
  * @returns Array of generated scripts ready to write to disk
  */
 export function generateScripts(
   platformInfo: PlatformInfo,
-  targetPaths: BinTargetPaths
+  targetPaths: BinTargetPaths,
+  binDir: string
 ): GeneratedScript[] {
   const isWindows = platformInfo.platform === "win32";
   const scripts: GeneratedScript[] = [];
@@ -225,11 +297,13 @@ export function generateScripts(
   // Generate code wrapper (for VS Code CLI)
   scripts.push(generateScript("code", targetPaths.codeRemoteCli, isWindows));
 
-  // Generate opencode wrapper with managed/standalone mode logic
+  // Generate opencode scripts (Node.js script + thin wrapper)
   if (targetPaths.opencodeBinary !== null) {
     const version = extractOpencodeVersion(targetPaths.opencodeBinary);
     if (version !== null) {
-      scripts.push(generateOpencodeScript(isWindows, version));
+      scripts.push(
+        ...generateOpencodeScript(isWindows, version, targetPaths.bundledNodePath, binDir)
+      );
     }
   }
 

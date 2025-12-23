@@ -47,6 +47,11 @@ describe("createMockPathProvider", () => {
         `[/\\\\]test[/\\\\]app-data[/\\\\]opencode[/\\\\]${OPENCODE_VERSION}[/\\\\]opencode$`
       )
     );
+    expect(pathProvider.bundledNodePath).toMatch(
+      new RegExp(
+        `[/\\\\]test[/\\\\]app-data[/\\\\]code-server[/\\\\]${CODE_SERVER_VERSION}[/\\\\]lib[/\\\\]node$`
+      )
+    );
   });
 
   it("accepts override for individual paths", () => {
@@ -77,6 +82,7 @@ describe("createMockPathProvider", () => {
       opencodeDir: "/k",
       codeServerBinaryPath: "/j/bin/code-server",
       opencodeBinaryPath: "/k/opencode",
+      bundledNodePath: "/j/lib/node",
     });
 
     expect(pathProvider.dataRootDir).toBe("/a");
@@ -93,6 +99,7 @@ describe("createMockPathProvider", () => {
     expect(pathProvider.opencodeDir).toBe("/k");
     expect(pathProvider.codeServerBinaryPath).toBe("/j/bin/code-server");
     expect(pathProvider.opencodeBinaryPath).toBe("/k/opencode");
+    expect(pathProvider.bundledNodePath).toBe("/j/lib/node");
   });
 
   it("getProjectWorkspacesDir returns path with project hash", () => {
@@ -134,6 +141,7 @@ describe("createMockPathProvider", () => {
     expect(typeof pathProvider.opencodeDir).toBe("string");
     expect(typeof pathProvider.codeServerBinaryPath).toBe("string");
     expect(typeof pathProvider.opencodeBinaryPath).toBe("string");
+    expect(typeof pathProvider.bundledNodePath).toBe("string");
     expect(typeof pathProvider.getProjectWorkspacesDir).toBe("function");
   });
 });
@@ -181,6 +189,15 @@ describe("DefaultPathProvider", () => {
       expect(pathProvider.codeServerBinaryPath).toMatch(/bin[/\\]code-server$/);
       expect(pathProvider.opencodeBinaryPath).toMatch(/opencode$/);
       expect(pathProvider.opencodeBinaryPath).not.toMatch(/\.exe$/);
+    });
+
+    it("returns bundled Node path for Unix", () => {
+      const buildInfo = createMockBuildInfo({ isDevelopment: true, appPath: "/test/app" });
+      const platformInfo = createMockPlatformInfo({ platform: "linux" });
+      const pathProvider = new DefaultPathProvider(buildInfo, platformInfo);
+
+      expect(pathProvider.bundledNodePath).toMatch(/lib[/\\]node$/);
+      expect(pathProvider.bundledNodePath).not.toMatch(/\.exe$/);
     });
 
     it("returns vscodeAssetsDir based on appPath", () => {
@@ -415,6 +432,20 @@ describe("DefaultPathProvider", () => {
       // Windows uses .cmd for code-server and .exe for opencode
       expect(pathProvider.codeServerBinaryPath).toMatch(/bin[/\\]code-server\.cmd$/);
       expect(pathProvider.opencodeBinaryPath).toMatch(/opencode\.exe$/);
+    });
+
+    it("returns bundled Node path with .exe extension", () => {
+      const buildInfo = createMockBuildInfo({
+        isDevelopment: false,
+        appPath: "C:/Program Files/Codehydra/resources/app.asar",
+      });
+      const platformInfo = createMockPlatformInfo({
+        platform: "win32",
+        homeDir: "C:/Users/TestUser",
+      });
+      const pathProvider = new DefaultPathProvider(buildInfo, platformInfo);
+
+      expect(pathProvider.bundledNodePath).toMatch(/lib[/\\]node\.exe$/);
     });
   });
 

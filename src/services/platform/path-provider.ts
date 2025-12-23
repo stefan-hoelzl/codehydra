@@ -51,6 +51,9 @@ export interface PathProvider {
   /** Absolute path to opencode binary executable */
   readonly opencodeBinaryPath: string;
 
+  /** Absolute path to bundled Node.js executable from code-server */
+  readonly bundledNodePath: string;
+
   /**
    * Get the workspaces directory for a project.
    * @param projectPath Absolute path to the project
@@ -85,6 +88,7 @@ export class DefaultPathProvider implements PathProvider {
   readonly opencodeDir: string;
   readonly codeServerBinaryPath: string;
   readonly opencodeBinaryPath: string;
+  readonly bundledNodePath: string;
 
   constructor(buildInfo: BuildInfo, platformInfo: PlatformInfo) {
     this.dataRootDir = this.computeDataRootDir(buildInfo, platformInfo);
@@ -112,6 +116,13 @@ export class DefaultPathProvider implements PathProvider {
     this.opencodeBinaryPath = join(
       this.opencodeDir,
       BINARY_CONFIGS.opencode.extractedBinaryPath(platform)
+    );
+
+    // Bundled Node.js from code-server distribution
+    this.bundledNodePath = join(
+      this.codeServerDir,
+      "lib",
+      platform === "win32" ? "node.exe" : "node"
     );
   }
 

@@ -208,10 +208,24 @@ When these are updated, `npm install` will download new versions. Production ins
 
 During VS Code setup, CLI wrapper scripts are generated in `<app-data>/bin/`:
 
-| Script                      | Purpose                                                     |
-| --------------------------- | ----------------------------------------------------------- |
-| `code` / `code.cmd`         | VS Code CLI (code-server's remote-cli)                      |
-| `opencode` / `opencode.cmd` | Redirects to `<app-data>/opencode/<version>/opencode[.exe]` |
+| Script                      | Purpose                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `code` / `code.cmd`         | VS Code CLI (code-server's remote-cli)                                         |
+| `opencode` / `opencode.cmd` | Node.js wrapper that parses ports.json and attaches to managed OpenCode server |
+
+**opencode wrapper architecture:**
+
+```
+opencode (shell) → opencode.cjs (Node.js) → opencode binary
+                        │
+                        ├─ Detects git root via `git rev-parse`
+                        ├─ Reads ports.json to find workspace port
+                        └─ Runs `opencode attach http://127.0.0.1:<port>`
+```
+
+- Uses bundled Node.js from code-server (`<app-data>/code-server/<version>/lib/node`)
+- **No standalone mode**: Only works in managed CodeHydra workspaces (returns error if workspace not found in ports.json)
+- Thin shell wrappers (`opencode` / `opencode.cmd`) delegate all logic to the cross-platform `opencode.cjs` script
 
 These scripts are available in the integrated terminal because:
 

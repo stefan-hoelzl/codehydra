@@ -252,7 +252,7 @@ export class VscodeSetupService implements IVscodeSetup {
     const targetPaths = this.resolveTargetPaths();
 
     // Generate scripts for this platform
-    const scripts = generateScripts(this.platformInfo, targetPaths);
+    const scripts = generateScripts(this.platformInfo, targetPaths, binDir);
 
     // Write each script
     for (const script of scripts) {
@@ -292,6 +292,7 @@ export class VscodeSetupService implements IVscodeSetup {
     return {
       codeRemoteCli: remoteCli,
       opencodeBinary: this.resolveOpencodePath(),
+      bundledNodePath: this.pathProvider.bundledNodePath,
     };
   }
 

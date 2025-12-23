@@ -52,6 +52,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
     codeServerDir: string;
     opencodeDir: string;
     codeServerBinaryPath: string;
+    bundledNodePath: string;
     getProjectWorkspacesDir: (projectPath: string) => string;
   };
   let networkLayer: DefaultNetworkLayer;
@@ -93,6 +94,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       codeServerDir: realPathProvider.codeServerDir,
       opencodeDir: realPathProvider.opencodeDir,
       codeServerBinaryPath: realPathProvider.codeServerBinaryPath,
+      bundledNodePath: realPathProvider.bundledNodePath,
       opencodeBinaryPath: realPathProvider.opencodeBinaryPath,
       getProjectWorkspacesDir: (projectPath: string) =>
         realPathProvider.getProjectWorkspacesDir(projectPath),
@@ -286,47 +288,45 @@ describe("Wrapper Script Boundary Tests", () => {
 
   // Skip on Windows - different script format
   it.skipIf(process.platform === "win32")(
-    "wrapper script is executable and runs in standalone mode",
+    "wrapper script errors when not in git repository",
     async () => {
       // Use a specific version for the test
       const TEST_VERSION = "1.0.163";
 
-      // Generate the wrapper script content with version
-      const script = generateOpencodeScript(false, TEST_VERSION);
-      const scriptPath = join(testDir, "bin", script.filename);
+      // Generate the opencode wrapper scripts with new signature
+      // Uses real Node.js (process.execPath) for testing
+      const binDir = join(testDir, "bin");
+      const scripts = generateOpencodeScript(false, TEST_VERSION, process.execPath, binDir);
 
-      // Write the script
-      await writeFile(scriptPath, script.content, "utf-8");
+      // Write all generated scripts
+      for (const script of scripts) {
+        const scriptPath = join(testDir, "bin", script.filename);
+        await writeFile(scriptPath, script.content, "utf-8");
 
-      // Make it executable
-      if (script.needsExecutable) {
-        await chmod(scriptPath, 0o755);
+        // Make it executable if needed
+        if (script.needsExecutable) {
+          await chmod(scriptPath, 0o755);
+        }
       }
 
-      // Create a fake opencode binary that just echoes success
-      // This tests that the wrapper script can execute and fall back to standalone mode
-      const fakeOpencodeScript = `#!/bin/sh
-echo "standalone_mode_activated"
-exit 0
-`;
-      // Create versioned directory and fake binary
-      const versionedDir = join(testDir, "opencode", TEST_VERSION);
-      await mkdir(versionedDir, { recursive: true });
-      const fakeOpencodePath = join(versionedDir, "opencode");
-      await writeFile(fakeOpencodePath, fakeOpencodeScript, "utf-8");
-      await chmod(fakeOpencodePath, 0o755);
+      // Find the shell wrapper script (not the .cjs)
+      const wrapperScript = scripts.find((s) => !s.filename.endsWith(".cjs"));
+      if (!wrapperScript) {
+        throw new Error("Shell wrapper script not found in generated scripts");
+      }
+      const wrapperPath = join(testDir, "bin", wrapperScript.filename);
 
-      // Execute the wrapper script from a non-git directory (will trigger standalone mode)
-      // The script should execute without error and run the fake opencode binary
-      const proc = processRunner.run(scriptPath, ["--help"], {
-        cwd: testDir, // Not a git repo, so no managed mode
+      // Execute the wrapper script from a non-git directory
+      // With new behavior (no standalone mode), this should error
+      const proc = processRunner.run(wrapperPath, [], {
+        cwd: testDir, // Not a git repo, so will trigger error
       });
 
       const result = await proc.wait(5000);
 
-      // Script should have executed successfully
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("standalone_mode_activated");
+      // Script should fail with exit code 1 and error message
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Error: Not in a git repository");
     }
   );
 });

@@ -112,6 +112,8 @@ export interface BinTargetPaths {
   readonly codeRemoteCli: string;
   /** Path to opencode binary, or null if not installed */
   readonly opencodeBinary: string | null;
+  /** Path to bundled Node.js from code-server */
+  readonly bundledNodePath: string;
 }
 
 /** Branded type for script filenames */
