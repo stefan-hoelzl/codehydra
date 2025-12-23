@@ -369,23 +369,23 @@ Log entries follow this format:
 
 ### Logger Names
 
-| Logger          | Module                      |
-| --------------- | --------------------------- |
-| `[process]`     | Process spawning            |
-| `[network]`     | HTTP requests, ports        |
-| `[fs]`          | Filesystem operations       |
-| `[git]`         | Git operations              |
-| `[opencode]`    | OpenCode SDK                |
-| `[code-server]` | code-server process         |
-| `[discovery]`   | OpenCode instance discovery |
-| `[pidtree]`     | Process tree lookups        |
-| `[keepfiles]`   | .keepfiles copying          |
-| `[api]`         | IPC handlers                |
-| `[window]`      | WindowManager               |
-| `[view]`        | ViewManager                 |
-| `[badge]`       | BadgeManager                |
-| `[app]`         | Application lifecycle       |
-| `[ui]`          | Renderer UI components      |
+| Logger              | Module                  |
+| ------------------- | ----------------------- |
+| `[process]`         | Process spawning        |
+| `[network]`         | HTTP requests, ports    |
+| `[fs]`              | Filesystem operations   |
+| `[git]`             | Git operations          |
+| `[opencode]`        | OpenCode SDK            |
+| `[opencode-server]` | OpenCode server manager |
+| `[code-server]`     | code-server process     |
+| `[pidtree]`         | Process tree lookups    |
+| `[keepfiles]`       | .keepfiles copying      |
+| `[api]`             | IPC handlers            |
+| `[window]`          | WindowManager           |
+| `[view]`            | ViewManager             |
+| `[badge]`           | BadgeManager            |
+| `[app]`             | Application lifecycle   |
+| `[ui]`              | Renderer UI components  |
 
 ### Debugging with Logs
 

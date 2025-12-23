@@ -19,7 +19,7 @@ import {
 import type { IViewManager } from "./managers/view-manager.interface";
 import type { Project, ProjectPath, WorkspacePath } from "../shared/ipc";
 import type { AgentStatusManager } from "../services/opencode/agent-status-manager";
-import type { DiscoveryService } from "../services/opencode/discovery-service";
+import type { OpenCodeServerManager } from "../services/opencode/opencode-server-manager";
 
 /**
  * Runtime state for an open project.
@@ -44,8 +44,8 @@ export class AppState {
   private readonly logger: Logger;
   private readonly openProjects: Map<string, OpenProject> = new Map();
   private readonly lastBaseBranches: Map<string, string> = new Map();
-  private discoveryService: DiscoveryService | null = null;
   private agentStatusManager: AgentStatusManager | null = null;
+  private serverManager: OpenCodeServerManager | null = null;
 
   constructor(
     projectStore: ProjectStore,
@@ -65,20 +65,6 @@ export class AppState {
   }
 
   /**
-   * Set the discovery service (injected from main process).
-   */
-  setDiscoveryService(service: DiscoveryService): void {
-    this.discoveryService = service;
-  }
-
-  /**
-   * Get the discovery service.
-   */
-  getDiscoveryService(): DiscoveryService | null {
-    return this.discoveryService;
-  }
-
-  /**
    * Set the agent status manager (injected from main process).
    */
   setAgentStatusManager(manager: AgentStatusManager): void {
@@ -90,6 +76,34 @@ export class AppState {
    */
   getAgentStatusManager(): AgentStatusManager | null {
     return this.agentStatusManager;
+  }
+
+  /**
+   * Set the OpenCode server manager and wire callbacks.
+   * Called from main process after creating services.
+   */
+  setServerManager(manager: OpenCodeServerManager): void {
+    this.serverManager = manager;
+
+    // Wire server callbacks to agent status manager
+    manager.onServerStarted((workspacePath, port) => {
+      if (this.agentStatusManager) {
+        void this.agentStatusManager.initWorkspace(workspacePath as WorkspacePath, port);
+      }
+    });
+
+    manager.onServerStopped((workspacePath) => {
+      if (this.agentStatusManager) {
+        this.agentStatusManager.removeWorkspace(workspacePath as WorkspacePath);
+      }
+    });
+  }
+
+  /**
+   * Get the OpenCode server manager.
+   */
+  getServerManager(): OpenCodeServerManager | null {
+    return this.serverManager;
   }
 
   /**
@@ -172,14 +186,20 @@ export class AppState {
     // Discover existing workspaces (excludes main directory)
     const workspaces = await provider.discover();
 
-    // Create views for each workspace and initialize agent status tracking
+    // Create views for each workspace and start OpenCode servers
     for (const workspace of workspaces) {
       const url = this.getWorkspaceUrl(workspace.path);
       this.viewManager.createWorkspaceView(workspace.path, url, projectPath);
 
-      // Initialize agent status tracking for the workspace
-      if (this.agentStatusManager) {
-        void this.agentStatusManager.initWorkspace(workspace.path as WorkspacePath);
+      // Start OpenCode server for the workspace (agent status tracking is wired via callback)
+      if (this.serverManager) {
+        void this.serverManager.startServer(workspace.path).catch((err: unknown) => {
+          this.logger.error(
+            "Failed to start OpenCode server",
+            { workspacePath: workspace.path },
+            err instanceof Error ? err : undefined
+          );
+        });
       }
     }
 
@@ -227,6 +247,11 @@ export class AppState {
     const openProject = this.openProjects.get(projectPath);
     if (!openProject) {
       return;
+    }
+
+    // Stop all OpenCode servers for this project
+    if (this.serverManager) {
+      await this.serverManager.stopAllForProject(projectPath);
     }
 
     // Destroy all workspace views
@@ -353,9 +378,15 @@ export class AppState {
       project: updatedProject,
     });
 
-    // Initialize agent status tracking for the workspace
-    if (this.agentStatusManager) {
-      void this.agentStatusManager.initWorkspace(workspace.path as WorkspacePath);
+    // Start OpenCode server for the workspace (agent status tracking is wired via callback)
+    if (this.serverManager) {
+      void this.serverManager.startServer(workspace.path).catch((err: unknown) => {
+        this.logger.error(
+          "Failed to start OpenCode server",
+          { workspacePath: workspace.path },
+          err instanceof Error ? err : undefined
+        );
+      });
     }
   }
 
@@ -372,9 +403,9 @@ export class AppState {
       return;
     }
 
-    // Remove agent status tracking
-    if (this.agentStatusManager) {
-      this.agentStatusManager.removeWorkspace(workspacePath as WorkspacePath);
+    // Stop OpenCode server (this will trigger onServerStopped callback, which removes agent status)
+    if (this.serverManager) {
+      await this.serverManager.stopServer(workspacePath);
     }
 
     // Destroy the workspace view

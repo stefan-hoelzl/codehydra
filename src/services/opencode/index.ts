@@ -3,25 +3,11 @@
  * Public API for the opencode module.
  */
 
-export { HttpInstanceProbe, type InstanceProbe } from "./instance-probe";
-export {
-  DiscoveryService,
-  type DiscoveryServiceDependencies,
-  type InstancesChangedCallback,
-} from "./discovery-service";
 export { OpenCodeClient, type SessionEventCallback } from "./opencode-client";
 export { AgentStatusManager, type StatusChangedCallback } from "./agent-status-manager";
+export { OpenCodeServerManager } from "./opencode-server-manager";
 
 // Re-export types
-export type {
-  Result,
-  PortInfo,
-  SessionStatus,
-  IDisposable,
-  Unsubscribe,
-  DiscoveryError,
-  ProbeError,
-  ScanError,
-} from "./types";
+export type { Result, PortInfo, SessionStatus, IDisposable, Unsubscribe } from "./types";
 
 export { ok, err } from "./types";

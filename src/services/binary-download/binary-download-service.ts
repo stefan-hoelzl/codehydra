@@ -276,24 +276,21 @@ export class DefaultBinaryDownloadService implements BinaryDownloadService {
     this.logger?.debug("Flattening directory", { dir: destDir });
     const entries = await this.fileSystemLayer.readdir(destDir);
 
-    // If there's exactly one directory entry that looks like a release dir, move its contents up
+    // If there's exactly one directory entry that looks like a release dir, flatten it
     const firstEntry = entries[0];
     if (entries.length === 1 && firstEntry?.isDirectory) {
       const nestedDir = path.join(destDir, firstEntry.name);
       const nestedEntries = await this.fileSystemLayer.readdir(nestedDir);
 
-      // Move all contents up using copyTree + rm (FileSystemLayer doesn't have rename)
+      // Use rename (atomic move) instead of copy+delete
       for (const entry of nestedEntries) {
         const src = path.join(nestedDir, entry.name);
         const dest = path.join(destDir, entry.name);
-
-        // Copy then remove (FileSystemLayer doesn't have rename)
-        await this.fileSystemLayer.copyTree(src, dest);
-        await this.fileSystemLayer.rm(src, { recursive: true });
+        await this.fileSystemLayer.rename(src, dest);
       }
 
       // Remove the now-empty nested directory
-      await this.fileSystemLayer.rm(nestedDir, { recursive: true });
+      await this.fileSystemLayer.rm(nestedDir, { recursive: true, force: true });
     }
   }
 

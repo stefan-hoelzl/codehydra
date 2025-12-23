@@ -27,7 +27,7 @@ For implementation patterns with code examples, see [docs/PATTERNS.md](PATTERNS.
 │  │ BaseWindow    │  │WebContentsView│  │ ├─ Git Worktree Provider      ││
 │  │ resize/bounds │  │ create/destroy│  │ ├─ Code-Server Manager        ││
 │  │               │  │ bounds/z-order│  │ ├─ Project Store              ││
-│  └───────────────┘  └───────────────┘  │ └─ OpenCode Discovery         ││
+│  └───────────────┘  └───────────────┘  │ └─ OpenCode Server Manager    ││
 │                                        └───────────────────────────────┘│
 ├──────────────────────────────────────────────────────────────────────────┤
 │  UI Layer (WebContentsView with transparent background)                  │
@@ -187,7 +187,7 @@ Services are pure Node.js for testability without Electron:
 | Git Worktree Provider    | Discover worktrees (not main dir), create, remove               | Implemented |
 | Code-Server Manager      | Start/stop code-server, port management                         | Implemented |
 | Project Store            | Persist open projects across sessions                           | Implemented |
-| OpenCode Discovery       | Find running OpenCode instances                                 | Implemented |
+| OpenCode Server Manager  | Spawn/manage one `opencode serve` per workspace                 | Implemented |
 | OpenCode Status Provider | SSE connections, status aggregation                             | Implemented |
 | VS Code Setup Service    | First-run extension and config installation                     | Implemented |
 | KeepFiles Service        | Copy gitignored files from project root to new workspaces       | Implemented |
@@ -391,10 +391,10 @@ NetworkLayer provides unified interfaces for all localhost network operations, d
 
 **Interface Responsibilities:**
 
-| Interface     | Methods                                 | Purpose                         | Used By                             |
-| ------------- | --------------------------------------- | ------------------------------- | ----------------------------------- |
-| `HttpClient`  | `fetch(url, options)`                   | HTTP GET with timeout support   | InstanceProbe, CodeServerManager    |
-| `PortManager` | `findFreePort()`, `getListeningPorts()` | Port discovery and availability | CodeServerManager, DiscoveryService |
+| Interface     | Methods                                 | Purpose                         | Used By                                  |
+| ------------- | --------------------------------------- | ------------------------------- | ---------------------------------------- |
+| `HttpClient`  | `fetch(url, options)`                   | HTTP GET with timeout support   | CodeServerManager, OpenCodeServerManager |
+| `PortManager` | `findFreePort()`, `getListeningPorts()` | Port discovery and availability | CodeServerManager, OpenCodeServerManager |
 
 **Dependency Injection:**
 
@@ -403,7 +403,14 @@ NetworkLayer provides unified interfaces for all localhost network operations, d
 const networkLayer = new DefaultNetworkLayer();
 
 // Inject only the interface(s) each consumer needs
-const instanceProbe = new HttpInstanceProbe(networkLayer); // HttpClient only
+const serverManager = new OpenCodeServerManager(
+  runner,
+  networkLayer,
+  fsLayer,
+  networkLayer,
+  pathProvider,
+  logger
+);
 const codeServerManager = new CodeServerManager(config, runner, networkLayer, networkLayer); // HttpClient + PortManager
 ```
 
@@ -433,7 +440,7 @@ const service = new SomeService(mockHttpClient, mockPortManager);
 
 ### ProcessTreeProvider Pattern
 
-`ProcessTreeProvider` is an interface for getting descendant PIDs of a process, used by `DiscoveryService` to filter port scans to processes spawned by code-server.
+`ProcessTreeProvider` is an interface for getting descendant PIDs of a process. It can be used to identify child processes spawned by a parent process.
 
 **Platform-specific implementations:**
 
@@ -476,11 +483,8 @@ const mockProcessTree: ProcessTreeProvider = {
   getDescendantPids: vi.fn().mockResolvedValue(new Set([1234, 5678])),
 };
 
-const service = new DiscoveryService({
-  portManager: mockPortManager,
-  processTree: mockProcessTree,
-  instanceProbe: mockInstanceProbe,
-});
+// Pass to any service that needs process tree information
+const service = new SomeService(mockProcessTree);
 ```
 
 ### OpenCode SDK Integration
@@ -1068,9 +1072,9 @@ The OpenCode integration provides real-time agent status monitoring for AI agent
 ┌─────────────────────────────────────────────────────────────────┐
 │                        MAIN PROCESS                              │
 │                                                                  │
-│  DiscoveryService ──► PortScanner + ProcessTree + InstanceProbe │
-│         │                                                        │
-│         │ discovers ports for workspaces                         │
+│  OpenCodeServerManager ──► spawns opencode serve per workspace  │
+│         │                      writes to ports.json              │
+│         │ onServerStarted(path, port)                            │
 │         ▼                                                        │
 │  AgentStatusManager ◄── OpenCodeClient (SSE events)             │
 │         │                                                        │
@@ -1096,27 +1100,35 @@ The OpenCode integration provides real-time agent status monitoring for AI agent
 
 ### Services (src/services/opencode/)
 
-| Service              | Responsibility                                            |
-| -------------------- | --------------------------------------------------------- |
-| `DiscoveryService`   | Discovers OpenCode instances via port scanning            |
-| `OpenCodeClient`     | Connects to OpenCode HTTP/SSE API, handles reconnection   |
-| `AgentStatusManager` | Aggregates status across workspaces, emits status changes |
+| Service                 | Responsibility                                                  |
+| ----------------------- | --------------------------------------------------------------- |
+| `OpenCodeServerManager` | Spawns/manages one `opencode serve` per workspace, writes ports |
+| `OpenCodeClient`        | Connects to OpenCode HTTP/SSE API, handles reconnection         |
+| `AgentStatusManager`    | Aggregates status across workspaces, emits status changes       |
 
-Supporting modules:
+### Managed Server Flow
 
-| Module          | Responsibility                                          |
-| --------------- | ------------------------------------------------------- |
-| `PortScanner`   | Scans for listening ports with PID info (node-netstat)  |
-| `ProcessTree`   | Gets descendant PIDs of code-server process (pidtree)   |
-| `InstanceProbe` | Probes ports to identify OpenCode instances (localhost) |
+1. **Workspace Add**: `AppState.addWorkspace()` calls `serverManager.startServer(path)`
+2. **Port Allocation**: `PortManager.findFreePort()` allocates a port
+3. **Server Spawn**: `opencode serve --port N --dir path` spawns in background
+4. **Health Check**: HTTP probe to `/app` confirms server is ready
+5. **Ports File Update**: Entry written to `<app-data>/opencode/ports.json`
+6. **Callback**: `onServerStarted(path, port)` wired to `agentStatusManager.initWorkspace()`
 
-### Discovery Flow
+### Ports File Format
 
-1. **PID Change Event**: `CodeServerManager.onPidChanged()` notifies `DiscoveryService`
-2. **Port Scan**: Main process polls `DiscoveryService.scan()` every 1s
-3. **Process Filtering**: Only scans ports owned by code-server descendants
-4. **Instance Probe**: HTTP request to `/path` endpoint identifies OpenCode instances
-5. **Caching**: Non-OpenCode ports cached (5 min TTL) to avoid re-probing
+The `<app-data>/opencode/ports.json` file maps workspace paths to ports:
+
+```json
+{
+  "workspaces": {
+    "/home/user/project/.worktrees/feature-a": { "port": 14001 },
+    "/home/user/project/.worktrees/feature-b": { "port": 14002 }
+  }
+}
+```
+
+The wrapper script (`<app-data>/bin/opencode`) reads this file to redirect `opencode` invocations to `opencode attach http://127.0.0.1:$PORT` when in a managed workspace.
 
 ### Status Update Flow
 

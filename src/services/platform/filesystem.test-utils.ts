@@ -106,6 +106,26 @@ export interface MockWriteFileBufferOptions {
 }
 
 /**
+ * Options for mock symlink method.
+ */
+export interface MockSymlinkOptions {
+  /** Error to throw */
+  readonly error?: FileSystemError;
+  /** Custom implementation */
+  readonly implementation?: (target: string, linkPath: string) => Promise<void>;
+}
+
+/**
+ * Options for mock rename method.
+ */
+export interface MockRenameOptions {
+  /** Error to throw */
+  readonly error?: FileSystemError;
+  /** Custom implementation */
+  readonly implementation?: (oldPath: string, newPath: string) => Promise<void>;
+}
+
+/**
  * Options for creating a mock FileSystemLayer.
  */
 export interface MockFileSystemLayerOptions {
@@ -127,6 +147,10 @@ export interface MockFileSystemLayerOptions {
   readonly makeExecutable?: MockMakeExecutableOptions;
   /** Mock writeFileBuffer: succeed or throw error */
   readonly writeFileBuffer?: MockWriteFileBufferOptions;
+  /** Mock symlink: succeed or throw error */
+  readonly symlink?: MockSymlinkOptions;
+  /** Mock rename: succeed or throw error */
+  readonly rename?: MockRenameOptions;
 }
 
 // ============================================================================
@@ -247,6 +271,26 @@ export function createMockFileSystemLayer(options?: MockFileSystemLayerOptions):
       }
       if (options?.writeFileBuffer?.error) {
         throw options.writeFileBuffer.error;
+      }
+      // Default: succeed silently
+    },
+
+    async symlink(target: string, linkPath: string): Promise<void> {
+      if (options?.symlink?.implementation) {
+        return options.symlink.implementation(target, linkPath);
+      }
+      if (options?.symlink?.error) {
+        throw options.symlink.error;
+      }
+      // Default: succeed silently
+    },
+
+    async rename(oldPath: string, newPath: string): Promise<void> {
+      if (options?.rename?.implementation) {
+        return options.rename.implementation(oldPath, newPath);
+      }
+      if (options?.rename?.error) {
+        throw options.rename.error;
       }
       // Default: succeed silently
     },

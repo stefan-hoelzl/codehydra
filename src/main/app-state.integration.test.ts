@@ -23,6 +23,7 @@ import {
   type MockLoggingService,
 } from "../services";
 import type { AgentStatusManager } from "../services/opencode/agent-status-manager";
+import type { OpenCodeServerManager } from "../services/opencode/opencode-server-manager";
 import type { WorkspacePath } from "../shared/ipc";
 
 // =============================================================================
@@ -111,6 +112,31 @@ function createMockAgentStatusManager(): AgentStatusManager {
   } as unknown as AgentStatusManager;
 }
 
+function createMockServerManager(): OpenCodeServerManager {
+  // Track callbacks to simulate real behavior
+  type StoppedCallback = (path: string) => void;
+  const stoppedCallbacks = new Set<StoppedCallback>();
+
+  return {
+    startServer: vi.fn().mockResolvedValue(14001),
+    stopServer: vi.fn().mockImplementation(async (path: string) => {
+      // Simulate callback firing when server stops
+      for (const cb of stoppedCallbacks) {
+        cb(path);
+      }
+    }),
+    stopAllForProject: vi.fn().mockResolvedValue(undefined),
+    getPort: vi.fn().mockReturnValue(undefined),
+    onServerStarted: vi.fn().mockReturnValue(() => {}),
+    onServerStopped: vi.fn().mockImplementation((cb: StoppedCallback) => {
+      stoppedCallbacks.add(cb);
+      return () => stoppedCallbacks.delete(cb);
+    }),
+    cleanupStaleEntries: vi.fn().mockResolvedValue(undefined),
+    dispose: vi.fn().mockResolvedValue(undefined),
+  } as unknown as OpenCodeServerManager;
+}
+
 // =============================================================================
 // Integration Tests: Workspace Removal Cleanup Flow
 // =============================================================================
@@ -119,6 +145,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
   let appState: AppState;
   let mockViewManager: IViewManager;
   let mockAgentStatusManager: AgentStatusManager;
+  let mockServerManager: OpenCodeServerManager;
   let mockPathProvider: PathProvider;
   let mockFileSystemLayer: FileSystemLayer;
   let mockLoggingService: MockLoggingService;
@@ -131,6 +158,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
     });
     mockViewManager = createMockViewManager();
     mockAgentStatusManager = createMockAgentStatusManager();
+    mockServerManager = createMockServerManager();
     mockFileSystemLayer = createMockFileSystemLayer();
     mockLoggingService = createMockLoggingService();
   });
@@ -140,7 +168,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
   });
 
   describe("removeWorkspace cleanup order", () => {
-    it("executes cleanup in order: agentStatusManager.removeWorkspace → viewManager.destroyWorkspaceView", async () => {
+    it("executes cleanup in order: serverManager.stopServer → viewManager.destroyWorkspaceView", async () => {
       appState = new AppState(
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
@@ -150,6 +178,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
+      appState.setServerManager(mockServerManager);
 
       // Open project to populate state
       await appState.openProject("/project");
@@ -157,7 +186,15 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
       // Track execution order
       const executionOrder: string[] = [];
 
-      vi.mocked(mockAgentStatusManager.removeWorkspace).mockImplementation(() => {
+      // Note: With the new design, serverManager.stopServer triggers onServerStopped callback
+      // which calls agentStatusManager.removeWorkspace. The order is now:
+      // 1. serverManager.stopServer (which fires callback that calls agentStatusManager.removeWorkspace)
+      // 2. viewManager.destroyWorkspaceView
+
+      vi.mocked(mockServerManager.stopServer).mockImplementation(async (path: string) => {
+        executionOrder.push("serverManager.stopServer");
+        // Simulate callback firing (which would call agentStatusManager.removeWorkspace)
+        vi.mocked(mockAgentStatusManager.removeWorkspace)(path as WorkspacePath);
         executionOrder.push("agentStatusManager.removeWorkspace");
       });
 
@@ -168,8 +205,9 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
       // Remove workspace
       await appState.removeWorkspace("/project", "/project/.worktrees/feature-1");
 
-      // Verify order: agent cleanup MUST happen before view destruction
+      // Verify order: server stop (with agent cleanup) happens before view destruction
       expect(executionOrder).toEqual([
+        "serverManager.stopServer",
         "agentStatusManager.removeWorkspace",
         "viewManager.destroyWorkspaceView",
       ]);
@@ -195,7 +233,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
       );
     });
 
-    it("calls agentStatusManager.removeWorkspace with WorkspacePath", async () => {
+    it("calls serverManager.stopServer with workspace path", async () => {
       appState = new AppState(
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
@@ -205,14 +243,13 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
+      appState.setServerManager(mockServerManager);
 
       await appState.openProject("/project");
 
       await appState.removeWorkspace("/project", "/project/.worktrees/feature-1");
 
-      expect(mockAgentStatusManager.removeWorkspace).toHaveBeenCalledWith(
-        "/project/.worktrees/feature-1" as WorkspacePath
-      );
+      expect(mockServerManager.stopServer).toHaveBeenCalledWith("/project/.worktrees/feature-1");
     });
 
     it("continues cleanup even if agentStatusManager is not set", async () => {
@@ -239,7 +276,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
       );
     });
 
-    it("calls agentStatusManager.removeWorkspace synchronously before view destruction", async () => {
+    it("calls serverManager.stopServer before view destruction", async () => {
       appState = new AppState(
         mockProjectStore as unknown as ProjectStore,
         mockViewManager,
@@ -249,21 +286,22 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
+      appState.setServerManager(mockServerManager);
 
       await appState.openProject("/project");
 
-      // Track that agent removal happens before view destruction
-      let agentRemoveCalled = false;
+      // Track that server stop happens before view destruction
+      let serverStopped = false;
       let viewDestroyStarted = false;
 
-      vi.mocked(mockAgentStatusManager.removeWorkspace).mockImplementation(() => {
-        agentRemoveCalled = true;
+      vi.mocked(mockServerManager.stopServer).mockImplementation(async () => {
+        serverStopped = true;
       });
 
       vi.mocked(mockViewManager.destroyWorkspaceView).mockImplementation(async () => {
         viewDestroyStarted = true;
-        // Verify agent removal was called before view destruction started
-        expect(agentRemoveCalled).toBe(true);
+        // Verify server was stopped before view destruction started
+        expect(serverStopped).toBe(true);
       });
 
       await appState.removeWorkspace("/project", "/project/.worktrees/feature-1");
@@ -362,6 +400,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
         mockLoggingService
       );
       appState.setAgentStatusManager(mockAgentStatusManager);
+      appState.setServerManager(mockServerManager);
 
       await appState.openProject("/project");
 
@@ -378,10 +417,8 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
       expect(projectAfter?.workspaces[0]?.name).toBe("feature-2");
 
       // Verify cleanup was only called for feature-1
-      expect(mockAgentStatusManager.removeWorkspace).toHaveBeenCalledTimes(1);
-      expect(mockAgentStatusManager.removeWorkspace).toHaveBeenCalledWith(
-        "/project/.worktrees/feature-1"
-      );
+      expect(mockServerManager.stopServer).toHaveBeenCalledTimes(1);
+      expect(mockServerManager.stopServer).toHaveBeenCalledWith("/project/.worktrees/feature-1");
       expect(mockViewManager.destroyWorkspaceView).toHaveBeenCalledTimes(1);
       expect(mockViewManager.destroyWorkspaceView).toHaveBeenCalledWith(
         "/project/.worktrees/feature-1"

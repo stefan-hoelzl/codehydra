@@ -207,6 +207,87 @@ describe("DefaultBinaryDownloadService", () => {
       expect(path).toContain(join("bin", "code-server"));
       expect(path).not.toContain(".cmd");
     });
+
+    it("flattens nested directory structure using rename", async () => {
+      // Track rename and rm calls to verify correct flattening behavior
+      const renameCalls: Array<{ oldPath: string; newPath: string }> = [];
+      const rmCalls: Array<{ path: string; options: unknown }> = [];
+      let readdirCallCount = 0;
+
+      // Create streaming response body
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("binary content"));
+          controller.close();
+        },
+      });
+
+      const successHttpClient = createMockHttpClient({
+        response: new Response(body, {
+          status: 200,
+          headers: { "content-length": "14" },
+        }),
+      });
+
+      const trackingFs = createMockFileSystemLayer({
+        readdir: {
+          implementation: async () => {
+            readdirCallCount++;
+            if (readdirCallCount === 1) {
+              // First call: destDir has single nested directory
+              return [createDirEntry("code-server-4.106.3-linux-amd64", { isDirectory: true })];
+            } else {
+              // Second call: nested directory contents
+              return [
+                createDirEntry("bin", { isDirectory: true }),
+                createDirEntry("lib", { isDirectory: true }),
+                createDirEntry("package.json", { isFile: true }),
+              ];
+            }
+          },
+        },
+        rename: {
+          implementation: async (oldPath, newPath) => {
+            renameCalls.push({ oldPath, newPath });
+          },
+        },
+        rm: {
+          implementation: async (path, options) => {
+            rmCalls.push({ path, options });
+          },
+        },
+      });
+
+      const trackingService = new DefaultBinaryDownloadService(
+        successHttpClient,
+        trackingFs,
+        mockArchiveExtractor,
+        mockPathProvider,
+        mockPlatformInfo
+      );
+
+      await trackingService.download("code-server");
+
+      // Verify rename was called for each nested entry (atomic moves)
+      expect(renameCalls).toHaveLength(3);
+      expect(renameCalls[0]).toEqual({
+        oldPath: join(
+          "/app-data",
+          "code-server",
+          CODE_SERVER_VERSION,
+          "code-server-4.106.3-linux-amd64",
+          "bin"
+        ),
+        newPath: join("/app-data", "code-server", CODE_SERVER_VERSION, "bin"),
+      });
+
+      // Verify the now-empty nested directory was removed
+      const nestedDirRmCall = rmCalls.find((c) =>
+        c.path.includes("code-server-4.106.3-linux-amd64")
+      );
+      expect(nestedDirRmCall).toBeDefined();
+      expect(nestedDirRmCall?.options).toEqual({ recursive: true, force: true });
+    });
   });
 
   describe("createWrapperScripts", () => {

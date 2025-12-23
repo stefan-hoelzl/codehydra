@@ -203,6 +203,37 @@ export interface FileSystemLayer {
    * await fs.writeFileBuffer('/path/to/binary', buffer);
    */
   writeFileBuffer(path: string, content: Buffer): Promise<void>;
+
+  /**
+   * Create a symbolic link.
+   * Removes existing symlink at linkPath before creating new one.
+   *
+   * @param target - Path the symlink should point to
+   * @param linkPath - Path where the symlink will be created
+   * @throws FileSystemError with code ENOENT if parent directory of linkPath doesn't exist
+   * @throws FileSystemError with code EACCES if permission denied
+   *
+   * @example Create symlink to versioned directory
+   * await fs.symlink('/app/opencode/1.0.0', '/app/opencode/current');
+   */
+  symlink(target: string, linkPath: string): Promise<void>;
+
+  /**
+   * Rename (move) a file or directory atomically.
+   * This is the standard pattern for atomic file writes:
+   * 1. Write to a temp file
+   * 2. Rename temp file to target (atomic on most filesystems)
+   *
+   * @param oldPath - Current path of the file/directory
+   * @param newPath - New path for the file/directory
+   * @throws FileSystemError with code ENOENT if oldPath doesn't exist
+   * @throws FileSystemError with code EACCES if permission denied
+   *
+   * @example Atomic write pattern
+   * await fs.writeFile('/path/to/file.tmp', content);
+   * await fs.rename('/path/to/file.tmp', '/path/to/file');
+   */
+  rename(oldPath: string, newPath: string): Promise<void>;
 }
 
 // ============================================================================
@@ -442,6 +473,55 @@ export class DefaultFileSystemLayer implements FileSystemLayer {
       const fsError = mapError(error, filePath);
       this.logger.warn("WriteBuffer failed", {
         path: filePath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
+    }
+  }
+
+  async symlink(target: string, linkPath: string): Promise<void> {
+    this.logger.debug("Symlink", { target, linkPath });
+    try {
+      // Remove existing symlink if present
+      try {
+        const stat = await fs.lstat(linkPath);
+        if (stat.isSymbolicLink()) {
+          await fs.unlink(linkPath);
+        }
+      } catch (error) {
+        // Ignore ENOENT - file doesn't exist, which is fine
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== "ENOENT") {
+          throw error;
+        }
+      }
+
+      // Create symlink
+      // On Windows, use 'junction' for directories (doesn't require admin)
+      const type = process.platform === "win32" ? "junction" : undefined;
+      await fs.symlink(target, linkPath, type);
+    } catch (error) {
+      const fsError = mapError(error, linkPath);
+      this.logger.warn("Symlink failed", {
+        target,
+        linkPath,
+        code: fsError.fsCode,
+        error: fsError.message,
+      });
+      throw fsError;
+    }
+  }
+
+  async rename(oldPath: string, newPath: string): Promise<void> {
+    this.logger.debug("Rename", { oldPath, newPath });
+    try {
+      await fs.rename(oldPath, newPath);
+    } catch (error) {
+      const fsError = mapError(error, oldPath);
+      this.logger.warn("Rename failed", {
+        oldPath,
+        newPath,
         code: fsError.fsCode,
         error: fsError.message,
       });

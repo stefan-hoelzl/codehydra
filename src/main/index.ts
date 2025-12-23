@@ -26,8 +26,7 @@ import {
   DefaultArchiveExtractor,
   type BinaryDownloadService,
 } from "../services/binary-download";
-import { createProcessTreeProvider } from "../services/platform/process-tree";
-import { DiscoveryService, AgentStatusManager, HttpInstanceProbe } from "../services/opencode";
+import { AgentStatusManager, OpenCodeServerManager } from "../services/opencode";
 import { PluginServer, sendStartupCommands, sendShutdownCommand } from "../services/plugin-server";
 import { wirePluginApi } from "./api/wire-plugin-api";
 import { WindowManager } from "./managers/window-manager";
@@ -169,10 +168,9 @@ let windowManager: WindowManager | null = null;
 let viewManager: ViewManager | null = null;
 let appState: AppState | null = null;
 let codeServerManager: CodeServerManager | null = null;
-let discoveryService: DiscoveryService | null = null;
 let agentStatusManager: AgentStatusManager | null = null;
 let badgeManager: BadgeManager | null = null;
-let scanInterval: ReturnType<typeof setInterval> | null = null;
+let serverManager: OpenCodeServerManager | null = null;
 let codeHydraApi: ICodeHydraApi | null = null;
 let apiEventCleanup: Unsubscribe | null = null;
 let agentStatusCleanup: Unsubscribe | null = null;
@@ -182,13 +180,6 @@ let agentStatusCleanup: Unsubscribe | null = null;
  * Started in startServices() before code-server.
  */
 let pluginServer: PluginServer | null = null;
-
-/**
- * Process tree provider for child process management.
- * Created lazily in startServices() using the platform-specific factory.
- */
-import type { ProcessTreeProvider } from "../services/platform/process-tree";
-let processTree: ProcessTreeProvider | null = null;
 
 /**
  * Shared ProcessRunner instance for both VscodeSetupService and CodeServerManager.
@@ -311,21 +302,21 @@ async function startServices(): Promise<void> {
   );
 
   // Initialize OpenCode services
-  // Create process tree provider using platform-specific factory
-  processTree = createProcessTreeProvider(loggingService.createLogger("pidtree"));
-  const instanceProbe = new HttpInstanceProbe(networkLayer);
-
-  discoveryService = new DiscoveryService({
-    portManager: networkLayer,
-    processTree,
-    instanceProbe,
-    logger: loggingService.createLogger("discovery"),
-  });
-
-  agentStatusManager = new AgentStatusManager(
-    discoveryService,
+  // Create OpenCodeServerManager to manage one opencode server per workspace
+  serverManager = new OpenCodeServerManager(
+    processRunner,
+    networkLayer, // PortManager
+    fileSystemLayer,
+    networkLayer, // HttpClient
+    pathProvider,
     loggingService.createLogger("opencode")
   );
+
+  // Clean up stale entries before opening any projects
+  await serverManager.cleanupStaleEntries();
+
+  // Create AgentStatusManager (receives ports via callbacks from serverManager)
+  agentStatusManager = new AgentStatusManager(loggingService.createLogger("opencode"));
 
   // Create and connect BadgeManager
   const electronAppApi = new DefaultElectronAppApi();
@@ -337,31 +328,9 @@ async function startServices(): Promise<void> {
   );
   badgeManager.connectToStatusManager(agentStatusManager);
 
-  // Inject services into AppState
-  appState.setDiscoveryService(discoveryService);
+  // Inject services into AppState and wire callbacks
   appState.setAgentStatusManager(agentStatusManager);
-
-  // Wire up code-server PID changes to discovery service
-  if (codeServerManager) {
-    codeServerManager.onPidChanged((pid) => {
-      if (discoveryService) {
-        discoveryService.setCodeServerPid(pid);
-      }
-    });
-
-    // Set initial PID if code-server is already running
-    const currentPid = codeServerManager.pid();
-    if (currentPid !== null) {
-      discoveryService.setCodeServerPid(currentPid);
-    }
-  }
-
-  // Start scan interval (1s) - DiscoveryService handles its own concurrency
-  scanInterval = setInterval(() => {
-    if (discoveryService) {
-      void discoveryService.scan();
-    }
-  }, 1000);
+  appState.setServerManager(serverManager);
 
   // Create and register API-based handlers
   // Reuse the existing lifecycleApi from bootstrap() if available
@@ -642,10 +611,10 @@ async function cleanup(): Promise<void> {
   const appLogger = loggingService.createLogger("app");
   appLogger.info("Shutdown initiated");
 
-  // Stop scan interval
-  if (scanInterval) {
-    clearInterval(scanInterval);
-    scanInterval = null;
+  // Dispose OpenCode server manager (stops all servers)
+  if (serverManager) {
+    await serverManager.dispose();
+    serverManager = null;
   }
 
   // Dispose badge manager
@@ -658,12 +627,6 @@ async function cleanup(): Promise<void> {
   if (agentStatusManager) {
     agentStatusManager.dispose();
     agentStatusManager = null;
-  }
-
-  // Dispose discovery service
-  if (discoveryService) {
-    discoveryService.dispose();
-    discoveryService = null;
   }
 
   // Cleanup API event wiring
@@ -741,17 +704,13 @@ app.on("activate", () => {
 app.on("before-quit", () => {
   // Explicit cleanup for OpenCode services - synchronous operations
   // These are done explicitly to ensure they happen even if cleanup() is async
-  if (scanInterval) {
-    clearInterval(scanInterval);
-    scanInterval = null;
+  if (serverManager) {
+    void serverManager.dispose();
+    serverManager = null;
   }
   if (agentStatusManager) {
     agentStatusManager.dispose();
     agentStatusManager = null;
-  }
-  if (discoveryService) {
-    discoveryService.dispose();
-    discoveryService = null;
   }
 
   // Run full cleanup for remaining resources (code-server, views, etc.)

@@ -34,7 +34,7 @@ export type LoggerName =
   | "code-server" // CodeServerManager - code-server process
   | "pidtree" // PidtreeProvider - process tree lookups
   | "keepfiles" // KeepFilesService - .keepfiles copying
-  | "discovery" // DiscoveryService - OpenCode instance discovery
+  | "opencode-server" // OpenCodeServerManager - opencode server lifecycle
   | "api" // IPC handlers
   | "window" // WindowManager
   | "view" // ViewManager

@@ -1,12 +1,13 @@
 /**
  * Agent Status Manager - owns status aggregation and workspace lifecycle.
- * Manages OpenCode providers and aggregates port-based statuses.
+ * Manages OpenCode clients per workspace with direct port assignment.
+ *
+ * Ports are provided by OpenCodeServerManager via callbacks routed through AppState.
  */
 
 import type { WorkspacePath, AgentStatusCounts, AggregatedAgentStatus } from "../../shared/ipc";
-import type { IDisposable, Unsubscribe, ClientStatus, DiscoveredInstance } from "./types";
+import type { IDisposable, Unsubscribe, ClientStatus } from "./types";
 import { OpenCodeClient, type PermissionEvent, type SdkClientFactory } from "./opencode-client";
-import type { DiscoveryService } from "./discovery-service";
 import type { Logger } from "../logging";
 
 /**
@@ -18,23 +19,15 @@ export type StatusChangedCallback = (
 ) => void;
 
 /**
- * Per-workspace provider that manages OpenCode client connections.
- * Uses port-based status tracking (1 agent per port).
+ * Per-workspace provider that manages a single OpenCode client connection.
+ * Each workspace has exactly one managed OpenCode server.
  */
 class OpenCodeProvider implements IDisposable {
-  private readonly clients = new Map<number, OpenCodeClient>();
+  private client: OpenCodeClient | null = null;
+  private clientStatus: ClientStatus = "idle";
   private readonly sdkFactory: SdkClientFactory | undefined;
   private readonly logger: Logger;
 
-  constructor(logger: Logger, sdkFactory: SdkClientFactory | undefined) {
-    this.logger = logger;
-    this.sdkFactory = sdkFactory;
-  }
-  /**
-   * Port-based status tracking.
-   * Map<port, ClientStatus>
-   */
-  private readonly clientStatuses = new Map<number, ClientStatus>();
   /**
    * Session to port mapping for permission correlation.
    * Map<sessionId, port>
@@ -51,53 +44,16 @@ class OpenCodeProvider implements IDisposable {
    */
   private readonly statusChangeListeners = new Set<() => void>();
 
-  /**
-   * Sync clients with discovered instances.
-   * Returns ports that were newly added (need initialization).
-   */
-  syncClients(instances: ReadonlyArray<DiscoveredInstance>): Set<number> {
-    const newPorts = new Set<number>();
-    const currentPorts = new Set(instances.map((i) => i.port));
-
-    // Remove clients for ports that no longer exist
-    for (const [port, client] of this.clients) {
-      if (!currentPorts.has(port)) {
-        client.dispose();
-        this.clients.delete(port);
-        this.clientStatuses.delete(port);
-        // Clear session mappings and permissions for sessions on this port
-        for (const [sessionId, sessionPort] of this.sessionToPort) {
-          if (sessionPort === port) {
-            this.sessionToPort.delete(sessionId);
-            this.pendingPermissions.delete(sessionId);
-          }
-        }
-      }
-    }
-
-    // Add clients for new ports (don't connect yet - need to fetch root sessions first)
-    for (const { port } of instances) {
-      if (!this.clients.has(port)) {
-        const client = new OpenCodeClient(port, this.logger, this.sdkFactory);
-        // Subscribe to status changes from client
-        client.onStatusChanged((status) => this.handleStatusChanged(port, status));
-        // Subscribe to session events for permission correlation
-        client.onSessionEvent((event) => this.handleSessionEvent(port, event));
-        // Subscribe to permission events
-        client.onPermissionEvent((event) => this.handlePermissionEvent(event));
-        this.clients.set(port, client);
-        newPorts.add(port);
-      }
-    }
-
-    return newPorts;
+  constructor(logger: Logger, sdkFactory: SdkClientFactory | undefined) {
+    this.logger = logger;
+    this.sdkFactory = sdkFactory;
   }
 
   /**
-   * Check if provider has any connected clients.
+   * Check if provider has a connected client.
    */
-  hasClients(): boolean {
-    return this.clients.size > 0;
+  hasClient(): boolean {
+    return this.client !== null;
   }
 
   /**
@@ -105,59 +61,73 @@ class OpenCodeProvider implements IDisposable {
    * Ports with pending permissions count as idle (waiting for user).
    */
   getEffectiveCounts(): { idle: number; busy: number } {
-    let idle = 0;
-    let busy = 0;
-
-    for (const [port, status] of this.clientStatuses.entries()) {
-      // Check if any session on this port has pending permission
-      const hasPermissionPending = [...this.sessionToPort.entries()]
-        .filter(([, p]) => p === port)
-        .some(([sessionId]) => this.pendingPermissions.has(sessionId));
-
-      if (hasPermissionPending) {
-        idle++;
-      } else if (status === "idle") {
-        idle++;
-      } else {
-        busy++;
-      }
+    if (!this.client) {
+      return { idle: 0, busy: 0 };
     }
 
-    // IMPORTANT: When connected but no client statuses yet, show as "1 idle" (green indicator)
-    if (this.clients.size > 0 && idle === 0 && busy === 0) {
-      idle = 1;
+    // Check if any session has pending permission
+    const hasPermissionPending = [...this.sessionToPort.keys()].some((sessionId) =>
+      this.pendingPermissions.has(sessionId)
+    );
+
+    if (hasPermissionPending) {
+      return { idle: 1, busy: 0 };
     }
 
-    return { idle, busy };
+    if (this.clientStatus === "idle") {
+      return { idle: 1, busy: 0 };
+    }
+
+    return { idle: 0, busy: 1 };
   }
 
   /**
-   * Initialize new clients by fetching root sessions and connecting.
-   * Must be called after syncClients for newly added ports.
+   * Initialize client with the given port.
+   * Creates OpenCodeClient, fetches root sessions, and connects to SSE.
+   * Handles connection failures gracefully - client will still be created
+   * but may not receive real-time updates.
    */
-  async initializeNewClients(newPorts: Set<number>): Promise<void> {
-    for (const port of newPorts) {
-      const client = this.clients.get(port);
-      if (client) {
-        // Fetch root sessions first to identify which sessions to track
-        await client.fetchRootSessions();
-        // Then connect to SSE for real-time updates
-        // Note: connect() is now async and we await it
-        await client.connect();
-      }
+  async initializeClient(port: number): Promise<void> {
+    if (this.client) {
+      // Already initialized
+      return;
+    }
+
+    const client = new OpenCodeClient(port, this.logger, this.sdkFactory);
+
+    // Subscribe to status changes from client
+    client.onStatusChanged((status) => this.handleStatusChanged(status));
+    // Subscribe to session events for permission correlation
+    client.onSessionEvent((event) => this.handleSessionEvent(port, event));
+    // Subscribe to permission events
+    client.onPermissionEvent((event) => this.handlePermissionEvent(event));
+
+    this.client = client;
+
+    try {
+      // Fetch root sessions first to identify which sessions to track
+      await client.fetchRootSessions();
+      // Then connect to SSE for real-time updates
+      await client.connect();
+    } catch {
+      // Connection failed - client is still created but may not have real-time updates
+      // This can happen if the server is not ready yet or network issues
+      // The client can retry later or will receive updates when connection is established
     }
   }
 
   /**
-   * Fetch initial status from all clients.
-   * Uses the new getStatus() API that returns aggregated ClientStatus.
+   * Fetch initial status from the client.
+   * Uses the getStatus() API that returns aggregated ClientStatus.
    */
-  async fetchStatuses(): Promise<void> {
-    for (const [port, client] of this.clients.entries()) {
-      const result = await client.getStatus();
-      if (result.ok) {
-        this.clientStatuses.set(port, result.value);
-      }
+  async fetchStatus(): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+
+    const result = await this.client.getStatus();
+    if (result.ok) {
+      this.clientStatus = result.value;
     }
   }
 
@@ -170,11 +140,11 @@ class OpenCodeProvider implements IDisposable {
   }
 
   dispose(): void {
-    for (const client of this.clients.values()) {
-      client.dispose();
+    if (this.client) {
+      this.client.dispose();
+      this.client = null;
     }
-    this.clients.clear();
-    this.clientStatuses.clear();
+    this.clientStatus = "idle";
     this.sessionToPort.clear();
     this.pendingPermissions.clear();
     this.statusChangeListeners.clear();
@@ -183,8 +153,8 @@ class OpenCodeProvider implements IDisposable {
   /**
    * Handle status change from a client.
    */
-  private handleStatusChanged(port: number, status: ClientStatus): void {
-    this.clientStatuses.set(port, status);
+  private handleStatusChanged(status: ClientStatus): void {
+    this.clientStatus = status;
     this.notifyStatusChange();
   }
 
@@ -249,32 +219,25 @@ class OpenCodeProvider implements IDisposable {
 
 /**
  * Agent Status Manager - aggregates status across all workspaces.
+ * Receives port assignments from OpenCodeServerManager via AppState callbacks.
  */
 export class AgentStatusManager implements IDisposable {
   private readonly providers = new Map<WorkspacePath, OpenCodeProvider>();
   private readonly statuses = new Map<WorkspacePath, AggregatedAgentStatus>();
   private readonly listeners = new Set<StatusChangedCallback>();
-  private discoveryUnsubscribe: Unsubscribe | null = null;
   private readonly sdkFactory: SdkClientFactory | undefined;
   private readonly logger: Logger;
 
-  constructor(
-    private readonly discoveryService: DiscoveryService,
-    logger: Logger,
-    sdkFactory: SdkClientFactory | undefined = undefined
-  ) {
+  constructor(logger: Logger, sdkFactory: SdkClientFactory | undefined = undefined) {
     this.logger = logger;
     this.sdkFactory = sdkFactory;
-    // Subscribe to discovery service for instance changes
-    this.discoveryUnsubscribe = discoveryService.onInstancesChanged((workspace, instances) => {
-      this.handleInstancesChanged(workspace as WorkspacePath, instances);
-    });
   }
 
   /**
-   * Initialize a workspace for agent tracking.
+   * Initialize a workspace for agent tracking with the given port.
+   * Called by AppState when OpenCodeServerManager reports server started.
    */
-  async initWorkspace(path: WorkspacePath): Promise<void> {
+  async initWorkspace(path: WorkspacePath, port: number): Promise<void> {
     if (this.providers.has(path)) {
       return;
     }
@@ -283,15 +246,11 @@ export class AgentStatusManager implements IDisposable {
     // Subscribe to status changes (includes permission changes)
     provider.onStatusChange(() => this.updateStatus(path));
 
-    // Get current instances for this workspace
-    const instances = this.discoveryService.getInstancesForWorkspace(path);
-    const newPorts = provider.syncClients(instances);
+    // Initialize client with the provided port
+    await provider.initializeClient(port);
 
-    // Initialize new clients (fetch root sessions + connect SSE)
-    await provider.initializeNewClients(newPorts);
-
-    // Fetch initial statuses from all clients
-    await provider.fetchStatuses();
+    // Fetch initial status from the client
+    await provider.fetchStatus();
 
     this.providers.set(path, provider);
     this.updateStatus(path);
@@ -299,6 +258,7 @@ export class AgentStatusManager implements IDisposable {
 
   /**
    * Remove a workspace from agent tracking.
+   * Called by AppState when OpenCodeServerManager reports server stopped.
    */
   removeWorkspace(path: WorkspacePath): void {
     const provider = this.providers.get(path);
@@ -333,32 +293,12 @@ export class AgentStatusManager implements IDisposable {
   }
 
   dispose(): void {
-    if (this.discoveryUnsubscribe) {
-      this.discoveryUnsubscribe();
-      this.discoveryUnsubscribe = null;
-    }
-
     for (const provider of this.providers.values()) {
       provider.dispose();
     }
     this.providers.clear();
     this.statuses.clear();
     this.listeners.clear();
-  }
-
-  private handleInstancesChanged(
-    workspace: WorkspacePath,
-    instances: ReadonlyArray<DiscoveredInstance>
-  ): void {
-    const provider = this.providers.get(workspace);
-    if (provider) {
-      const newPorts = provider.syncClients(instances);
-      // Initialize new clients (fetch root sessions + connect SSE), then fetch statuses
-      void provider
-        .initializeNewClients(newPorts)
-        .then(() => provider.fetchStatuses())
-        .then(() => this.updateStatus(workspace));
-    }
   }
 
   private updateStatus(path: WorkspacePath): void {
