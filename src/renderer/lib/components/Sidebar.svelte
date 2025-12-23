@@ -528,6 +528,11 @@
 
   .workspace-item.active {
     background: var(--ch-list-active-bg);
+    color: var(--ch-list-active-fg);
+  }
+
+  .workspace-item.active .workspace-btn {
+    color: inherit;
   }
 
   .workspace-item:hover {
@@ -571,7 +576,7 @@
   }
 
   .workspace-item-minimized.active .status-indicator-btn {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--ch-list-active-bg);
   }
 
   .sidebar-footer {

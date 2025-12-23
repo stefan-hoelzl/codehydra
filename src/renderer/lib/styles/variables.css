@@ -64,6 +64,7 @@
   /* Focus/selection colors */
   --ch-focus-border: var(--vscode-focusBorder, #007fd4);
   --ch-list-active-bg: var(--vscode-list-activeSelectionBackground, #094771);
+  --ch-list-active-fg: var(--vscode-list-activeSelectionForeground, #ffffff);
   --ch-list-hover-bg: var(--vscode-list-hoverBackground, #2a2d2e);
 
   /* Error colors */
@@ -149,6 +150,7 @@
     /* Focus/selection colors */
     --ch-focus-border: var(--vscode-focusBorder, #0066b8);
     --ch-list-active-bg: var(--vscode-list-activeSelectionBackground, #0060c0);
+    --ch-list-active-fg: var(--vscode-list-activeSelectionForeground, #ffffff);
     --ch-list-hover-bg: var(--vscode-list-hoverBackground, #f0f0f0);
 
     /* Error colors */

@@ -351,10 +351,12 @@
   .dropdown-option:hover,
   .dropdown-option.highlighted {
     background: var(--ch-list-active-bg);
+    color: var(--ch-list-active-fg);
   }
 
   .dropdown-option[aria-selected="true"] {
     background: var(--ch-list-active-bg);
+    color: var(--ch-list-active-fg);
   }
 
   .no-results {
