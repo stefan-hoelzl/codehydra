@@ -22,6 +22,7 @@ import type {
 import type {
   IVscodeSetup,
   SetupStep as ServiceSetupStep,
+  PreflightResult,
 } from "../../services/vscode-setup/types";
 import type { Logger } from "../../services/logging/index";
 
@@ -49,9 +50,14 @@ export type EmitProgressCallback = (progress: SetupProgress) => void;
  *
  * Provides getState(), setup(), and quit() methods for the setup flow.
  * Designed to be created early in bootstrap() and reused by CodeHydraApiImpl.
+ *
+ * Uses preflight checks to determine what needs setup, enabling selective
+ * installation of only missing/outdated components.
  */
 export class LifecycleApi implements ILifecycleApi {
   private setupInProgress = false;
+  /** Cached preflight result from getState() for use in setup() */
+  private cachedPreflightResult: PreflightResult | null = null;
 
   constructor(
     private readonly vscodeSetup: IVscodeSetup,
@@ -63,20 +69,52 @@ export class LifecycleApi implements ILifecycleApi {
 
   /**
    * Get the current application state.
-   * @returns "ready" if setup is complete, "setup" otherwise
+   *
+   * Uses preflight checks to determine if setup is needed:
+   * - Checks binary versions (code-server, opencode)
+   * - Checks installed extension versions
+   * - Checks setup marker validity
+   *
+   * The preflight result is cached for use by setup().
+   *
+   * @returns "ready" if no setup needed, "setup" otherwise
    */
   async getState(): Promise<AppState> {
-    const isComplete = await this.vscodeSetup.isSetupComplete();
-    return isComplete ? "ready" : "setup";
+    const preflightResult = await this.vscodeSetup.preflight();
+
+    // Cache for later use in setup()
+    this.cachedPreflightResult = preflightResult;
+
+    // Log preflight results
+    if (preflightResult.success) {
+      if (preflightResult.needsSetup) {
+        this.logger?.info("Preflight: setup required", {
+          missingBinaries: preflightResult.missingBinaries.join(",") || "none",
+          missingExtensions: preflightResult.missingExtensions.join(",") || "none",
+          outdatedExtensions: preflightResult.outdatedExtensions.join(",") || "none",
+        });
+      } else {
+        this.logger?.debug("Preflight: no setup required", {});
+      }
+      return preflightResult.needsSetup ? "setup" : "ready";
+    } else {
+      // Preflight failed - treat as needing setup
+      this.logger?.warn("Preflight failed", { error: preflightResult.error.message });
+      return "setup";
+    }
   }
 
   /**
    * Run the setup process.
    *
    * Behavior:
-   * - If setup is already complete: calls onSetupComplete and returns success
+   * - Uses cached preflight result (from getState()) or runs preflight if not cached
+   * - If no setup needed: calls onSetupComplete and returns success
    * - If setup is already in progress: returns SETUP_IN_PROGRESS error
-   * - Otherwise: cleans vscode dir, runs setup, emits progress, calls onSetupComplete on success
+   * - Otherwise: runs selective setup based on preflight results
+   *
+   * Note: Does NOT auto-clean the vscode directory. Selective cleaning of
+   * outdated extensions is handled by VscodeSetupService based on preflight results.
    *
    * @returns Success or failure result
    */
@@ -93,10 +131,17 @@ export class LifecycleApi implements ILifecycleApi {
     this.setupInProgress = true;
 
     try {
-      // Check if already complete
-      const isComplete = await this.vscodeSetup.isSetupComplete();
-      if (isComplete) {
-        // Still need to call onSetupComplete (starts services)
+      // Use cached preflight result or run preflight if not available
+      let preflightResult = this.cachedPreflightResult;
+      if (!preflightResult) {
+        preflightResult = await this.vscodeSetup.preflight();
+      }
+      // Clear cache after use
+      this.cachedPreflightResult = null;
+
+      // Check if setup is actually needed
+      if (preflightResult.success && !preflightResult.needsSetup) {
+        // No setup needed - just start services
         try {
           await this.onSetupComplete();
         } catch (error) {
@@ -109,23 +154,23 @@ export class LifecycleApi implements ILifecycleApi {
         return { success: true };
       }
 
-      // Auto-clean before setup
-      await this.vscodeSetup.cleanVscodeDir();
-
-      // Run setup with progress callbacks
-      const result = await this.vscodeSetup.setup((serviceProgress) => {
-        this.logger?.debug("Setup progress", {
-          step: serviceProgress.step,
-          message: serviceProgress.message,
-        });
-        const apiStep = this.mapSetupStep(serviceProgress.step);
-        if (apiStep) {
-          this.emitProgress({
-            step: apiStep,
+      // Run setup with progress callbacks, passing preflight result for selective setup
+      const result = await this.vscodeSetup.setup(
+        preflightResult.success ? preflightResult : undefined,
+        (serviceProgress) => {
+          this.logger?.debug("Setup progress", {
+            step: serviceProgress.step,
             message: serviceProgress.message,
           });
+          const apiStep = this.mapSetupStep(serviceProgress.step);
+          if (apiStep) {
+            this.emitProgress({
+              step: apiStep,
+              message: serviceProgress.message,
+            });
+          }
         }
-      });
+      );
 
       if (result.success) {
         this.logger?.info("Setup complete", {});

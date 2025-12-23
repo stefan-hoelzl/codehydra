@@ -129,15 +129,15 @@ All external system access MUST go through abstraction interfaces. Direct librar
 
 ## Key Concepts
 
-| Concept         | Description                                                                                                                                                                                               |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project         | Git repository path (container, not viewable) - the main git directory                                                                                                                                    |
-| Workspace       | Git worktree (viewable in code-server) - NOT the main directory                                                                                                                                           |
-| WebContentsView | Electron view for embedding (not iframe)                                                                                                                                                                  |
-| Shortcut Mode   | Keyboard-driven navigation activated by Alt+X. All key detection in main process (ShortcutController). Actions: ↑↓ navigate, 1-0 jump, Enter new, Delete remove, O open project. Escape exits (renderer). |
-| VS Code Setup   | First-run setup that installs extensions and config; runs once before code-server starts; marker at `<app-data>/vscode/.setup-completed`. See [VS Code Assets](#vs-code-assets) for details.              |
-| .keepfiles      | Config file in project root listing files to copy to new workspaces. Uses gitignore syntax with **inverted semantics** - listed patterns are COPIED (not ignored). Supports negation with `!` prefix.     |
-| App Icon Badge  | Shows count of idle workspaces on the app icon. Platform support: macOS dock badge, Windows taskbar overlay, Linux Unity launcher. Badge hidden when count is 0.                                          |
+| Concept         | Description                                                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Project         | Git repository path (container, not viewable) - the main git directory                                                                                                                                                         |
+| Workspace       | Git worktree (viewable in code-server) - NOT the main directory                                                                                                                                                                |
+| WebContentsView | Electron view for embedding (not iframe)                                                                                                                                                                                       |
+| Shortcut Mode   | Keyboard-driven navigation activated by Alt+X. All key detection in main process (ShortcutController). Actions: ↑↓ navigate, 1-0 jump, Enter new, Delete remove, O open project. Escape exits (renderer).                      |
+| VS Code Setup   | First-run setup that installs extensions and config; uses preflight checks on every startup to detect missing/outdated components; marker at `<app-data>/.setup-completed`. See [VS Code Assets](#vs-code-assets) for details. |
+| .keepfiles      | Config file in project root listing files to copy to new workspaces. Uses gitignore syntax with **inverted semantics** - listed patterns are COPIED (not ignored). Supports negation with `!` prefix.                          |
+| App Icon Badge  | Shows count of idle workspaces on the app icon. Platform support: macOS dock badge, Windows taskbar overlay, Linux Unity launcher. Badge hidden when count is 0.                                                               |
 
 ## VS Code Assets
 
@@ -151,6 +151,29 @@ VS Code setup assets (settings, keybindings, extensions) are stored as dedicated
 | `src/services/vscode-setup/assets/keybindings.json`    | Custom keybindings (Alt+T for panel toggle)                |
 | `src/services/vscode-setup/assets/extensions.json`     | Extension manifest (marketplace + bundled vsix)            |
 | `src/services/vscode-setup/assets/codehydra-sidekick/` | Custom extension source (packaged to .vsix at build)       |
+
+### extensions.json Format
+
+The extensions.json file uses a structured format for preflight version checking:
+
+```json
+{
+  "marketplace": ["sst-dev.opencode"],
+  "bundled": [
+    {
+      "id": "codehydra.codehydra",
+      "version": "0.0.1",
+      "vsix": "codehydra.vscode-0.0.1.vsix"
+    }
+  ]
+}
+```
+
+**Important**: When updating bundled extensions:
+
+1. Update the `version` field to match the new extension version
+2. Update the `vsix` field to match the new vsix filename
+3. The preflight phase will detect version mismatches and only reinstall outdated extensions
 
 ### Build Process
 

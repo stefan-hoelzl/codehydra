@@ -19,7 +19,7 @@ import {
   type BuildInfo,
   type LoggingService,
 } from "../services";
-import { VscodeSetupService } from "../services/vscode-setup";
+import { VscodeSetupService, WrapperScriptGenerationService } from "../services/vscode-setup";
 import { ExecaProcessRunner } from "../services/platform/process";
 import {
   DefaultBinaryDownloadService,
@@ -469,11 +469,14 @@ async function startServices(): Promise<void> {
  * bootstrap() → startServices()
  *
  * The initialization flow is:
- * 1. Create VscodeSetupService (needed for LifecycleApi)
- * 2. Create WindowManager and ViewManager
- * 3. Create LifecycleApi and register lifecycle handlers (available immediately)
- * 4. Load UI (renderer will call lifecycle.getState() in onMount)
- * 5. Handler returns "ready" or "setup"
+ * 1. Initialize logging and disable application menu
+ * 2. Create VscodeSetupService, BinaryDownloadService
+ * 3. Regenerate wrapper scripts (cheap operation on every startup)
+ * 4. Run preflight to determine if setup is needed
+ * 5. Create WindowManager and ViewManager
+ * 6. Create LifecycleApi and register lifecycle handlers
+ * 7. If setup complete, start services immediately
+ * 8. Load UI (renderer will call lifecycle.getState() in onMount)
  *    - If "ready": renderer shows MainView
  *    - If "setup": renderer shows SetupScreen, calls lifecycle.setup()
  */
@@ -519,10 +522,27 @@ async function bootstrap(): Promise<void> {
     loggingService.createLogger("vscode-setup")
   );
 
-  // 3. Check if setup is already complete (determines code-server startup)
-  const setupComplete = await vscodeSetupService.isSetupComplete();
+  // 3. Regenerate wrapper scripts on every startup (cheap operation, ~1ms)
+  // This ensures scripts are always fresh and match current binary versions
+  const wrapperScriptService = new WrapperScriptGenerationService(
+    pathProvider,
+    fileSystemLayer,
+    platformInfo,
+    loggingService.createLogger("vscode-setup") // Use vscode-setup logger for wrapper scripts
+  );
+  try {
+    await wrapperScriptService.regenerate();
+  } catch (error) {
+    // Log but don't fail bootstrap - scripts can be regenerated during setup
+    const message = error instanceof Error ? error.message : String(error);
+    appLogger.warn("Failed to regenerate wrapper scripts", { error: message });
+  }
 
-  // 4. Create WindowManager with appropriate title and icon
+  // 4. Run preflight to determine if setup is needed
+  const preflightResult = await vscodeSetupService.preflight();
+  const setupComplete = preflightResult.success && !preflightResult.needsSetup;
+
+  // 5. Create WindowManager with appropriate title and icon
   // In dev mode, show branch name: "CodeHydra (branch-name)"
   const windowTitle =
     buildInfo.isDevelopment && buildInfo.gitBranch
@@ -535,7 +555,7 @@ async function bootstrap(): Promise<void> {
     pathProvider.appIconPath
   );
 
-  // 5. Create ViewManager with port=0 initially
+  // 6. Create ViewManager with port=0 initially
   // Port will be updated when startServices() runs
   viewManager = ViewManager.create(
     windowManager,
@@ -546,14 +566,14 @@ async function bootstrap(): Promise<void> {
     loggingService.createLogger("view")
   );
 
-  // 6. Maximize window after ViewManager subscription is active
+  // 7. Maximize window after ViewManager subscription is active
   // On Linux, maximize() is async - wait for it to complete before loading UI
   await windowManager.maximizeAsync();
 
   // Capture viewManager for closure (TypeScript narrow refinement doesn't persist)
   const viewManagerRef = viewManager;
 
-  // 7. Create LifecycleApi - this must happen BEFORE loading UI
+  // 8. Create LifecycleApi - this must happen BEFORE loading UI
   // The LifecycleApi handles setup flow and is reused by CodeHydraApiImpl
   lifecycleApi = new LifecycleApi(
     vscodeSetupService,
@@ -571,11 +591,11 @@ async function bootstrap(): Promise<void> {
     loggingService.createLogger("lifecycle")
   );
 
-  // 8. Register lifecycle handlers EARLY (before loading UI)
+  // 9. Register lifecycle handlers EARLY (before loading UI)
   // These handlers delegate to LifecycleApi
   registerLifecycleHandlers(lifecycleApi);
 
-  // 9. If setup is complete, start services immediately
+  // 10. If setup is complete, start services immediately
   // This is done BEFORE loading UI so handlers are ready when MainView mounts
   if (setupComplete) {
     await startServices();
@@ -584,12 +604,12 @@ async function bootstrap(): Promise<void> {
     appLogger.info("Setup required");
   }
 
-  // 10. Load UI layer HTML
+  // 11. Load UI layer HTML
   // Renderer will call lifecycle.getState() in onMount and route based on response
   const uiView = viewManager.getUIView();
   await uiView.webContents.loadFile(nodePath.join(__dirname, "../renderer/index.html"));
 
-  // 11. Open DevTools in development only
+  // 12. Open DevTools in development only
   // Note: DevTools not auto-opened to avoid z-order issues on Linux.
   // Use Ctrl+Shift+I to open manually when needed (opens detached).
   if (buildInfo.isDevelopment) {

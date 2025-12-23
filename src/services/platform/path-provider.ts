@@ -24,8 +24,11 @@ export interface PathProvider {
   /** Directory for VS Code user data: `<dataRoot>/vscode/user-data/` */
   readonly vscodeUserDataDir: string;
 
-  /** Path to VS Code setup marker: `<dataRoot>/vscode/.setup-completed` */
-  readonly vscodeSetupMarkerPath: string;
+  /** Path to setup marker: `<dataRoot>/.setup-completed` */
+  readonly setupMarkerPath: string;
+
+  /** @deprecated Use setupMarkerPath. Legacy location for migration detection. */
+  readonly legacySetupMarkerPath: string;
 
   /** Directory for Electron data: `<dataRoot>/electron/` */
   readonly electronDataDir: string;
@@ -79,7 +82,8 @@ export class DefaultPathProvider implements PathProvider {
   readonly vscodeDir: string;
   readonly vscodeExtensionsDir: string;
   readonly vscodeUserDataDir: string;
-  readonly vscodeSetupMarkerPath: string;
+  readonly setupMarkerPath: string;
+  readonly legacySetupMarkerPath: string;
   readonly electronDataDir: string;
   readonly vscodeAssetsDir: string;
   readonly appIconPath: string;
@@ -96,7 +100,8 @@ export class DefaultPathProvider implements PathProvider {
     this.vscodeDir = join(this.dataRootDir, "vscode");
     this.vscodeExtensionsDir = join(this.vscodeDir, "extensions");
     this.vscodeUserDataDir = join(this.vscodeDir, "user-data");
-    this.vscodeSetupMarkerPath = join(this.vscodeDir, ".setup-completed");
+    this.setupMarkerPath = join(this.dataRootDir, ".setup-completed");
+    this.legacySetupMarkerPath = join(this.vscodeDir, ".setup-completed");
     this.electronDataDir = join(this.dataRootDir, "electron");
     // Assets are bundled at out/main/assets/ (same path in dev and prod)
     this.vscodeAssetsDir = join(buildInfo.appPath, "out", "main", "assets");

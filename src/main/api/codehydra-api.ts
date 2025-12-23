@@ -940,20 +940,36 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
   }
 
   private createLifecycleApi(): ILifecycleApi {
+    // Cache preflight result for use by setup()
+    let cachedPreflightResult: import("../../services/vscode-setup/types").PreflightResult | null =
+      null;
+
     return {
       getState: async (): Promise<AppStateType> => {
         if (!this.vscodeSetup) {
           // If no setup service provided, assume ready
           return "ready";
         }
-        const isComplete = await this.vscodeSetup.isSetupComplete();
-        return isComplete ? "ready" : "setup";
+        // Use preflight to determine state
+        cachedPreflightResult = await this.vscodeSetup.preflight();
+        if (!cachedPreflightResult.success) {
+          return "setup"; // Preflight failed, need setup
+        }
+        return cachedPreflightResult.needsSetup ? "setup" : "ready";
       },
 
       setup: async (): Promise<SetupResult> => {
         if (!this.vscodeSetup) {
           return { success: true };
         }
+
+        // Use cached preflight result or run preflight if not available
+        let preflightResult = cachedPreflightResult;
+        if (!preflightResult) {
+          preflightResult = await this.vscodeSetup.preflight();
+        }
+        // Clear cache after use
+        cachedPreflightResult = null;
 
         // Create a progress callback that translates service types to API types
         // and emits setup:progress events
@@ -968,7 +984,7 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
           }
         };
 
-        const serviceResult = await this.vscodeSetup.setup(onProgress);
+        const serviceResult = await this.vscodeSetup.setup(preflightResult, onProgress);
 
         // Translate service result to API result
         if (serviceResult.success) {

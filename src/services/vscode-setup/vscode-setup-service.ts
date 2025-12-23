@@ -10,16 +10,18 @@ import type { PlatformInfo } from "../platform/platform-info";
 import type { Logger } from "../logging/index";
 import { VscodeSetupError } from "../errors";
 import {
-  CURRENT_SETUP_VERSION,
   type IVscodeSetup,
   type SetupResult,
   type ProgressCallback,
   type SetupMarker,
   type ProcessRunner,
-  type ExtensionsConfig,
   type BinTargetPaths,
+  type PreflightResult,
+  type BinaryType,
+  validateExtensionsConfig,
 } from "./types";
 import { generateScripts } from "./bin-scripts";
+import { listInstalledExtensions } from "./extension-utils";
 import type { BinaryDownloadService } from "../binary-download/binary-download-service";
 
 /**
@@ -57,12 +59,140 @@ export class VscodeSetupService implements IVscodeSetup {
   }
 
   /**
-   * Check if setup has been completed with the current version.
-   * @returns true if setup is complete and version matches
+   * Check if setup has been completed with the current schema version.
+   * @returns true if setup is complete and schema version matches
    */
   async isSetupComplete(): Promise<boolean> {
     const marker = await this.readMarker();
-    return marker !== null && marker.version === CURRENT_SETUP_VERSION;
+    // schemaVersion 1 is the current version; 0 indicates legacy format
+    return marker !== null && marker.schemaVersion === 1;
+  }
+
+  /**
+   * Run preflight checks to determine what needs to be installed/updated.
+   *
+   * This is a read-only operation that checks:
+   * - Binary versions (code-server, opencode)
+   * - Installed extension versions
+   * - Setup marker validity
+   *
+   * @returns PreflightResult indicating what components need setup
+   */
+  async preflight(): Promise<PreflightResult> {
+    const missingBinaries: BinaryType[] = [];
+    const missingExtensions: string[] = [];
+    const outdatedExtensions: string[] = [];
+
+    try {
+      // Check binaries
+      if (this.binaryDownloadService) {
+        const codeServerInstalled = await this.binaryDownloadService.isInstalled("code-server");
+        if (!codeServerInstalled) {
+          missingBinaries.push("code-server");
+        }
+        const opencodeInstalled = await this.binaryDownloadService.isInstalled("opencode");
+        if (!opencodeInstalled) {
+          missingBinaries.push("opencode");
+        }
+      }
+
+      // Load extensions config
+      const configContent = await this.fs.readFile(join(this.assetsDir, "extensions.json"));
+      const parsed = JSON.parse(configContent) as unknown;
+      const validation = validateExtensionsConfig(parsed);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: { type: "unknown", message: validation.error },
+        };
+      }
+      const config = validation.config;
+
+      // List installed extensions
+      const installedExtensions = await listInstalledExtensions(
+        this.fs,
+        this.pathProvider.vscodeExtensionsDir
+      );
+
+      // Check marketplace extensions (any version)
+      for (const extId of config.marketplace) {
+        if (!installedExtensions.has(extId)) {
+          missingExtensions.push(extId);
+        }
+      }
+
+      // Check bundled extensions (exact version)
+      for (const bundledExt of config.bundled) {
+        const installedVersion = installedExtensions.get(bundledExt.id);
+        if (!installedVersion) {
+          missingExtensions.push(bundledExt.id);
+        } else if (installedVersion !== bundledExt.version) {
+          outdatedExtensions.push(bundledExt.id);
+        }
+      }
+
+      // Check marker file (check new location, then legacy location)
+      const marker = await this.readMarker();
+      const legacyMarker = await this.readLegacyMarker();
+
+      // If no valid marker exists, or marker has old format, setup is needed
+      // The new format uses 'schemaVersion' instead of 'version'
+      const hasValidMarker =
+        marker !== null && "schemaVersion" in marker && marker.schemaVersion === 1;
+
+      // Legacy marker (old 'version' field or old location) triggers re-setup
+      const hasLegacyMarker = legacyMarker !== null || (marker !== null && !hasValidMarker);
+
+      const needsSetup =
+        missingBinaries.length > 0 ||
+        missingExtensions.length > 0 ||
+        outdatedExtensions.length > 0 ||
+        !hasValidMarker ||
+        hasLegacyMarker;
+
+      this.logger?.debug("Preflight completed", {
+        needsSetup,
+        missingBinaries: missingBinaries.join(",") || "none",
+        missingExtensions: missingExtensions.join(",") || "none",
+        outdatedExtensions: outdatedExtensions.join(",") || "none",
+        hasValidMarker,
+        hasLegacyMarker,
+      });
+
+      return {
+        success: true,
+        needsSetup,
+        missingBinaries,
+        missingExtensions,
+        outdatedExtensions,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger?.warn("Preflight failed", { error: message });
+      return {
+        success: false,
+        error: { type: "filesystem-unreadable", message },
+      };
+    }
+  }
+
+  /**
+   * Remove specific extension directories before reinstallation.
+   * @param extensionIds Extension IDs to clean (e.g., "codehydra.codehydra")
+   */
+  async cleanComponents(extensionIds: readonly string[]): Promise<void> {
+    const extensionsDir = this.pathProvider.vscodeExtensionsDir;
+    const installedExtensions = await listInstalledExtensions(this.fs, extensionsDir);
+
+    for (const extId of extensionIds) {
+      const version = installedExtensions.get(extId);
+      if (version) {
+        const extDirName = `${extId}-${version}`;
+        const extPath = join(extensionsDir, extDirName);
+        this.logger?.debug("Cleaning extension", { extId, path: extPath });
+        await this.fs.rm(extPath, { recursive: true, force: true });
+      }
+    }
   }
 
   /**
@@ -79,21 +209,38 @@ export class VscodeSetupService implements IVscodeSetup {
    * - CLI wrapper scripts created in bin directory
    * - Marker file written with version
    *
+   * @param preflightResult Preflight result indicating what components need setup
    * @param onProgress Optional callback for progress updates
    * @returns Result indicating success or failure with error details
    */
-  async setup(onProgress?: ProgressCallback): Promise<SetupResult> {
+  async setup(
+    preflightResult: PreflightResult,
+    onProgress?: ProgressCallback
+  ): Promise<SetupResult> {
     // Step 0: Validate required assets exist
     await this.validateAssets();
 
+    // Use preflight result for selective setup if successful
+    const preflight = preflightResult.success ? preflightResult : undefined;
+
+    // Clean outdated extensions before reinstalling
+    if (preflight && preflight.outdatedExtensions.length > 0) {
+      await this.cleanComponents(preflight.outdatedExtensions);
+    }
+
     // Step 1: Download binaries (if BinaryDownloadService is provided)
-    const binaryResult = await this.downloadBinaries(onProgress);
+    // Use preflight result to determine which binaries to download
+    const binaryResult = await this.downloadBinaries(onProgress, preflight?.missingBinaries);
     if (!binaryResult.success) {
       return binaryResult;
     }
 
     // Step 2: Install extensions (bundled and marketplace)
-    const extensionsResult = await this.installExtensions(onProgress);
+    // Use preflight result to determine which extensions to install
+    const extensionsToInstall = preflight
+      ? [...preflight.missingExtensions, ...preflight.outdatedExtensions]
+      : undefined;
+    const extensionsResult = await this.installExtensions(onProgress, extensionsToInstall);
     if (!extensionsResult.success) {
       return extensionsResult;
     }
@@ -110,17 +257,33 @@ export class VscodeSetupService implements IVscodeSetup {
   /**
    * Download code-server and opencode binaries if not already installed.
    * @param onProgress Optional callback for progress updates
+   * @param missingBinaries Optional list of binaries to download (from preflight)
    * @returns Result indicating success or failure
    */
-  private async downloadBinaries(onProgress?: ProgressCallback): Promise<SetupResult> {
+  private async downloadBinaries(
+    onProgress?: ProgressCallback,
+    missingBinaries?: readonly BinaryType[]
+  ): Promise<SetupResult> {
     if (!this.binaryDownloadService) {
       // No binary download service - skip (for backward compatibility)
       return { success: true };
     }
 
+    // Determine which binaries to download
+    // If missingBinaries is provided, only download those
+    // Otherwise, check and download both (full setup)
+    const shouldDownloadCodeServer =
+      missingBinaries === undefined
+        ? !(await this.binaryDownloadService.isInstalled("code-server"))
+        : missingBinaries.includes("code-server");
+
+    const shouldDownloadOpencode =
+      missingBinaries === undefined
+        ? !(await this.binaryDownloadService.isInstalled("opencode"))
+        : missingBinaries.includes("opencode");
+
     // Download code-server
-    const codeServerInstalled = await this.binaryDownloadService.isInstalled("code-server");
-    if (!codeServerInstalled) {
+    if (shouldDownloadCodeServer) {
       this.logger?.info("Downloading binary", { binary: "code-server" });
       onProgress?.({ step: "binary-download", message: "Setting up code-server..." });
       try {
@@ -140,8 +303,7 @@ export class VscodeSetupService implements IVscodeSetup {
     }
 
     // Download opencode
-    const opencodeInstalled = await this.binaryDownloadService.isInstalled("opencode");
-    if (!opencodeInstalled) {
+    if (shouldDownloadOpencode) {
       this.logger?.info("Downloading binary", { binary: "opencode" });
       onProgress?.({ step: "binary-download", message: "Setting up opencode..." });
       try {
@@ -221,14 +383,11 @@ export class VscodeSetupService implements IVscodeSetup {
     onProgress?.({ step: "finalize", message: "Finalizing setup..." });
 
     const marker: SetupMarker = {
-      version: CURRENT_SETUP_VERSION,
+      schemaVersion: 1, // Current marker schema version
       completedAt: new Date().toISOString(),
     };
 
-    await this.fs.writeFile(
-      this.pathProvider.vscodeSetupMarkerPath,
-      JSON.stringify(marker, null, 2)
-    );
+    await this.fs.writeFile(this.pathProvider.setupMarkerPath, JSON.stringify(marker, null, 2));
   }
 
   /**
@@ -351,20 +510,47 @@ export class VscodeSetupService implements IVscodeSetup {
   /**
    * Install all extensions (bundled vsix and marketplace).
    * @param onProgress Optional callback for progress updates
+   * @param extensionsToInstall Optional list of extension IDs to install (for selective setup)
    * @returns Result indicating success or failure
    */
-  async installExtensions(onProgress?: ProgressCallback): Promise<SetupResult> {
+  async installExtensions(
+    onProgress?: ProgressCallback,
+    extensionsToInstall?: readonly string[]
+  ): Promise<SetupResult> {
     // Load extensions config from assets
     const configContent = await this.fs.readFile(join(this.assetsDir, "extensions.json"));
-    const config = JSON.parse(configContent) as ExtensionsConfig;
+    const parsed = JSON.parse(configContent) as unknown;
+
+    // Validate config format
+    const validation = validateExtensionsConfig(parsed);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error: {
+          type: "missing-assets",
+          message: validation.error,
+          code: "INVALID_EXTENSIONS_CONFIG",
+        },
+      };
+    }
+    const config = validation.config;
+
+    // If extensionsToInstall is provided, filter to only those extensions
+    // Otherwise, install all extensions (full setup)
+    const shouldInstall = (extId: string) =>
+      extensionsToInstall === undefined || extensionsToInstall.includes(extId);
 
     // Install bundled extensions (vsix files)
-    for (const vsixFilename of config.bundled) {
-      onProgress?.({ step: "extensions", message: `Installing ${vsixFilename}...` });
+    for (const bundledExt of config.bundled) {
+      if (!shouldInstall(bundledExt.id)) {
+        continue;
+      }
+
+      onProgress?.({ step: "extensions", message: `Installing ${bundledExt.id}...` });
 
       // Copy vsix from assets to vscode directory for installation
-      const srcPath = join(this.assetsDir, vsixFilename);
-      const destPath = join(this.pathProvider.vscodeDir, vsixFilename);
+      const srcPath = join(this.assetsDir, bundledExt.vsix);
+      const destPath = join(this.pathProvider.vscodeDir, bundledExt.vsix);
       await this.fs.mkdir(this.pathProvider.vscodeDir);
       await this.fs.copyTree(srcPath, destPath);
 
@@ -377,6 +563,10 @@ export class VscodeSetupService implements IVscodeSetup {
 
     // Install marketplace extensions
     for (const extensionId of config.marketplace) {
+      if (!shouldInstall(extensionId)) {
+        continue;
+      }
+
       onProgress?.({ step: "extensions", message: `Installing ${extensionId}...` });
 
       const result = await this.runInstallExtension(extensionId);
@@ -429,16 +619,50 @@ export class VscodeSetupService implements IVscodeSetup {
   }
 
   /**
-   * Read and parse the setup marker file.
+   * Read and parse the setup marker file from the new location.
    * @returns Parsed marker or null if missing/invalid
    */
   private async readMarker(): Promise<SetupMarker | null> {
     try {
-      const content = await this.fs.readFile(this.pathProvider.vscodeSetupMarkerPath);
-      const marker = JSON.parse(content) as SetupMarker;
-      // Validate marker structure
-      if (typeof marker.version === "number" && typeof marker.completedAt === "string") {
-        return marker;
+      const content = await this.fs.readFile(this.pathProvider.setupMarkerPath);
+      const marker = JSON.parse(content) as unknown;
+      // Validate marker structure - accept both old and new formats
+      if (typeof marker !== "object" || marker === null) {
+        return null;
+      }
+      const obj = marker as Record<string, unknown>;
+      // Check for new format (schemaVersion)
+      if (typeof obj.schemaVersion === "number" && typeof obj.completedAt === "string") {
+        return { schemaVersion: obj.schemaVersion, completedAt: obj.completedAt };
+      }
+      // Check for old format (version) - return it with version as schemaVersion for compatibility
+      if (typeof obj.version === "number" && typeof obj.completedAt === "string") {
+        return { schemaVersion: 0, completedAt: obj.completedAt }; // schemaVersion 0 indicates legacy
+      }
+      return null;
+    } catch {
+      // File doesn't exist or is invalid
+      return null;
+    }
+  }
+
+  /**
+   * Read and parse the setup marker file from the legacy location.
+   * @returns Parsed marker or null if missing/invalid
+   */
+  private async readLegacyMarker(): Promise<SetupMarker | null> {
+    try {
+      const content = await this.fs.readFile(this.pathProvider.legacySetupMarkerPath);
+      const marker = JSON.parse(content) as unknown;
+      if (typeof marker !== "object" || marker === null) {
+        return null;
+      }
+      const obj = marker as Record<string, unknown>;
+      if (typeof obj.version === "number" && typeof obj.completedAt === "string") {
+        return { schemaVersion: 0, completedAt: obj.completedAt }; // Legacy format
+      }
+      if (typeof obj.schemaVersion === "number" && typeof obj.completedAt === "string") {
+        return { schemaVersion: obj.schemaVersion, completedAt: obj.completedAt };
       }
       return null;
     } catch {

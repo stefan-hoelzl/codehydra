@@ -3,32 +3,96 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { LifecycleApi } from "./lifecycle-api";
-import type { IVscodeSetup, SetupResult } from "../../services/vscode-setup/types";
+import {
+  LifecycleApi,
+  type OnSetupCompleteCallback,
+  type EmitProgressCallback,
+} from "./lifecycle-api";
+import type { IVscodeSetup, SetupResult, PreflightResult } from "../../services/vscode-setup/types";
 
 // =============================================================================
 // Test Utilities
 // =============================================================================
 
-function createMockVscodeSetup(
-  overrides: {
-    isSetupComplete?: boolean;
-    setupResult?: SetupResult;
-  } = {}
-): IVscodeSetup {
-  const { isSetupComplete = true, setupResult = { success: true } } = overrides;
-
+/**
+ * Create a successful preflight result indicating setup is needed.
+ */
+function createPreflightNeedsSetup(
+  overrides: Partial<{
+    missingBinaries: readonly string[];
+    missingExtensions: readonly string[];
+    outdatedExtensions: readonly string[];
+  }> = {}
+): PreflightResult {
   return {
-    isSetupComplete: vi.fn().mockResolvedValue(isSetupComplete),
-    setup: vi.fn().mockResolvedValue(setupResult),
-    cleanVscodeDir: vi.fn().mockResolvedValue(undefined),
+    success: true,
+    needsSetup: true,
+    missingBinaries: overrides.missingBinaries ?? ["code-server"],
+    missingExtensions: overrides.missingExtensions ?? [],
+    outdatedExtensions: overrides.outdatedExtensions ?? [],
+  } as PreflightResult;
+}
+
+/**
+ * Create a successful preflight result indicating no setup needed.
+ */
+function createPreflightReady(): PreflightResult {
+  return {
+    success: true,
+    needsSetup: false,
+    missingBinaries: [],
+    missingExtensions: [],
+    outdatedExtensions: [],
   };
 }
 
-function createMockApp(): { quit: ReturnType<typeof vi.fn> } {
+function createMockVscodeSetup(
+  overrides: {
+    preflightResult?: PreflightResult;
+    setupResult?: SetupResult;
+  } = {}
+): IVscodeSetup {
+  const { preflightResult = createPreflightReady(), setupResult = { success: true } } = overrides;
+
   return {
-    quit: vi.fn(),
+    isSetupComplete: vi
+      .fn()
+      .mockResolvedValue(!preflightResult.success || !preflightResult.needsSetup),
+    preflight: vi.fn().mockResolvedValue(preflightResult),
+    setup: vi.fn().mockResolvedValue(setupResult),
+    cleanVscodeDir: vi.fn().mockResolvedValue(undefined),
+    cleanComponents: vi.fn().mockResolvedValue(undefined),
   };
+}
+
+interface MockApp {
+  quit: () => void;
+}
+
+function createMockApp(): MockApp {
+  return {
+    quit: vi.fn() as unknown as () => void,
+  };
+}
+
+/** Typed mock for OnSetupCompleteCallback that can be used with expect assertions */
+type MockedOnSetupComplete = OnSetupCompleteCallback & ReturnType<typeof vi.fn>;
+
+/** Typed mock for EmitProgressCallback that can be used with expect assertions */
+type MockedEmitProgress = EmitProgressCallback & ReturnType<typeof vi.fn>;
+
+/**
+ * Create a mock for OnSetupCompleteCallback.
+ */
+function createOnSetupCompleteMock(): MockedOnSetupComplete {
+  return vi.fn().mockResolvedValue(undefined) as MockedOnSetupComplete;
+}
+
+/**
+ * Create a mock for EmitProgressCallback.
+ */
+function createEmitProgressMock(): MockedEmitProgress {
+  return vi.fn() as MockedEmitProgress;
 }
 
 // =============================================================================
@@ -37,59 +101,101 @@ function createMockApp(): { quit: ReturnType<typeof vi.fn> } {
 
 describe("LifecycleApi", () => {
   let mockSetup: IVscodeSetup;
-  let mockApp: ReturnType<typeof createMockApp>;
-  let onSetupComplete: ReturnType<typeof vi.fn>;
-  let emitProgress: ReturnType<typeof vi.fn>;
+  let mockApp: MockApp;
+  let onSetupComplete: MockedOnSetupComplete;
+  let emitProgress: MockedEmitProgress;
 
   beforeEach(() => {
     mockSetup = createMockVscodeSetup();
     mockApp = createMockApp();
-    onSetupComplete = vi.fn().mockResolvedValue(undefined);
-    emitProgress = vi.fn();
+    onSetupComplete = createOnSetupCompleteMock();
+    emitProgress = createEmitProgressMock();
   });
 
   describe("getState()", () => {
-    it("returns 'ready' when setup is complete", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: true });
+    it("returns 'ready' when preflight indicates no setup needed", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightReady() });
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
 
       const state = await api.getState();
 
       expect(state).toBe("ready");
+      expect(mockSetup.preflight).toHaveBeenCalled();
     });
 
-    it("returns 'setup' when setup is incomplete", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: false });
+    it("returns 'setup' when preflight indicates setup needed", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
 
       const state = await api.getState();
 
       expect(state).toBe("setup");
     });
+
+    it("returns 'setup' when preflight fails", async () => {
+      const failedPreflight: PreflightResult = {
+        success: false,
+        error: { type: "filesystem-unreadable", message: "Cannot read extensions directory" },
+      };
+      mockSetup = createMockVscodeSetup({ preflightResult: failedPreflight });
+      const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
+
+      const state = await api.getState();
+
+      expect(state).toBe("setup");
+    });
+
+    it("caches preflight result for use by setup()", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
+      const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
+
+      // Call getState to cache preflight result
+      await api.getState();
+
+      // Call setup - should use cached result
+      await api.setup();
+
+      // preflight should only be called once (in getState)
+      expect(mockSetup.preflight).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("setup()", () => {
-    it("calls cleanVscodeDir before running setup (auto-clean)", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: false });
+    it("does NOT call cleanVscodeDir before running setup (selective clean only)", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
 
       await api.setup();
 
-      expect(mockSetup.cleanVscodeDir).toHaveBeenCalled();
+      // cleanVscodeDir should NOT be called - selective cleaning happens in VscodeSetupService
+      expect(mockSetup.cleanVscodeDir).not.toHaveBeenCalled();
       expect(mockSetup.setup).toHaveBeenCalled();
+    });
 
-      // Verify clean is called before setup
-      const cleanOrder = (mockSetup.cleanVscodeDir as ReturnType<typeof vi.fn>).mock
-        .invocationCallOrder[0];
-      const setupOrder = (mockSetup.setup as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
-      expect(cleanOrder).toBeLessThan(setupOrder!);
+    it("passes preflight result to setup() for selective installation", async () => {
+      const preflightResult = createPreflightNeedsSetup({
+        missingBinaries: ["opencode"],
+        outdatedExtensions: ["codehydra.codehydra"],
+      });
+      mockSetup = createMockVscodeSetup({ preflightResult });
+      const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
+
+      await api.setup();
+
+      // setup should be called with the preflight result
+      expect(mockSetup.setup).toHaveBeenCalledWith(preflightResult, expect.any(Function));
     });
 
     it("emits progress events during setup", async () => {
-      const mockSetupService = createMockVscodeSetup({ isSetupComplete: false });
+      const mockSetupService = createMockVscodeSetup({
+        preflightResult: createPreflightNeedsSetup(),
+      });
       // Capture the progress callback and invoke it
       (mockSetupService.setup as ReturnType<typeof vi.fn>).mockImplementation(
-        async (onProgress: (progress: { step: string; message: string }) => void) => {
+        async (
+          _preflight: unknown,
+          onProgress: (progress: { step: string; message: string }) => void
+        ) => {
           onProgress({ step: "binary-download", message: "Setting up code-server..." });
           onProgress({ step: "extensions", message: "Installing extensions..." });
           onProgress({ step: "config", message: "Configuring settings..." });
@@ -116,7 +222,7 @@ describe("LifecycleApi", () => {
     });
 
     it("calls onSetupComplete callback on success", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: false });
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
 
       const result = await api.setup();
@@ -127,7 +233,7 @@ describe("LifecycleApi", () => {
 
     it("returns failure result on error", async () => {
       mockSetup = createMockVscodeSetup({
-        isSetupComplete: false,
+        preflightResult: createPreflightNeedsSetup(),
         setupResult: { success: false, error: { type: "network", message: "Failed to install" } },
       });
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
@@ -144,7 +250,7 @@ describe("LifecycleApi", () => {
     });
 
     it("guards against concurrent setup calls", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: false });
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
       // Make setup take time
       let resolveSetup: () => void;
       (mockSetup.setup as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -175,8 +281,8 @@ describe("LifecycleApi", () => {
       expect(result1).toEqual({ success: true });
     });
 
-    it("returns success immediately if already complete", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: true });
+    it("returns success immediately if no setup needed (preflight.needsSetup is false)", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightReady() });
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
 
       const result = await api.setup();
@@ -190,8 +296,8 @@ describe("LifecycleApi", () => {
     });
 
     it("handles error in onSetupComplete callback", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: false });
-      onSetupComplete.mockRejectedValue(new Error("Services failed to start"));
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
+      onSetupComplete = vi.fn().mockRejectedValue(new Error("Services failed to start"));
 
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
       const result = await api.setup();
@@ -205,7 +311,7 @@ describe("LifecycleApi", () => {
     });
 
     it("resets setupInProgress flag on error", async () => {
-      mockSetup = createMockVscodeSetup({ isSetupComplete: false });
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
       (mockSetup.setup as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Setup failed"));
 
       const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
@@ -221,9 +327,14 @@ describe("LifecycleApi", () => {
     });
 
     it("filters out finalize step from progress events", async () => {
-      const mockSetupService = createMockVscodeSetup({ isSetupComplete: false });
+      const mockSetupService = createMockVscodeSetup({
+        preflightResult: createPreflightNeedsSetup(),
+      });
       (mockSetupService.setup as ReturnType<typeof vi.fn>).mockImplementation(
-        async (onProgress: (progress: { step: string; message: string }) => void) => {
+        async (
+          _preflight: unknown,
+          onProgress: (progress: { step: string; message: string }) => void
+        ) => {
           onProgress({ step: "extensions", message: "Installing..." });
           onProgress({ step: "finalize", message: "Finalizing..." });
           return { success: true };
@@ -239,6 +350,35 @@ describe("LifecycleApi", () => {
         step: "extensions",
         message: "Installing...",
       });
+    });
+
+    it("runs preflight if not cached (setup called without prior getState)", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
+      const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
+
+      // Call setup directly without getState
+      await api.setup();
+
+      // preflight should be called
+      expect(mockSetup.preflight).toHaveBeenCalled();
+      expect(mockSetup.setup).toHaveBeenCalled();
+    });
+
+    it("clears cached preflight result after use", async () => {
+      mockSetup = createMockVscodeSetup({ preflightResult: createPreflightNeedsSetup() });
+      const api = new LifecycleApi(mockSetup, mockApp, onSetupComplete, emitProgress);
+
+      // Call getState to cache preflight result
+      await api.getState();
+
+      // Call setup - uses cached result
+      await api.setup();
+
+      // Call setup again - should run preflight again since cache was cleared
+      await api.setup();
+
+      // preflight should be called twice (once in getState, once in second setup)
+      expect(mockSetup.preflight).toHaveBeenCalledTimes(2);
     });
   });
 

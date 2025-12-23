@@ -1,0 +1,109 @@
+/**
+ * Service for generating CLI wrapper scripts.
+ *
+ * This service is responsible for creating wrapper scripts (code, opencode)
+ * in the bin directory. It is designed to be called on every app startup
+ * to ensure scripts are always fresh and match current binary versions.
+ *
+ * Script regeneration is cheap (~1ms) and has no side effects beyond writing
+ * the scripts themselves, making it safe to run unconditionally.
+ */
+
+import { join } from "node:path";
+import type { PathProvider } from "../platform/path-provider";
+import type { FileSystemLayer } from "../platform/filesystem";
+import type { PlatformInfo } from "../platform/platform-info";
+import type { Logger } from "../logging/index";
+import { generateScripts } from "./bin-scripts";
+import type { BinTargetPaths } from "./types";
+
+/**
+ * Service for generating CLI wrapper scripts in the bin directory.
+ */
+export class WrapperScriptGenerationService {
+  constructor(
+    private readonly pathProvider: PathProvider,
+    private readonly fs: FileSystemLayer,
+    private readonly platformInfo: PlatformInfo,
+    private readonly logger?: Logger
+  ) {}
+
+  /**
+   * Regenerate all wrapper scripts in the bin directory.
+   *
+   * This method:
+   * 1. Creates the bin directory if it doesn't exist
+   * 2. Resolves target binary paths
+   * 3. Generates platform-appropriate scripts (shell or .cmd)
+   * 4. Writes scripts to disk with correct permissions
+   *
+   * Safe to call on every app startup - overwrites existing scripts.
+   */
+  async regenerate(): Promise<void> {
+    const binDir = this.pathProvider.binDir;
+
+    this.logger?.debug("Regenerating wrapper scripts", { binDir });
+
+    // Create bin directory (no-op if exists)
+    await this.fs.mkdir(binDir);
+
+    // Resolve target binary paths
+    const targetPaths = this.resolveTargetPaths();
+
+    // Generate scripts for this platform
+    const scripts = generateScripts(this.platformInfo, targetPaths, binDir);
+
+    // Write each script
+    for (const script of scripts) {
+      const scriptPath = join(binDir, script.filename);
+      await this.fs.writeFile(scriptPath, script.content);
+
+      // Make executable on Unix
+      if (script.needsExecutable) {
+        await this.fs.makeExecutable(scriptPath);
+      }
+
+      this.logger?.debug("Wrote wrapper script", { filename: script.filename });
+    }
+
+    this.logger?.info("Wrapper scripts regenerated", { count: scripts.length });
+  }
+
+  /**
+   * Resolve paths to target binaries for wrapper script generation.
+   *
+   * The code script points to code-server's remote-cli.
+   * The opencode script points to the downloaded opencode binary.
+   *
+   * @returns Target paths for script generation
+   */
+  private resolveTargetPaths(): BinTargetPaths {
+    // For the code command, we need the remote-cli script that code-server provides
+    const codeServerDir = this.pathProvider.codeServerDir;
+    const remoteCli = this.resolveRemoteCliPath(codeServerDir);
+
+    return {
+      codeRemoteCli: remoteCli,
+      opencodeBinary: this.pathProvider.opencodeBinaryPath,
+      bundledNodePath: this.pathProvider.bundledNodePath,
+    };
+  }
+
+  /**
+   * Resolve the path to the remote-cli script for the `code` command.
+   *
+   * @param codeServerDir - Path to code-server installation directory
+   * @returns Path to the remote-cli script
+   */
+  private resolveRemoteCliPath(codeServerDir: string): string {
+    const isWindows = this.platformInfo.platform === "win32";
+
+    if (isWindows) {
+      return join(codeServerDir, "lib", "vscode", "bin", "remote-cli", "code.cmd");
+    }
+
+    // Unix: the script is named based on platform
+    const platform = this.platformInfo.platform === "darwin" ? "darwin" : "linux";
+    return join(codeServerDir, "lib", "vscode", "bin", "remote-cli", `code-${platform}.sh`);
+  }
+}

@@ -1383,8 +1383,16 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
     app = createMockElectronApp();
     vscodeSetup = {
       isSetupComplete: vi.fn().mockResolvedValue(true),
+      preflight: vi.fn().mockResolvedValue({
+        success: true,
+        needsSetup: false,
+        missingBinaries: [],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      }),
       setup: vi.fn().mockResolvedValue({ success: true }),
       cleanVscodeDir: vi.fn(),
+      cleanComponents: vi.fn(),
     } as unknown as IVscodeSetup;
     api = new CodeHydraApiImpl(appState, viewManager, dialog, app, vscodeSetup);
   });
@@ -1423,17 +1431,29 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
         // No lifecycleApi passed
       );
 
-      // Should use internal lifecycle (backed by vscodeSetup)
-      vi.mocked(vscodeSetup.isSetupComplete).mockResolvedValue(false);
+      // Should use internal lifecycle (backed by vscodeSetup via preflight)
+      vi.mocked(vscodeSetup.preflight).mockResolvedValue({
+        success: true,
+        needsSetup: true,
+        missingBinaries: ["code-server"],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      });
       const state = await apiWithInternal.lifecycle.getState();
-      expect(vscodeSetup.isSetupComplete).toHaveBeenCalled();
+      expect(vscodeSetup.preflight).toHaveBeenCalled();
       expect(state).toBe("setup");
     });
   });
 
   describe("getState()", () => {
     it("should return 'ready' when setup is complete", async () => {
-      vi.mocked(vscodeSetup.isSetupComplete).mockResolvedValue(true);
+      vi.mocked(vscodeSetup.preflight).mockResolvedValue({
+        success: true,
+        needsSetup: false,
+        missingBinaries: [],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      });
 
       const result = await api.lifecycle.getState();
 
@@ -1441,7 +1461,13 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
     });
 
     it("should return 'setup' when setup is not complete", async () => {
-      vi.mocked(vscodeSetup.isSetupComplete).mockResolvedValue(false);
+      vi.mocked(vscodeSetup.preflight).mockResolvedValue({
+        success: true,
+        needsSetup: true,
+        missingBinaries: ["code-server"],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      });
 
       const result = await api.lifecycle.getState();
 
@@ -1451,6 +1477,13 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
 
   describe("setup()", () => {
     it("should return success result when setup succeeds", async () => {
+      vi.mocked(vscodeSetup.preflight).mockResolvedValue({
+        success: true,
+        needsSetup: true,
+        missingBinaries: ["code-server"],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      });
       vi.mocked(vscodeSetup.setup).mockResolvedValue({ success: true });
 
       const result = await api.lifecycle.setup();
@@ -1459,6 +1492,13 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
     });
 
     it("should return failure result when setup fails", async () => {
+      vi.mocked(vscodeSetup.preflight).mockResolvedValue({
+        success: true,
+        needsSetup: true,
+        missingBinaries: ["code-server"],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      });
       vi.mocked(vscodeSetup.setup).mockResolvedValue({
         success: false,
         error: {
@@ -1478,8 +1518,15 @@ describe("CodeHydraApiImpl - ILifecycleApi", () => {
     });
 
     it("should emit setup:progress events", async () => {
+      vi.mocked(vscodeSetup.preflight).mockResolvedValue({
+        success: true,
+        needsSetup: true,
+        missingBinaries: ["code-server"],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      });
       // Simulate progress callbacks using service types (config → settings mapping)
-      vi.mocked(vscodeSetup.setup).mockImplementation(async (onProgress) => {
+      vi.mocked(vscodeSetup.setup).mockImplementation(async (_preflight, onProgress) => {
         // Service uses "config" step, API translates to "settings"
         onProgress?.({ step: "extensions", message: "Installing extensions..." });
         onProgress?.({ step: "config", message: "Writing settings..." });

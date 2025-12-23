@@ -2,12 +2,7 @@
 import { join } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VscodeSetupService } from "./vscode-setup-service";
-import {
-  CURRENT_SETUP_VERSION,
-  type SetupMarker,
-  type ProcessRunner,
-  type ProcessResult,
-} from "./types";
+import { type SetupMarker, type ProcessRunner, type ProcessResult } from "./types";
 import type { SpawnedProcess } from "../platform/process";
 import type { PathProvider } from "../platform/path-provider";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
@@ -55,8 +50,33 @@ function createMockBinaryDownloadService(
 function createExtensionsConfig(): string {
   return JSON.stringify({
     marketplace: ["sst-dev.opencode"],
-    bundled: ["codehydra-sidekick-0.0.1.vsix"],
+    bundled: [
+      {
+        id: "codehydra.sidekick",
+        version: "0.0.1",
+        vsix: "codehydra-sidekick-0.0.1.vsix",
+      },
+    ],
   });
+}
+
+/**
+ * Create a preflight result for full setup (all components missing).
+ */
+function createFullSetupPreflightResult(): {
+  success: true;
+  needsSetup: boolean;
+  missingBinaries: readonly ("code-server" | "opencode")[];
+  missingExtensions: readonly string[];
+  outdatedExtensions: readonly string[];
+} {
+  return {
+    success: true,
+    needsSetup: true,
+    missingBinaries: ["code-server", "opencode"],
+    missingExtensions: ["codehydra.sidekick", "sst-dev.opencode"],
+    outdatedExtensions: [],
+  };
 }
 
 describe("VscodeSetupService", () => {
@@ -75,7 +95,8 @@ describe("VscodeSetupService", () => {
       vscodeDir: "/mock/vscode",
       vscodeExtensionsDir: "/mock/vscode/extensions",
       vscodeUserDataDir: "/mock/vscode/user-data",
-      vscodeSetupMarkerPath: "/mock/vscode/.setup-completed",
+      setupMarkerPath: "/mock/.setup-completed",
+      legacySetupMarkerPath: "/mock/vscode/.setup-completed",
       vscodeAssetsDir: "/mock/assets",
       binDir: "/mock/bin",
     });
@@ -84,9 +105,9 @@ describe("VscodeSetupService", () => {
   });
 
   describe("isSetupComplete", () => {
-    it("returns true when marker exists with correct version", async () => {
+    it("returns true when marker exists with schemaVersion 1", async () => {
       const marker: SetupMarker = {
-        version: CURRENT_SETUP_VERSION,
+        schemaVersion: 1,
         completedAt: "2025-12-09T10:00:00.000Z",
       };
       mockFs = createMockFileSystemLayer({
@@ -102,7 +123,7 @@ describe("VscodeSetupService", () => {
     it("returns false when marker is missing", async () => {
       mockFs = createMockFileSystemLayer({
         readFile: {
-          error: new FileSystemError("ENOENT", "/mock/vscode/.setup-completed", "Not found"),
+          error: new FileSystemError("ENOENT", "/mock/.setup-completed", "Not found"),
         },
       });
 
@@ -112,9 +133,9 @@ describe("VscodeSetupService", () => {
       expect(result).toBe(false);
     });
 
-    it("returns false when version mismatch", async () => {
+    it("returns false when schemaVersion is not 1 (legacy)", async () => {
       const marker: SetupMarker = {
-        version: CURRENT_SETUP_VERSION - 1, // Old version
+        schemaVersion: 0, // Legacy format (maps from old version field)
         completedAt: "2025-12-09T10:00:00.000Z",
       };
       mockFs = createMockFileSystemLayer({
@@ -140,7 +161,7 @@ describe("VscodeSetupService", () => {
 
     it("returns false when marker is missing required fields", async () => {
       mockFs = createMockFileSystemLayer({
-        readFile: { content: JSON.stringify({ version: "not a number" }) },
+        readFile: { content: JSON.stringify({ schemaVersion: "not a number" }) },
       });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
@@ -336,7 +357,7 @@ describe("VscodeSetupService", () => {
       const progressMessages = progressCallback.mock.calls.map(
         (call) => (call[0] as { message: string }).message
       );
-      expect(progressMessages).toContain("Installing codehydra-sidekick-0.0.1.vsix...");
+      expect(progressMessages).toContain("Installing codehydra.sidekick...");
       expect(progressMessages).toContain("Installing sst-dev.opencode...");
     });
 
@@ -411,13 +432,13 @@ describe("VscodeSetupService", () => {
       await service.writeCompletionMarker(progressCallback);
 
       // Verify marker written
-      const markerPath = "/mock/vscode/.setup-completed";
+      const markerPath = "/mock/.setup-completed";
       expect(writtenFiles.has(markerPath)).toBe(true);
 
       // Verify content structure
       const markerContent = writtenFiles.get(markerPath)!;
       const marker = JSON.parse(markerContent) as SetupMarker;
-      expect(marker.version).toBe(CURRENT_SETUP_VERSION);
+      expect(marker.schemaVersion).toBe(1);
       expect(marker.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
       // Verify progress callback called
@@ -437,8 +458,9 @@ describe("VscodeSetupService", () => {
       });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
-      await expect(service.setup()).rejects.toThrow(VscodeSetupError);
-      await expect(service.setup()).rejects.toThrow(/Required asset files not found/);
+      const preflight = createFullSetupPreflightResult();
+      await expect(service.setup(preflight)).rejects.toThrow(VscodeSetupError);
+      await expect(service.setup(preflight)).rejects.toThrow(/Required asset files not found/);
     });
 
     it("runs all setup steps in order and returns success", async () => {
@@ -458,7 +480,8 @@ describe("VscodeSetupService", () => {
 
       const progressCallback = vi.fn();
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
-      const result = await service.setup(progressCallback);
+      const preflight = createFullSetupPreflightResult();
+      const result = await service.setup(preflight, progressCallback);
 
       expect(result).toEqual({ success: true });
 
@@ -466,7 +489,7 @@ describe("VscodeSetupService", () => {
       const progressMessages = progressCallback.mock.calls.map(
         (call) => (call[0] as { message: string }).message
       );
-      expect(progressMessages).toContain("Installing codehydra-sidekick-0.0.1.vsix...");
+      expect(progressMessages).toContain("Installing codehydra.sidekick...");
       expect(progressMessages).toContain("Installing sst-dev.opencode...");
       expect(progressMessages).toContain("Creating CLI wrapper scripts...");
       expect(progressMessages).toContain("Finalizing setup...");
@@ -487,7 +510,8 @@ describe("VscodeSetupService", () => {
       );
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
-      const result = await service.setup();
+      const preflight = createFullSetupPreflightResult();
+      const result = await service.setup(preflight);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -666,8 +690,6 @@ describe("VscodeSetupService", () => {
   });
 
   describe("binary download integration", () => {
-    const defaultCopyResult = { copiedCount: 1, skippedSymlinks: [] };
-
     it("downloads binaries first when BinaryDownloadService is provided", async () => {
       const downloadOrder: string[] = [];
       const mockBinaryService = createMockBinaryDownloadService({
@@ -683,7 +705,7 @@ describe("VscodeSetupService", () => {
       mockFs = createMockFileSystemLayer({
         readFile: { content: createExtensionsConfig() },
         mkdir: { implementation: async () => {} },
-        copyTree: { result: defaultCopyResult },
+        copyTree: {},
         writeFile: { implementation: async () => {} },
       });
       vi.mocked(mockProcessRunner.run).mockReturnValue(
@@ -701,22 +723,23 @@ describe("VscodeSetupService", () => {
         mockPlatformInfo,
         mockBinaryService
       );
-      const result = await service.setup();
+      const preflight = createFullSetupPreflightResult();
+      const result = await service.setup(preflight);
 
       expect(result).toEqual({ success: true });
-      // Verify binaries are downloaded before extensions
+      // Verify binaries are downloaded before extensions (using preflight result)
       expect(downloadOrder).toEqual([
         "download:code-server",
         "download:opencode",
         "createWrapperScripts",
       ]);
-      expect(mockBinaryService.isInstalled).toHaveBeenCalledWith("code-server");
-      expect(mockBinaryService.isInstalled).toHaveBeenCalledWith("opencode");
+      // Note: isInstalled is NOT called during setup when preflight is passed
+      // The preflight result already contains missingBinaries info
     });
 
-    it("skips download when binaries are already installed", async () => {
+    it("skips download when preflight indicates binaries already installed", async () => {
       const mockBinaryService = createMockBinaryDownloadService({
-        isInstalled: vi.fn().mockResolvedValue(true), // Already installed
+        isInstalled: vi.fn().mockResolvedValue(true), // Not used when preflight passed
         download: vi.fn(),
         createWrapperScripts: vi.fn(),
       });
@@ -724,7 +747,7 @@ describe("VscodeSetupService", () => {
       mockFs = createMockFileSystemLayer({
         readFile: { content: createExtensionsConfig() },
         mkdir: { implementation: async () => {} },
-        copyTree: { result: defaultCopyResult },
+        copyTree: {},
         writeFile: { implementation: async () => {} },
       });
       vi.mocked(mockProcessRunner.run).mockReturnValue(
@@ -742,10 +765,23 @@ describe("VscodeSetupService", () => {
         mockPlatformInfo,
         mockBinaryService
       );
-      await service.setup();
+      // Use preflight with empty missingBinaries to indicate already installed
+      const preflight: {
+        success: true;
+        needsSetup: boolean;
+        missingBinaries: readonly ("code-server" | "opencode")[];
+        missingExtensions: readonly string[];
+        outdatedExtensions: readonly string[];
+      } = {
+        success: true,
+        needsSetup: true, // Still needs setup for extensions
+        missingBinaries: [], // No missing binaries
+        missingExtensions: ["codehydra.codehydra", "sst-dev.opencode"],
+        outdatedExtensions: [],
+      };
+      await service.setup(preflight);
 
-      // Should check if installed but not download
-      expect(mockBinaryService.isInstalled).toHaveBeenCalled();
+      // Should NOT download when preflight says no binaries missing
       expect(mockBinaryService.download).not.toHaveBeenCalled();
       // Should still create wrapper scripts
       expect(mockBinaryService.createWrapperScripts).toHaveBeenCalled();
@@ -769,7 +805,8 @@ describe("VscodeSetupService", () => {
         mockPlatformInfo,
         mockBinaryService
       );
-      const result = await service.setup();
+      const preflight = createFullSetupPreflightResult();
+      const result = await service.setup(preflight);
 
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -789,7 +826,7 @@ describe("VscodeSetupService", () => {
       mockFs = createMockFileSystemLayer({
         readFile: { content: createExtensionsConfig() },
         mkdir: { implementation: async () => {} },
-        copyTree: { result: defaultCopyResult },
+        copyTree: {},
         writeFile: { implementation: async () => {} },
       });
       vi.mocked(mockProcessRunner.run).mockReturnValue(
@@ -808,7 +845,8 @@ describe("VscodeSetupService", () => {
         mockPlatformInfo,
         mockBinaryService
       );
-      await service.setup(progressCallback);
+      const preflight = createFullSetupPreflightResult();
+      await service.setup(preflight, progressCallback);
 
       const progressMessages = progressCallback.mock.calls.map(
         (call) => call[0] as { message: string; step: string }
@@ -828,7 +866,7 @@ describe("VscodeSetupService", () => {
       mockFs = createMockFileSystemLayer({
         readFile: { content: createExtensionsConfig() },
         mkdir: { implementation: async () => {} },
-        copyTree: { result: defaultCopyResult },
+        copyTree: {},
         writeFile: { implementation: async () => {} },
       });
       vi.mocked(mockProcessRunner.run).mockReturnValue(
@@ -846,9 +884,141 @@ describe("VscodeSetupService", () => {
         mockFs,
         mockPlatformInfo
       );
-      const result = await service.setup();
+      const preflight = createFullSetupPreflightResult();
+      const result = await service.setup(preflight);
 
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe("cleanComponents", () => {
+    it("removes only specified extension directories", async () => {
+      // Create mock with spyable rm method
+      const rmSpy = vi.fn().mockResolvedValue(undefined);
+      const spyFs: FileSystemLayer = {
+        readFile: vi.fn().mockResolvedValue(""),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        mkdir: vi.fn().mockResolvedValue(undefined),
+        readdir: vi.fn().mockResolvedValue([
+          {
+            name: "codehydra.codehydra-0.0.1",
+            isDirectory: true,
+            isFile: false,
+            isSymbolicLink: false,
+          },
+          {
+            name: "sst-dev.opencode-1.0.0",
+            isDirectory: true,
+            isFile: false,
+            isSymbolicLink: false,
+          },
+          {
+            name: "other.extension-2.0.0",
+            isDirectory: true,
+            isFile: false,
+            isSymbolicLink: false,
+          },
+        ]),
+        unlink: vi.fn().mockResolvedValue(undefined),
+        rm: rmSpy,
+        copyTree: vi.fn().mockResolvedValue(undefined),
+        makeExecutable: vi.fn().mockResolvedValue(undefined),
+        writeFileBuffer: vi.fn().mockResolvedValue(undefined),
+        symlink: vi.fn().mockResolvedValue(undefined),
+        rename: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, spyFs);
+      await service.cleanComponents(["codehydra.codehydra"]);
+
+      // Should only remove the specified extension
+      expect(rmSpy).toHaveBeenCalledWith(
+        join("/mock/vscode/extensions", "codehydra.codehydra-0.0.1"),
+        { recursive: true, force: true }
+      );
+      // Should not remove other extensions
+      expect(rmSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("sst-dev.opencode"),
+        expect.anything()
+      );
+      expect(rmSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("other.extension"),
+        expect.anything()
+      );
+    });
+
+    it("handles extension that is not installed (no error)", async () => {
+      // Create mock with spyable rm method
+      const rmSpy = vi.fn().mockResolvedValue(undefined);
+      const spyFs: FileSystemLayer = {
+        readFile: vi.fn().mockResolvedValue(""),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        mkdir: vi.fn().mockResolvedValue(undefined),
+        readdir: vi.fn().mockResolvedValue([
+          {
+            name: "sst-dev.opencode-1.0.0",
+            isDirectory: true,
+            isFile: false,
+            isSymbolicLink: false,
+          },
+        ]),
+        unlink: vi.fn().mockResolvedValue(undefined),
+        rm: rmSpy,
+        copyTree: vi.fn().mockResolvedValue(undefined),
+        makeExecutable: vi.fn().mockResolvedValue(undefined),
+        writeFileBuffer: vi.fn().mockResolvedValue(undefined),
+        symlink: vi.fn().mockResolvedValue(undefined),
+        rename: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, spyFs);
+      // Should not throw even if extension is not found
+      await expect(service.cleanComponents(["codehydra.codehydra"])).resolves.not.toThrow();
+      expect(rmSpy).not.toHaveBeenCalled();
+    });
+
+    it("cleans multiple extensions at once", async () => {
+      // Create mock with spyable rm method
+      const rmSpy = vi.fn().mockResolvedValue(undefined);
+      const spyFs: FileSystemLayer = {
+        readFile: vi.fn().mockResolvedValue(""),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        mkdir: vi.fn().mockResolvedValue(undefined),
+        readdir: vi.fn().mockResolvedValue([
+          {
+            name: "codehydra.codehydra-0.0.1",
+            isDirectory: true,
+            isFile: false,
+            isSymbolicLink: false,
+          },
+          {
+            name: "sst-dev.opencode-1.0.0",
+            isDirectory: true,
+            isFile: false,
+            isSymbolicLink: false,
+          },
+        ]),
+        unlink: vi.fn().mockResolvedValue(undefined),
+        rm: rmSpy,
+        copyTree: vi.fn().mockResolvedValue(undefined),
+        makeExecutable: vi.fn().mockResolvedValue(undefined),
+        writeFileBuffer: vi.fn().mockResolvedValue(undefined),
+        symlink: vi.fn().mockResolvedValue(undefined),
+        rename: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, spyFs);
+      await service.cleanComponents(["codehydra.codehydra", "sst-dev.opencode"]);
+
+      // Should remove both extensions
+      expect(rmSpy).toHaveBeenCalledWith(
+        join("/mock/vscode/extensions", "codehydra.codehydra-0.0.1"),
+        { recursive: true, force: true }
+      );
+      expect(rmSpy).toHaveBeenCalledWith(
+        join("/mock/vscode/extensions", "sst-dev.opencode-1.0.0"),
+        { recursive: true, force: true }
+      );
     });
   });
 });

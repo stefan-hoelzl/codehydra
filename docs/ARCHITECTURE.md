@@ -1437,36 +1437,52 @@ Binary versions are defined in `src/services/binary-download/versions.ts`:
 
 ## VS Code Setup
 
-### First-Run Behavior
+### Startup Flow with Preflight
 
-On first launch (or when setup version changes), the application runs a blocking setup process:
+The application uses a preflight phase to detect what needs installation, enabling selective setup:
 
 ```
 app.whenReady()
        │
        ▼
-  isSetupComplete()?  ──YES──►  Normal startup (skip to code-server)
-       │ NO
-       ▼
-  cleanVscodeDir()     # Remove any partial state
+  regenerateWrapperScripts()   # Always regenerate (cheap, ~1ms)
        │
+       ▼
+  preflight()                  # Check what's installed
+       │
+       ├─► missingBinaries?    # code-server/<version>/ exists?
+       ├─► missingExtensions?  # Extension directories exist?
+       ├─► outdatedExtensions? # Bundled extension version matches?
+       └─► markerValid?        # .setup-completed with schemaVersion 1?
+       │
+       ▼
+  needsSetup?  ──NO──►  Normal startup (services start immediately)
+       │ YES
        ▼
   Show SetupScreen     # Blocking UI with progress bar
        │
        ▼
-   validateAssets()     # Check settings.json, keybindings.json, extensions.json exist
+  validateAssets()     # Check settings.json, keybindings.json, extensions.json exist
        │
        ▼
-   Run setup steps:
-   1. downloadBinaries()      # Download code-server + opencode from GitHub releases
-   2. installExtensions()     # bundled .vsix + marketplace extensions
-   3. setupBinDirectory()     # Create CLI wrapper scripts in bin/
-   4. writeCompletionMarker() # .setup-completed
+  Run SELECTIVE setup:
+  1. downloadBinaries()      # Only download missing binaries
+  2. cleanExtensions()       # Remove outdated extensions only
+  3. installExtensions()     # Only install missing/outdated extensions
+  4. setupBinDirectory()     # Create CLI wrapper scripts in bin/
+  5. writeCompletionMarker() # .setup-completed (schemaVersion: 1)
        │
        ▼
   On success: Show "Setup complete!" (1.5s) → Continue to normal startup
   On failure: Show error with Retry/Quit buttons
 ```
+
+**Key behaviors:**
+
+- **Wrapper scripts regenerated on EVERY startup**: Cheap operation ensures scripts always match current binary versions
+- **Preflight is read-only**: Only checks filesystem, no network calls
+- **Selective setup**: Only installs what's missing/outdated based on preflight results
+- **No full clean**: `cleanVscodeDir()` is NOT called; only specific outdated extensions are removed
 
 ### Asset Files
 
@@ -1506,7 +1522,8 @@ out/main/assets/ (ASAR in prod)
 
 ```
 <app-data>/
-├── bin/                           # CLI wrapper scripts (generated during setup)
+├── .setup-completed               # JSON: { schemaVersion: 1, completedAt: "ISO" }
+├── bin/                           # CLI wrapper scripts (regenerated every startup)
 │   ├── code (code.cmd)            # VS Code CLI wrapper
 │   └── opencode (opencode.cmd)    # OpenCode wrapper (redirects to versioned binary)
 ├── code-server/
@@ -1520,11 +1537,10 @@ out/main/assets/ (ASAR in prod)
 │   └── <version>/                 # e.g., 0.1.47/
 │       └── opencode[.exe]         # Actual opencode binary
 ├── vscode/
-│   ├── .setup-completed           # JSON: { version: N, completedAt: "ISO" }
 │   ├── codehydra-sidekick-0.0.1.vsix # Copied from assets for installation
 │   ├── extensions/
-│   │   ├── codehydra.sidekick-0.0.1/   # Installed by code-server
-│   │   └── sst-dev.opencode-X.X.X/   # Installed by code-server
+│   │   ├── codehydra.sidekick-0.0.1/  # Installed by code-server
+│   │   └── sst-dev.opencode-X.X.X/    # Installed by code-server
 │   └── user-data/
 │       └── User/
 │           ├── settings.json      # Copied from assets
@@ -1535,7 +1551,26 @@ out/main/assets/ (ASAR in prod)
 
 ### Setup Versioning
 
-The `.setup-completed` marker contains a version number. When `CURRENT_SETUP_VERSION` is incremented (in `src/services/vscode-setup/types.ts`), existing installs will re-run setup on next launch, ensuring all users get updated extensions or config.
+The setup system uses a **preflight-based approach** instead of a single version number. On every startup:
+
+1. **Preflight checks** detect what's missing/outdated:
+   - Binary versions (code-server, opencode directories exist?)
+   - Extension versions (matches `extensions.json` config?)
+   - Marker validity (has `schemaVersion: 1`?)
+
+2. **Selective setup** runs only for components that need installation
+
+The `.setup-completed` marker uses `schemaVersion` (not `version`) to track marker format changes:
+
+```json
+{
+  "schemaVersion": 1,
+  "completedAt": "2025-12-23T10:30:00.000Z"
+}
+```
+
+**When `schemaVersion` changes**: Only for marker format/preflight architecture changes.
+**When binary/extension versions change**: Preflight detects missing components automatically; no marker change needed.
 
 ### Codehydra Extension
 

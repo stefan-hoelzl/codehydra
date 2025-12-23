@@ -16,10 +16,10 @@ import { DefaultFileSystemLayer } from "../platform/filesystem";
 import { createSilentLogger } from "../logging";
 import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
 import {
-  CURRENT_SETUP_VERSION,
   type SetupMarker,
   type ProcessRunner,
   type ProcessResult,
+  type PreflightResult,
 } from "./types";
 import type { SpawnedProcess } from "../platform/process";
 import type { PathProvider } from "../platform/path-provider";
@@ -63,12 +63,18 @@ describe("VscodeSetupService Integration", () => {
   async function createMockAssets(assetsDir: string): Promise<void> {
     await mkdir(assetsDir, { recursive: true });
 
-    // extensions.json
+    // extensions.json - new format with bundled extension objects
     await writeFile(
       join(assetsDir, "extensions.json"),
       JSON.stringify({
         marketplace: ["sst-dev.opencode"],
-        bundled: ["codehydra-sidekick-0.0.1.vsix"],
+        bundled: [
+          {
+            id: "codehydra.sidekick",
+            version: "0.0.1",
+            vsix: "codehydra-sidekick-0.0.1.vsix",
+          },
+        ],
       })
     );
 
@@ -102,6 +108,19 @@ describe("VscodeSetupService Integration", () => {
     };
   }
 
+  /**
+   * Create a preflight result for full setup (all components missing).
+   */
+  function createFullSetupPreflightResult(): PreflightResult {
+    return {
+      success: true,
+      needsSetup: true,
+      missingBinaries: ["code-server", "opencode"],
+      missingExtensions: ["codehydra.codehydra", "sst-dev.opencode"],
+      outdatedExtensions: [],
+    };
+  }
+
   beforeEach(async () => {
     tempDir = await createTestDir();
     fsLayer = new DefaultFileSystemLayer(createSilentLogger());
@@ -111,7 +130,7 @@ describe("VscodeSetupService Integration", () => {
       vscodeDir: join(tempDir, "vscode"),
       extensionsDir: join(tempDir, "vscode", "extensions"),
       userDataDir: join(tempDir, "vscode", "user-data"),
-      markerPath: join(tempDir, "vscode", ".setup-completed"),
+      markerPath: join(tempDir, ".setup-completed"), // New location is <dataRoot>/.setup-completed
       assetsDir: join(tempDir, "assets"),
       binDir: join(tempDir, "bin"),
     };
@@ -125,7 +144,7 @@ describe("VscodeSetupService Integration", () => {
       vscodeDir: mockPaths.vscodeDir,
       vscodeExtensionsDir: mockPaths.extensionsDir,
       vscodeUserDataDir: mockPaths.userDataDir,
-      vscodeSetupMarkerPath: mockPaths.markerPath,
+      setupMarkerPath: mockPaths.markerPath,
       vscodeAssetsDir: mockPaths.assetsDir,
       binDir: mockPaths.binDir,
     });
@@ -140,9 +159,10 @@ describe("VscodeSetupService Integration", () => {
     it("creates all required files in correct locations", async () => {
       const processRunner = createMockProcessRunner();
       const service = new VscodeSetupService(processRunner, testPathProvider, fsLayer);
+      const preflight = createFullSetupPreflightResult();
 
       // Run setup
-      const result = await service.setup();
+      const result = await service.setup(preflight);
 
       expect(result.success).toBe(true);
 
@@ -153,30 +173,29 @@ describe("VscodeSetupService Integration", () => {
 
       // Verify marker file
       const marker = JSON.parse(await readFile(mockPaths.markerPath, "utf-8")) as SetupMarker;
-      expect(marker.version).toBe(CURRENT_SETUP_VERSION);
+      expect(marker.schemaVersion).toBe(1);
       expect(marker.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
     it("emits progress callbacks in correct order", async () => {
       const processRunner = createMockProcessRunner();
       const service = new VscodeSetupService(processRunner, testPathProvider, fsLayer);
+      const preflight = createFullSetupPreflightResult();
 
       const progressMessages: string[] = [];
-      const result = await service.setup((progress) => {
+      const result = await service.setup(preflight, (progress) => {
         progressMessages.push(progress.message);
       });
 
       expect(result.success).toBe(true);
       // Extension installation, then CLI scripts, then finalize
-      expect(progressMessages).toContain("Installing codehydra-sidekick-0.0.1.vsix...");
+      expect(progressMessages).toContain("Installing codehydra.sidekick...");
       expect(progressMessages).toContain("Installing sst-dev.opencode...");
       expect(progressMessages).toContain("Creating CLI wrapper scripts...");
       expect(progressMessages).toContain("Finalizing setup...");
 
       // Verify order: bundled extension, then marketplace, then CLI scripts, then finalize
-      const codehydraIndex = progressMessages.indexOf(
-        "Installing codehydra-sidekick-0.0.1.vsix..."
-      );
+      const codehydraIndex = progressMessages.indexOf("Installing codehydra.sidekick...");
       const opencodeIndex = progressMessages.indexOf("Installing sst-dev.opencode...");
       const scriptsIndex = progressMessages.indexOf("Creating CLI wrapper scripts...");
       const finalizeIndex = progressMessages.indexOf("Finalizing setup...");
@@ -189,9 +208,10 @@ describe("VscodeSetupService Integration", () => {
     it("completes within reasonable time", async () => {
       const processRunner = createMockProcessRunner();
       const service = new VscodeSetupService(processRunner, testPathProvider, fsLayer);
+      const preflight = createFullSetupPreflightResult();
 
       const startTime = Date.now();
-      await service.setup();
+      await service.setup(preflight);
       const elapsedMs = Date.now() - startTime;
 
       // Setup should complete within 5 seconds (generous for slow CI)
@@ -203,8 +223,9 @@ describe("VscodeSetupService Integration", () => {
     it("does not write marker when extension install fails", async () => {
       const processRunner = createMockProcessRunner(1, "Failed to install extension");
       const service = new VscodeSetupService(processRunner, testPathProvider, fsLayer);
+      const preflight = createFullSetupPreflightResult();
 
-      const result = await service.setup();
+      const result = await service.setup(preflight);
 
       expect(result.success).toBe(false);
 
@@ -215,8 +236,9 @@ describe("VscodeSetupService Integration", () => {
     it("bundled vsix is copied before extension install is attempted", async () => {
       const processRunner = createMockProcessRunner(1, "Failed");
       const service = new VscodeSetupService(processRunner, testPathProvider, fsLayer);
+      const preflight = createFullSetupPreflightResult();
 
-      await service.setup();
+      await service.setup(preflight);
 
       // Vsix file should be copied (happens before install command)
       const vsixPath = join(mockPaths.vscodeDir, "codehydra-sidekick-0.0.1.vsix");
@@ -226,14 +248,14 @@ describe("VscodeSetupService Integration", () => {
   });
 
   describe("Version mismatch triggers re-setup", () => {
-    it("returns false for old version marker", async () => {
-      // Create marker with old version
+    it("returns false for legacy version marker", async () => {
+      // Create marker with old 'version' field (legacy format)
       await mkdir(mockPaths.vscodeDir, { recursive: true });
-      const marker: SetupMarker = {
-        version: CURRENT_SETUP_VERSION - 1,
+      const legacyMarker = {
+        version: 6, // Old format used 'version' instead of 'schemaVersion'
         completedAt: new Date().toISOString(),
       };
-      await writeFile(mockPaths.markerPath, JSON.stringify(marker), "utf-8");
+      await writeFile(mockPaths.markerPath, JSON.stringify(legacyMarker), "utf-8");
 
       const processRunner = createMockProcessRunner();
       const service = new VscodeSetupService(processRunner, testPathProvider, fsLayer);
@@ -242,11 +264,11 @@ describe("VscodeSetupService Integration", () => {
       expect(isComplete).toBe(false);
     });
 
-    it("returns true for current version marker", async () => {
-      // Create marker with current version
+    it("returns true for current schemaVersion marker", async () => {
+      // Create marker with current schemaVersion
       await mkdir(mockPaths.vscodeDir, { recursive: true });
       const marker: SetupMarker = {
-        version: CURRENT_SETUP_VERSION,
+        schemaVersion: 1,
         completedAt: new Date().toISOString(),
       };
       await writeFile(mockPaths.markerPath, JSON.stringify(marker), "utf-8");
@@ -344,7 +366,7 @@ describe("VscodeSetupService Integration", () => {
         vscodeDir: mockPaths.vscodeDir,
         vscodeExtensionsDir: mockPaths.extensionsDir,
         vscodeUserDataDir: mockPaths.userDataDir,
-        vscodeSetupMarkerPath: mockPaths.markerPath,
+        setupMarkerPath: mockPaths.markerPath,
         vscodeAssetsDir: mockPaths.assetsDir,
         binDir,
       });
@@ -356,8 +378,9 @@ describe("VscodeSetupService Integration", () => {
         fsLayer,
         createMockPlatformInfo({ platform: "linux" })
       );
+      const preflight = createFullSetupPreflightResult();
 
-      const result = await service.setup();
+      const result = await service.setup(preflight);
 
       expect(result.success).toBe(true);
 
@@ -374,7 +397,7 @@ describe("VscodeSetupService Integration", () => {
         vscodeDir: mockPaths.vscodeDir,
         vscodeExtensionsDir: mockPaths.extensionsDir,
         vscodeUserDataDir: mockPaths.userDataDir,
-        vscodeSetupMarkerPath: mockPaths.markerPath,
+        setupMarkerPath: mockPaths.markerPath,
         vscodeAssetsDir: mockPaths.assetsDir,
         binDir,
       });
@@ -386,9 +409,10 @@ describe("VscodeSetupService Integration", () => {
         fsLayer,
         createMockPlatformInfo({ platform: "linux" })
       );
+      const preflight = createFullSetupPreflightResult();
 
       const progressMessages: string[] = [];
-      await service.setup((progress) => {
+      await service.setup(preflight, (progress) => {
         progressMessages.push(progress.message);
       });
 
@@ -407,11 +431,12 @@ describe("VscodeSetupService Integration", () => {
       const realProcessRunner = new ExecaProcessRunner(testLogger);
 
       const service = new VscodeSetupService(realProcessRunner, testPathProvider, fsLayer);
+      const preflight = createFullSetupPreflightResult();
 
       // Clean up any existing state first
       await service.cleanVscodeDir();
 
-      const result = await service.setup();
+      const result = await service.setup(preflight);
 
       // This test may fail without network access
       if (result.success) {

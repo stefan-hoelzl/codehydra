@@ -3,6 +3,7 @@
  */
 
 export { VscodeSetupService } from "./vscode-setup-service";
+export { WrapperScriptGenerationService } from "./wrapper-script-generation-service";
 export { generateScript, generateScripts } from "./bin-scripts";
 export {
   CURRENT_SETUP_VERSION,
@@ -18,4 +19,12 @@ export {
   type BinTargetPaths,
   type GeneratedScript,
   type ScriptFilename,
+  type ExtensionsConfig,
+  type BundledExtensionConfig,
+  type PreflightResult,
+  type PreflightError,
+  type PreflightErrorType,
+  type BinaryType,
+  validateExtensionsConfig,
 } from "./types";
+export { parseExtensionDir, listInstalledExtensions } from "./extension-utils";
