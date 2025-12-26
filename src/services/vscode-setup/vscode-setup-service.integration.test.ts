@@ -116,7 +116,7 @@ describe("VscodeSetupService Integration", () => {
       success: true,
       needsSetup: true,
       missingBinaries: ["code-server", "opencode"],
-      missingExtensions: ["codehydra.codehydra", "sst-dev.opencode"],
+      missingExtensions: ["codehydra.sidekick", "sst-dev.opencode"],
       outdatedExtensions: [],
     };
   }
