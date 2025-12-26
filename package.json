@@ -23,7 +23,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.web.json --fail-on-warnings",
     "validate": "npm run format:check && npm run lint && npm run check && npm run test:legacy && npm run test:integration && npm run build",
     "validate:fix": "npm run format && npm run lint:fix && npm run check && npm run test:legacy && npm run test:integration && npm run build",
-    "postinstall": "patch-package && tsx scripts/download-binaries.ts"
+    "postinstall": "tsx scripts/download-binaries.ts"
   },
   "keywords": [],
   "author": "",
@@ -36,7 +36,6 @@
     "electron-log": "^5.4.3",
     "execa": "^9.6.1",
     "ignore": "^7.0.5",
-    "patch-package": "^8.0.1",
     "simple-git": "^3.30.0",
     "socket.io": "^4.8.1",
     "tar": "^7.5.2",
