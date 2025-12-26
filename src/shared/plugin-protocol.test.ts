@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateSetMetadataRequest,
+  validateExecuteCommandRequest,
   normalizeWorkspacePath,
   isValidCommandRequest,
   COMMAND_TIMEOUT_MS,
@@ -160,6 +161,117 @@ describe("validateSetMetadataRequest", () => {
       const result = validateSetMetadataRequest({ key: "my.key", value: "test" });
       expect(result.valid).toBe(false);
       expect((result as { error: string }).error).toContain("Invalid key format");
+    });
+  });
+});
+
+describe("validateExecuteCommandRequest", () => {
+  describe("valid requests", () => {
+    it("accepts valid command string", () => {
+      const result = validateExecuteCommandRequest({ command: "workbench.action.files.save" });
+      expect(result).toEqual({ valid: true });
+    });
+
+    it("accepts command with empty args array", () => {
+      const result = validateExecuteCommandRequest({
+        command: "workbench.action.files.save",
+        args: [],
+      });
+      expect(result).toEqual({ valid: true });
+    });
+
+    it("accepts command with args array containing values", () => {
+      const result = validateExecuteCommandRequest({
+        command: "vscode.openFolder",
+        args: ["/path/to/folder", { forceNewWindow: true }],
+      });
+      expect(result).toEqual({ valid: true });
+    });
+  });
+
+  describe("invalid requests - structure", () => {
+    it("rejects null payload", () => {
+      const result = validateExecuteCommandRequest(null);
+      expect(result).toEqual({ valid: false, error: "Request must be an object" });
+    });
+
+    it("rejects undefined payload", () => {
+      const result = validateExecuteCommandRequest(undefined);
+      expect(result).toEqual({ valid: false, error: "Request must be an object" });
+    });
+
+    it("rejects primitive values", () => {
+      expect(validateExecuteCommandRequest("string")).toEqual({
+        valid: false,
+        error: "Request must be an object",
+      });
+      expect(validateExecuteCommandRequest(123)).toEqual({
+        valid: false,
+        error: "Request must be an object",
+      });
+    });
+  });
+
+  describe("invalid requests - missing command", () => {
+    it("rejects missing command field", () => {
+      const result = validateExecuteCommandRequest({});
+      expect(result).toEqual({ valid: false, error: "Missing required field: command" });
+    });
+
+    it("rejects object with only args", () => {
+      const result = validateExecuteCommandRequest({ args: [] });
+      expect(result).toEqual({ valid: false, error: "Missing required field: command" });
+    });
+  });
+
+  describe("invalid requests - wrong types", () => {
+    it("rejects non-string command", () => {
+      expect(validateExecuteCommandRequest({ command: 123 })).toEqual({
+        valid: false,
+        error: "Field 'command' must be a string",
+      });
+      expect(validateExecuteCommandRequest({ command: null })).toEqual({
+        valid: false,
+        error: "Field 'command' must be a string",
+      });
+      expect(validateExecuteCommandRequest({ command: {} })).toEqual({
+        valid: false,
+        error: "Field 'command' must be a string",
+      });
+    });
+
+    it("rejects non-array args", () => {
+      expect(validateExecuteCommandRequest({ command: "test.command", args: "not-array" })).toEqual(
+        {
+          valid: false,
+          error: "Field 'args' must be an array",
+        }
+      );
+      expect(validateExecuteCommandRequest({ command: "test.command", args: 123 })).toEqual({
+        valid: false,
+        error: "Field 'args' must be an array",
+      });
+      expect(validateExecuteCommandRequest({ command: "test.command", args: {} })).toEqual({
+        valid: false,
+        error: "Field 'args' must be an array",
+      });
+    });
+  });
+
+  describe("invalid requests - empty command", () => {
+    it("rejects empty command string", () => {
+      const result = validateExecuteCommandRequest({ command: "" });
+      expect(result).toEqual({ valid: false, error: "Field 'command' cannot be empty" });
+    });
+
+    it("rejects whitespace-only command", () => {
+      const result = validateExecuteCommandRequest({ command: "   " });
+      expect(result).toEqual({ valid: false, error: "Field 'command' cannot be empty" });
+    });
+
+    it("rejects command with only tabs", () => {
+      const result = validateExecuteCommandRequest({ command: "\t\t" });
+      expect(result).toEqual({ valid: false, error: "Field 'command' cannot be empty" });
     });
   });
 });

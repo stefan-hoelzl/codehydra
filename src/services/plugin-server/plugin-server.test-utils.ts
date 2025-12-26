@@ -200,6 +200,8 @@ export interface MockApiHandlersOptions {
   readonly setMetadata?: PluginResult<void>;
   /** Result to return from delete. Default: { success: true, data: { started: true } } */
   readonly delete?: PluginResult<DeleteWorkspaceResponse>;
+  /** Result to return from executeCommand. Default: { success: true, data: undefined } */
+  readonly executeCommand?: unknown | PluginResult<unknown>;
 }
 
 /**
@@ -272,11 +274,19 @@ export function createMockApiHandlers(options?: MockApiHandlersOptions): ApiCall
     data: { started: true },
   };
 
+  let executeCommandResult: PluginResult<unknown>;
+  if (isPluginResult(options?.executeCommand)) {
+    executeCommandResult = options.executeCommand;
+  } else {
+    executeCommandResult = { success: true, data: options?.executeCommand ?? undefined };
+  }
+
   return {
     getStatus: vi.fn().mockResolvedValue(statusResult),
     getOpencodePort: vi.fn().mockResolvedValue(portResult),
     getMetadata: vi.fn().mockResolvedValue(metadataResult),
     setMetadata: vi.fn(() => Promise.resolve(setMetadataResult)),
     delete: vi.fn().mockResolvedValue(deleteResult),
+    executeCommand: vi.fn().mockResolvedValue(executeCommandResult),
   };
 }

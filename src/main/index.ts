@@ -369,6 +369,7 @@ async function startServices(): Promise<void> {
       }
     },
     killTerminalsCallback,
+    pluginServer ?? undefined,
     loggingService.createLogger("api")
   );
 

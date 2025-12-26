@@ -604,13 +604,14 @@ await api.workspace.setMetadata("my-key", "my-value");
 
 **Available Methods:**
 
-| Method                             | Returns                          | Description                                    |
-| ---------------------------------- | -------------------------------- | ---------------------------------------------- |
-| `whenReady()`                      | `Promise<void>`                  | Resolves when connected to CodeHydra           |
-| `workspace.getStatus()`            | `Promise<WorkspaceStatus>`       | Get current workspace status                   |
-| `workspace.getMetadata()`          | `Promise<Record<string,string>>` | Get all workspace metadata                     |
-| `workspace.setMetadata(key,value)` | `Promise<void>`                  | Set metadata (null value deletes key)          |
-| `workspace.getOpencodePort()`      | `Promise<number \| null>`        | Get OpenCode server port (null if not running) |
+| Method                                 | Returns                          | Description                                    |
+| -------------------------------------- | -------------------------------- | ---------------------------------------------- |
+| `whenReady()`                          | `Promise<void>`                  | Resolves when connected to CodeHydra           |
+| `workspace.getStatus()`                | `Promise<WorkspaceStatus>`       | Get current workspace status                   |
+| `workspace.getMetadata()`              | `Promise<Record<string,string>>` | Get all workspace metadata                     |
+| `workspace.setMetadata(key,value)`     | `Promise<void>`                  | Set metadata (null value deletes key)          |
+| `workspace.getOpencodePort()`          | `Promise<number \| null>`        | Get OpenCode server port (null if not running) |
+| `workspace.executeCommand(cmd, args?)` | `Promise<unknown>`               | Execute a VS Code command (10s timeout)        |
 
 **Type Declarations:**
 
@@ -630,6 +631,23 @@ try {
 ```
 
 **Timeout:** All API calls have a 10-second timeout.
+
+## MCP Server
+
+CodeHydra runs an MCP (Model Context Protocol) server that exposes workspace API methods to AI agents. OpenCode servers are automatically configured to connect to this MCP server.
+
+### Available Tools
+
+| Tool                          | Description                                     |
+| ----------------------------- | ----------------------------------------------- |
+| `workspace_get_status`        | Get workspace status (dirty flag, agent status) |
+| `workspace_get_metadata`      | Get all workspace metadata                      |
+| `workspace_set_metadata`      | Set or delete a metadata key                    |
+| `workspace_get_opencode_port` | Get OpenCode server port                        |
+| `workspace_execute_command`   | Execute a VS Code command                       |
+| `workspace_delete`            | Delete the workspace                            |
+
+**Note**: MCP tools mirror the Public API workspace methods. See `docs/API.md` for detailed documentation.
 
 ## Development Workflow
 

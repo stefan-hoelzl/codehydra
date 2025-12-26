@@ -50,6 +50,7 @@ All methods operate on the **connected workspace**.
 | `getOpencodePort` | `() => Promise<number \| null>`                                      | Get OpenCode server port (null if not running)    |
 | `getMetadata`     | `() => Promise<Record<string, string>>`                              | Get all metadata (always includes `base` key)     |
 | `setMetadata`     | `(key: string, value: string \| null) => Promise<void>`              | Set or delete a metadata key                      |
+| `executeCommand`  | `(command: string, args?: unknown[]) => Promise<unknown>`            | Execute a VS Code command (10-second timeout)     |
 | `delete`          | `(options?: { keepBranch?: boolean }) => Promise<{ started: true }>` | Delete the workspace (terminates OpenCode, async) |
 
 ### Usage Examples
@@ -122,6 +123,24 @@ const result = await api.workspace.delete({ keepBranch: true });
 ```
 
 **Note:** Deletion is async - the Promise resolves immediately with `{ started: true }`. The actual cleanup happens in the background.
+
+#### Execute VS Code Commands
+
+```typescript
+// Save all files
+await api.workspace.executeCommand("workbench.action.files.saveAll");
+
+// Open settings
+await api.workspace.executeCommand("workbench.action.openSettings");
+
+// Command with return value (some commands return data)
+const text = await api.workspace.executeCommand("editor.action.getSelectedText");
+
+// Command with arguments
+await api.workspace.executeCommand("vscode.openFolder", ["/path/to/folder"]);
+```
+
+**Note:** Most VS Code commands return `undefined`. The return type is `unknown` because command return types are not statically typed. Commands have a 10-second timeout.
 
 ### Metadata Key Format
 
@@ -243,6 +262,7 @@ interface WorkspaceApi {
   getOpencodePort(): Promise<number | null>;
   getMetadata(): Promise<Readonly<Record<string, string>>>;
   setMetadata(key: string, value: string | null): Promise<void>;
+  executeCommand(command: string, args?: readonly unknown[]): Promise<unknown>;
   delete(options?: { keepBranch?: boolean }): Promise<{ started: boolean }>;
 }
 
@@ -321,6 +341,7 @@ All events use acknowledgment callbacks for request/response pattern.
 | `api:workspace:getOpencodePort` | None                     | `PluginResult<number \| null>`          |
 | `api:workspace:getMetadata`     | None                     | `PluginResult<Record<string, string>>`  |
 | `api:workspace:setMetadata`     | `SetMetadataRequest`     | `PluginResult<void>`                    |
+| `api:workspace:executeCommand`  | `ExecuteCommandRequest`  | `PluginResult<unknown>`                 |
 | `api:workspace:delete`          | `DeleteWorkspaceRequest` | `PluginResult<DeleteWorkspaceResponse>` |
 
 ### Event Channels (Server → Client)
@@ -343,6 +364,11 @@ type PluginResult<T> = { success: true; data: T } | { success: false; error: str
 interface SetMetadataRequest {
   key: string; // Must match /^[A-Za-z][A-Za-z0-9-]*$/ and not end with hyphen
   value: string | null; // null to delete
+}
+
+interface ExecuteCommandRequest {
+  command: string; // VS Code command identifier (e.g., "workbench.action.files.save")
+  args?: unknown[]; // Optional arguments to pass to the command
 }
 
 interface DeleteWorkspaceRequest {
@@ -516,16 +542,17 @@ const unsubscribe = on("workspace:switched", (event) => {
 
 #### `workspaces` - Workspace Management
 
-| Method            | Signature                                                                                                   | Description                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `create`          | `(projectId: ProjectId, name: string, base: string) => Promise<Workspace>`                                  | Create a new workspace from a base branch |
-| `remove`          | `(projectId: ProjectId, workspaceName: WorkspaceName, keepBranch?: boolean) => Promise<{ started: true }>`  | Start workspace removal (fire-and-forget) |
-| `forceRemove`     | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<void>`                                     | Force remove (skip cleanup)               |
-| `get`             | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<Workspace \| undefined>`                   | Get a workspace                           |
-| `getStatus`       | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<WorkspaceStatus>`                          | Get workspace status                      |
-| `getOpencodePort` | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<number \| null>`                           | Get OpenCode server port                  |
-| `setMetadata`     | `(projectId: ProjectId, workspaceName: WorkspaceName, key: string, value: string \| null) => Promise<void>` | Set/delete metadata                       |
-| `getMetadata`     | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<Record<string, string>>`                   | Get all metadata                          |
+| Method            | Signature                                                                                                              | Description                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `create`          | `(projectId: ProjectId, name: string, base: string) => Promise<Workspace>`                                             | Create a new workspace from a base branch |
+| `remove`          | `(projectId: ProjectId, workspaceName: WorkspaceName, keepBranch?: boolean) => Promise<{ started: true }>`             | Start workspace removal (fire-and-forget) |
+| `forceRemove`     | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<void>`                                                | Force remove (skip cleanup)               |
+| `get`             | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<Workspace \| undefined>`                              | Get a workspace                           |
+| `getStatus`       | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<WorkspaceStatus>`                                     | Get workspace status                      |
+| `getOpencodePort` | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<number \| null>`                                      | Get OpenCode server port                  |
+| `setMetadata`     | `(projectId: ProjectId, workspaceName: WorkspaceName, key: string, value: string \| null) => Promise<void>`            | Set/delete metadata                       |
+| `getMetadata`     | `(projectId: ProjectId, workspaceName: WorkspaceName) => Promise<Record<string, string>>`                              | Get all metadata                          |
+| `executeCommand`  | `(projectId: ProjectId, workspaceName: WorkspaceName, command: string, args?: readonly unknown[]) => Promise<unknown>` | Execute a VS Code command                 |
 
 #### `ui` - UI State Management
 

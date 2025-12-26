@@ -91,6 +91,26 @@ export interface IWorkspaceApi {
     projectId: ProjectId,
     workspaceName: WorkspaceName
   ): Promise<Readonly<Record<string, string>>>;
+  /**
+   * Execute a VS Code command in a workspace.
+   *
+   * Note: Most VS Code commands return `undefined`. The return type is `unknown`
+   * because command return types are not statically typed.
+   *
+   * @param projectId Project containing the workspace
+   * @param workspaceName Name of the workspace
+   * @param command VS Code command identifier (e.g., "workbench.action.files.save")
+   * @param args Optional arguments to pass to the command
+   * @returns The command's return value, or undefined if command returns nothing
+   * @throws Error if workspace not found, workspace not connected, command not found, or execution fails
+   * @throws Error if command times out (10-second limit)
+   */
+  executeCommand(
+    projectId: ProjectId,
+    workspaceName: WorkspaceName,
+    command: string,
+    args?: readonly unknown[]
+  ): Promise<unknown>;
 }
 
 export interface IUiApi {

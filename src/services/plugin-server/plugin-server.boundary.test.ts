@@ -515,6 +515,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
+        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -545,6 +546,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
+        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -575,6 +577,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
+        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -618,6 +621,101 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       // The important thing is the server didn't crash
     });
 
+    it("executeCommand round-trip via real Socket.IO", async () => {
+      const handlers = createMockApiHandlers({
+        executeCommand: "command result",
+      });
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{
+        success: boolean;
+        data?: unknown;
+        error?: string;
+      }>((resolve) => {
+        client.emit(
+          "api:workspace:executeCommand",
+          { command: "test.command", args: ["arg1", "arg2"] },
+          (res) => resolve(res)
+        );
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe("command result");
+      expect(handlers.executeCommand).toHaveBeenCalledWith("/test/workspace", {
+        command: "test.command",
+        args: ["arg1", "arg2"],
+      });
+    });
+
+    it("executeCommand returns undefined for commands that return nothing", async () => {
+      const handlers = createMockApiHandlers({
+        executeCommand: undefined,
+      });
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{
+        success: boolean;
+        data?: unknown;
+        error?: string;
+      }>((resolve) => {
+        client.emit(
+          "api:workspace:executeCommand",
+          { command: "workbench.action.files.saveAll" },
+          (res) => resolve(res)
+        );
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeUndefined();
+    });
+
+    it("executeCommand validates request before calling handler", async () => {
+      const handlers = createMockApiHandlers();
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Send invalid request (empty command)
+      const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        client.emit("api:workspace:executeCommand", { command: "" }, (res) => resolve(res));
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("cannot be empty");
+      // Handler should NOT be called for invalid requests
+      expect(handlers.executeCommand).not.toHaveBeenCalled();
+    });
+
+    it("executeCommand handles handler errors gracefully", async () => {
+      const handlers = createMockApiHandlers({
+        executeCommand: { success: false, error: "Command not found: invalid.command" },
+      });
+      server.onApiCall(handlers);
+
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      const result = await new Promise<{
+        success: boolean;
+        data?: unknown;
+        error?: string;
+      }>((resolve) => {
+        client.emit("api:workspace:executeCommand", { command: "invalid.command" }, (res) =>
+          resolve(res)
+        );
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Command not found: invalid.command");
+    });
+
     it("handles request timeout", async () => {
       // Create a handler that never responds (simulates a hanging API call)
       const handlers: ApiCallHandlers = {
@@ -631,6 +729,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
+        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 

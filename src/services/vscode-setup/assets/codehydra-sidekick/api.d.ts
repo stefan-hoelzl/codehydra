@@ -133,6 +133,29 @@ export interface WorkspaceApi {
    * ```
    */
   setMetadata(key: string, value: string | null): Promise<void>;
+
+  /**
+   * Execute a VS Code command in this workspace.
+   *
+   * Note: Most VS Code commands return `undefined`. The return type is `unknown`
+   * because command return types are not statically typed.
+   *
+   * @param command - VS Code command identifier (e.g., "workbench.action.files.save")
+   * @param args - Optional arguments to pass to the command
+   * @returns The command's return value, or undefined if command returns nothing
+   * @throws Error if workspace disconnected, command not found, or execution fails
+   * @throws Error if command times out (10-second limit)
+   *
+   * @example
+   * ```typescript
+   * // Save all files (returns undefined)
+   * await api.workspace.executeCommand('workbench.action.files.saveAll');
+   *
+   * // Get selected text (returns string | undefined)
+   * const text = await api.workspace.executeCommand('editor.action.getSelectedText');
+   * ```
+   */
+  executeCommand(command: string, args?: readonly unknown[]): Promise<unknown>;
 }
 
 /**

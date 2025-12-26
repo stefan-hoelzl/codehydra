@@ -71,15 +71,15 @@ describe("VscodeSetupService Integration", () => {
         bundled: [
           {
             id: "codehydra.sidekick",
-            version: "0.0.1",
-            vsix: "codehydra-sidekick-0.0.1.vsix",
+            version: "0.0.2",
+            vsix: "codehydra-sidekick-0.0.2.vsix",
           },
         ],
       })
     );
 
     // Create a mock vsix file (just needs to exist for the test)
-    await writeFile(join(assetsDir, "codehydra-sidekick-0.0.1.vsix"), "mock-vsix-content");
+    await writeFile(join(assetsDir, "codehydra-sidekick-0.0.2.vsix"), "mock-vsix-content");
   }
 
   /**
@@ -168,7 +168,7 @@ describe("VscodeSetupService Integration", () => {
       expect(result.success).toBe(true);
 
       // Verify vsix was copied to vscodeDir
-      const vsixPath = join(mockPaths.vscodeDir, "codehydra-sidekick-0.0.1.vsix");
+      const vsixPath = join(mockPaths.vscodeDir, "codehydra-sidekick-0.0.2.vsix");
       const vsixContent = await readFile(vsixPath, "utf-8");
       expect(vsixContent).toBe("mock-vsix-content");
 
@@ -242,7 +242,7 @@ describe("VscodeSetupService Integration", () => {
       await service.setup(preflight);
 
       // Vsix file should be copied (happens before install command)
-      const vsixPath = join(mockPaths.vscodeDir, "codehydra-sidekick-0.0.1.vsix");
+      const vsixPath = join(mockPaths.vscodeDir, "codehydra-sidekick-0.0.2.vsix");
       const vsixContent = await readFile(vsixPath, "utf-8");
       expect(vsixContent).toBe("mock-vsix-content");
     });
@@ -283,11 +283,11 @@ describe("VscodeSetupService Integration", () => {
 
     it("cleanVscodeDir removes entire directory", async () => {
       // Create full setup state
-      await mkdir(join(mockPaths.extensionsDir, "codehydra.sidekick-0.0.1-universal"), {
+      await mkdir(join(mockPaths.extensionsDir, "codehydra.sidekick-0.0.2-universal"), {
         recursive: true,
       });
       await writeFile(
-        join(mockPaths.extensionsDir, "codehydra.sidekick-0.0.1-universal", "package.json"),
+        join(mockPaths.extensionsDir, "codehydra.sidekick-0.0.2-universal", "package.json"),
         "{}",
         "utf-8"
       );

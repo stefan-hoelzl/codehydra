@@ -1270,11 +1270,12 @@ CodeHydra and VS Code extensions communicate via Socket.IO WebSocket connection.
 
 **Client → Server (API Calls):**
 
-| Event                       | Payload              | Response                              | Description                      |
-| --------------------------- | -------------------- | ------------------------------------- | -------------------------------- |
-| `api:workspace:getStatus`   | (none)               | `PluginResult<WorkspaceStatus>`       | Get workspace dirty/agent status |
-| `api:workspace:getMetadata` | (none)               | `PluginResult<Record<string,string>>` | Get all workspace metadata       |
-| `api:workspace:setMetadata` | `SetMetadataRequest` | `PluginResult<void>`                  | Set or delete metadata key       |
+| Event                          | Payload                 | Response                              | Description                      |
+| ------------------------------ | ----------------------- | ------------------------------------- | -------------------------------- |
+| `api:workspace:getStatus`      | (none)                  | `PluginResult<WorkspaceStatus>`       | Get workspace dirty/agent status |
+| `api:workspace:getMetadata`    | (none)                  | `PluginResult<Record<string,string>>` | Get all workspace metadata       |
+| `api:workspace:setMetadata`    | `SetMetadataRequest`    | `PluginResult<void>`                  | Set or delete metadata key       |
+| `api:workspace:executeCommand` | `ExecuteCommandRequest` | `PluginResult<unknown>`               | Execute a VS Code command        |
 
 **Types:**
 

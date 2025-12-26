@@ -406,6 +406,46 @@ export class McpServer implements IMcpServer {
       )
     );
 
+    // workspace_execute_command
+    this.registeredTools.push(
+      this.mcpServer.registerTool(
+        "workspace_execute_command",
+        {
+          description:
+            "Execute a VS Code command in the current workspace. Most commands return undefined.",
+          inputSchema: z.object({
+            command: z
+              .string()
+              .min(1)
+              .max(256)
+              .describe("VS Code command identifier (e.g., 'workbench.action.files.save')"),
+            args: z.array(z.unknown()).optional().describe("Optional command arguments"),
+          }),
+        },
+        async (args, extra) => {
+          const context = await this.getToolContext(extra);
+          if (!context.resolved) {
+            return this.errorResult(
+              "workspace-not-found",
+              `Workspace not found: ${context.workspacePath}`
+            );
+          }
+
+          try {
+            const result = await this.api.workspaces.executeCommand(
+              context.resolved.projectId,
+              context.resolved.workspaceName,
+              args.command,
+              args.args
+            );
+            return this.successResult(result);
+          } catch (error) {
+            return this.handleError(error);
+          }
+        }
+      )
+    );
+
     this.logger.debug("Registered tools", { count: this.registeredTools.length });
   }
 
@@ -439,13 +479,14 @@ export class McpServer implements IMcpServer {
 
   /**
    * Create a success result for MCP tools.
+   * Handles undefined specially since JSON.stringify(undefined) returns undefined (not a string).
    */
   private successResult<T>(data: T): { content: Array<{ type: "text"; text: string }> } {
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(data),
+          text: data === undefined ? "null" : JSON.stringify(data),
         },
       ],
     };

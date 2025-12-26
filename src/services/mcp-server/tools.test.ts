@@ -66,6 +66,7 @@ function createMockWorkspaceApi(overrides?: Partial<IWorkspaceApi>): IWorkspaceA
     getOpencodePort: vi.fn().mockResolvedValue(14001),
     setMetadata: vi.fn().mockResolvedValue(undefined),
     getMetadata: vi.fn().mockResolvedValue({ base: "main" }),
+    executeCommand: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -83,8 +84,9 @@ interface SimulatedToolContext {
  * This mimics the tool registration logic from McpServer.
  */
 function createToolHandlers(api: ICoreApi) {
+  // Handle undefined specially since JSON.stringify(undefined) returns undefined (not a string)
   const successResult = <T>(data: T): ToolResult => ({
-    content: [{ type: "text", text: JSON.stringify(data) }],
+    content: [{ type: "text", text: data === undefined ? "null" : JSON.stringify(data) }],
   });
 
   const errorResult = (code: McpError["code"], message: string): ToolResult => ({
@@ -175,6 +177,26 @@ function createToolHandlers(api: ICoreApi) {
           context.resolved.projectId,
           context.resolved.workspaceName,
           args.keepBranch ?? false
+        );
+        return successResult(result);
+      } catch (error) {
+        return handleError(error);
+      }
+    },
+
+    workspace_execute_command: async (
+      context: SimulatedToolContext,
+      args: { command: string; args?: readonly unknown[] }
+    ): Promise<ToolResult> => {
+      if (!context.resolved) {
+        return errorResult("workspace-not-found", `Workspace not found: ${context.workspacePath}`);
+      }
+      try {
+        const result = await api.workspaces.executeCommand(
+          context.resolved.projectId,
+          context.resolved.workspaceName,
+          args.command,
+          args.args
         );
         return successResult(result);
       } catch (error) {
@@ -534,6 +556,210 @@ describe("MCP Tools", () => {
         context.resolved!.workspaceName,
         false
       );
+    });
+  });
+
+  describe("workspace_execute_command", () => {
+    it("returns command result on success", async () => {
+      const executeCommandMock = vi.fn().mockResolvedValue("command result");
+      const workspaceApi = createMockWorkspaceApi({
+        executeCommand: executeCommandMock,
+      });
+
+      const api: ICoreApi = {
+        workspaces: workspaceApi,
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createResolvedContext();
+
+      const result = await handlers.workspace_execute_command(context, {
+        command: "test.command",
+      });
+      const parsed = parseToolResult<unknown>(result);
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toBe("command result");
+      }
+    });
+
+    it("returns null for commands that return null", async () => {
+      const executeCommandMock = vi.fn().mockResolvedValue(null);
+      const workspaceApi = createMockWorkspaceApi({
+        executeCommand: executeCommandMock,
+      });
+
+      const api: ICoreApi = {
+        workspaces: workspaceApi,
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createResolvedContext();
+
+      const result = await handlers.workspace_execute_command(context, {
+        command: "workbench.action.files.saveAll",
+      });
+      const parsed = parseToolResult<unknown>(result);
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toBeNull();
+      }
+    });
+
+    it("handles undefined result correctly (converts to null string)", async () => {
+      // Most VS Code commands return undefined - verify the result has a valid string text field
+      const executeCommandMock = vi.fn().mockResolvedValue(undefined);
+      const workspaceApi = createMockWorkspaceApi({
+        executeCommand: executeCommandMock,
+      });
+
+      const api: ICoreApi = {
+        workspaces: workspaceApi,
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createResolvedContext();
+
+      const result = await handlers.workspace_execute_command(context, {
+        command: "workbench.action.files.saveAll",
+      });
+
+      // Verify the result structure
+      expect(result.content).toHaveLength(1);
+
+      // Verify the text field is a valid string (not undefined)
+      // This is the critical fix: JSON.stringify(undefined) returns undefined,
+      // but MCP requires the text field to be a string
+      const text = result.content[0]?.text;
+      expect(text).toBe("null");
+      expect(typeof text).toBe("string");
+
+      // Verify it can be parsed as valid JSON
+      const parsed = parseToolResult<unknown>(result);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toBeNull();
+      }
+    });
+
+    it("passes command and args to API", async () => {
+      const executeCommandMock = vi.fn().mockResolvedValue(undefined);
+      const workspaceApi = createMockWorkspaceApi({
+        executeCommand: executeCommandMock,
+      });
+
+      const api: ICoreApi = {
+        workspaces: workspaceApi,
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createResolvedContext();
+
+      await handlers.workspace_execute_command(context, {
+        command: "vscode.open",
+        args: ["/path/to/file", { preview: true }],
+      });
+
+      expect(executeCommandMock).toHaveBeenCalledWith(
+        context.resolved!.projectId,
+        context.resolved!.workspaceName,
+        "vscode.open",
+        ["/path/to/file", { preview: true }]
+      );
+    });
+
+    it("returns error when workspace not found", async () => {
+      const api: ICoreApi = {
+        workspaces: createMockWorkspaceApi(),
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createUnresolvedContext();
+
+      const result = await handlers.workspace_execute_command(context, {
+        command: "test.command",
+      });
+      const parsed = parseToolResult<unknown>(result);
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.code).toBe("workspace-not-found");
+      }
+    });
+
+    it("propagates API errors correctly", async () => {
+      const executeCommandMock = vi
+        .fn()
+        .mockRejectedValue(new Error("Command not found: invalid.command"));
+      const workspaceApi = createMockWorkspaceApi({
+        executeCommand: executeCommandMock,
+      });
+
+      const api: ICoreApi = {
+        workspaces: workspaceApi,
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createResolvedContext();
+
+      const result = await handlers.workspace_execute_command(context, {
+        command: "invalid.command",
+      });
+      const parsed = parseToolResult<unknown>(result);
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.code).toBe("internal-error");
+        expect(parsed.error.message).toBe("Command not found: invalid.command");
+      }
+    });
+
+    it("propagates timeout errors correctly", async () => {
+      const executeCommandMock = vi.fn().mockRejectedValue(new Error("Command timed out"));
+      const workspaceApi = createMockWorkspaceApi({
+        executeCommand: executeCommandMock,
+      });
+
+      const api: ICoreApi = {
+        workspaces: workspaceApi,
+        projects: {} as IProjectApi,
+        on: vi.fn().mockReturnValue(() => {}),
+        dispose: vi.fn(),
+      };
+
+      const handlers = createToolHandlers(api);
+      const context = createResolvedContext();
+
+      const result = await handlers.workspace_execute_command(context, {
+        command: "slow.command",
+      });
+      const parsed = parseToolResult<unknown>(result);
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.code).toBe("internal-error");
+        expect(parsed.error.message).toBe("Command timed out");
+      }
     });
   });
 });

@@ -31,6 +31,7 @@ function createMockCoreApi(overrides?: {
     getOpencodePort: vi.fn().mockResolvedValue(14001),
     setMetadata: vi.fn().mockResolvedValue(undefined),
     getMetadata: vi.fn().mockResolvedValue({ base: "main" }),
+    executeCommand: vi.fn().mockResolvedValue(undefined),
   };
 
   const defaultProjects: IProjectApi = {
@@ -153,7 +154,8 @@ describe("McpServer", () => {
       expect(toolNames).toContain("workspace_set_metadata");
       expect(toolNames).toContain("workspace_get_opencode_port");
       expect(toolNames).toContain("workspace_delete");
-      expect(tools.length).toBe(5);
+      expect(toolNames).toContain("workspace_execute_command");
+      expect(tools.length).toBe(6);
     });
   });
 

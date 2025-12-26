@@ -34,6 +34,7 @@ import type {
   IVscodeSetup,
   SetupStep as ServiceSetupStep,
 } from "../../services/vscode-setup/types";
+import type { PluginServer } from "../../services/plugin-server";
 import { createSilentLogger, type Logger } from "../../services/logging";
 import { generateProjectId } from "./id-utils";
 
@@ -74,6 +75,9 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
   // Kill terminals callback (injected for workspace cleanup before view destruction)
   private readonly killTerminalsCallback: KillTerminalsCallback | undefined;
 
+  // PluginServer for executing VS Code commands in workspaces
+  private readonly pluginServer: PluginServer | undefined;
+
   // Track in-progress deletions to prevent double-deletion
   private readonly inProgressDeletions: Set<string> = new Set();
 
@@ -92,6 +96,7 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     existingLifecycleApi?: ILifecycleApi,
     emitDeletionProgress?: DeletionProgressCallback,
     killTerminalsCallback?: KillTerminalsCallback,
+    pluginServer?: PluginServer,
     logger?: Logger
   ) {
     this.viewManager = viewManager;
@@ -102,6 +107,8 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
     this.emitDeletionProgress = emitDeletionProgress ?? (() => {});
     // Store callback (undefined if not provided)
     this.killTerminalsCallback = killTerminalsCallback;
+    // Store PluginServer for executeCommand (undefined if not provided)
+    this.pluginServer = pluginServer;
     // Default to silent logger if not provided
     this.logger = logger ?? createSilentLogger();
 
@@ -892,6 +899,55 @@ export class CodeHydraApiImpl implements ICodeHydraApi {
 
         // Delegate to provider
         return provider.getMetadata(workspace.path);
+      },
+
+      executeCommand: async (
+        projectId: ProjectId,
+        workspaceName: WorkspaceName,
+        command: string,
+        args?: readonly unknown[]
+      ): Promise<unknown> => {
+        // Log the command execution attempt
+        this.logger.info("Executing command", {
+          projectId,
+          workspaceName,
+          command,
+          hasArgs: !!args,
+        });
+
+        // Check if PluginServer is available
+        if (!this.pluginServer) {
+          throw new Error("Workspace not connected");
+        }
+
+        // Resolve project ID to path
+        const projectPath = await this.resolveProjectPath(projectId);
+        if (!projectPath) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+
+        // Find workspace path
+        const internalProject = this.appState.getProject(projectPath);
+        if (!internalProject) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+
+        const workspace = internalProject.workspaces.find(
+          (w) => this.extractWorkspaceName(w.path) === workspaceName
+        );
+        if (!workspace) {
+          throw new Error(`Workspace not found: ${workspaceName}`);
+        }
+
+        // Execute command via PluginServer
+        const result = await this.pluginServer.sendCommand(workspace.path, command, args);
+
+        // Unwrap PluginResult: throw on error, return data on success
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+
+        return result.data;
       },
     };
   }

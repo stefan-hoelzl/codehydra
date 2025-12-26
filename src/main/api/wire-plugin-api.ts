@@ -12,6 +12,7 @@ import type { PluginServer, ApiCallHandlers } from "../../services/plugin-server
 import type {
   SetMetadataRequest,
   DeleteWorkspaceRequest,
+  ExecuteCommandRequest,
   PluginResult,
 } from "../../shared/plugin-protocol";
 import type { ICodeHydraApi } from "../../shared/api/interfaces";
@@ -184,6 +185,39 @@ export function wirePluginApi(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logger.error("delete error", { workspace: workspacePath, error: message });
+        return { success: false, error: message };
+      }
+    },
+
+    async executeCommand(workspacePath: string, request: ExecuteCommandRequest) {
+      const resolved = resolveWorkspace(workspacePath);
+      if ("success" in resolved && resolved.success === false) {
+        return resolved;
+      }
+      const { projectId, workspaceName } = resolved as {
+        projectId: ProjectId;
+        workspaceName: WorkspaceName;
+      };
+
+      try {
+        const result = await api.workspaces.executeCommand(
+          projectId,
+          workspaceName,
+          request.command,
+          request.args
+        );
+        logger.debug("executeCommand success", {
+          workspace: workspacePath,
+          command: request.command,
+        });
+        return { success: true, data: result };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error("executeCommand error", {
+          workspace: workspacePath,
+          command: request.command,
+          error: message,
+        });
         return { success: false, error: message };
       }
     },

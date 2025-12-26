@@ -220,6 +220,23 @@ const codehydraApi = {
     setMetadata(key, value) {
       return emitApiCall("api:workspace:setMetadata", { key, value });
     },
+
+    /**
+     * Execute a VS Code command in this workspace.
+     * @param {string} command - VS Code command identifier (e.g., "workbench.action.files.save")
+     * @param {unknown[]} [args] - Optional arguments to pass to the command
+     * @returns {Promise<unknown>} The command's return value, or undefined if command returns nothing
+     */
+    executeCommand(command, args) {
+      // Client-side validation
+      if (typeof command !== "string" || command.trim().length === 0) {
+        return Promise.reject(new Error("Command must be a non-empty string"));
+      }
+      if (args !== undefined && !Array.isArray(args)) {
+        return Promise.reject(new Error("Args must be an array"));
+      }
+      return emitApiCall("api:workspace:executeCommand", { command, args });
+    },
   },
 };
 

@@ -149,6 +149,51 @@ export interface SetMetadataRequest {
 }
 
 /**
+ * Request payload for executing a VS Code command.
+ */
+export interface ExecuteCommandRequest {
+  /** VS Code command identifier (e.g., "workbench.action.files.save") */
+  readonly command: string;
+  /** Optional arguments to pass to the command */
+  readonly args?: readonly unknown[];
+}
+
+/**
+ * Runtime validation for ExecuteCommandRequest.
+ * Validates that command is a non-empty string and args is an array if present.
+ *
+ * @param payload - The payload to validate
+ * @returns Object with valid boolean and optional error message
+ */
+export function validateExecuteCommandRequest(
+  payload: unknown
+): { valid: true } | { valid: false; error: string } {
+  if (typeof payload !== "object" || payload === null) {
+    return { valid: false, error: "Request must be an object" };
+  }
+
+  const request = payload as Record<string, unknown>;
+
+  if (!("command" in request)) {
+    return { valid: false, error: "Missing required field: command" };
+  }
+
+  if (typeof request.command !== "string") {
+    return { valid: false, error: "Field 'command' must be a string" };
+  }
+
+  if (request.command.trim().length === 0) {
+    return { valid: false, error: "Field 'command' cannot be empty" };
+  }
+
+  if ("args" in request && !Array.isArray(request.args)) {
+    return { valid: false, error: "Field 'args' must be an array" };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Request payload for deleting a workspace.
  */
 export interface DeleteWorkspaceRequest {
@@ -284,6 +329,17 @@ export interface ClientToServerEvents {
   "api:workspace:setMetadata": (
     request: SetMetadataRequest,
     ack: (result: PluginResult<void>) => void
+  ) => void;
+
+  /**
+   * Execute a VS Code command in the connected workspace.
+   *
+   * @param request - The command to execute with optional args
+   * @param ack - Acknowledgment callback with command result
+   */
+  "api:workspace:executeCommand": (
+    request: ExecuteCommandRequest,
+    ack: (result: PluginResult<unknown>) => void
   ) => void;
 
   /**

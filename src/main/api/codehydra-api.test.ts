@@ -1906,3 +1906,310 @@ describe("CodeHydraApiImpl - getOpencodePort", () => {
     });
   });
 });
+
+// =============================================================================
+// Tests: executeCommand
+// =============================================================================
+
+describe("CodeHydraApiImpl - executeCommand", () => {
+  let appState: AppState;
+  let viewManager: IViewManager;
+  let dialog: typeof Electron.dialog;
+  let app: typeof Electron.app;
+
+  beforeEach(() => {
+    appState = createMockAppState();
+    viewManager = createMockViewManager();
+    dialog = createMockElectronDialog();
+    app = createMockElectronApp();
+  });
+
+  function createMockPluginServer(
+    sendCommandImpl: (
+      path: string,
+      cmd: string,
+      args?: readonly unknown[]
+    ) => Promise<{ success: true; data: unknown } | { success: false; error: string }>
+  ) {
+    return {
+      sendCommand: vi.fn(sendCommandImpl),
+      start: vi.fn(),
+      close: vi.fn(),
+      getPort: vi.fn(),
+      isConnected: vi.fn(),
+      onConnect: vi.fn(),
+      onApiCall: vi.fn(),
+    };
+  }
+
+  describe("constructor stores PluginServer reference", () => {
+    it("should accept pluginServer in constructor", () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: true,
+        data: undefined,
+      }));
+
+      // Should not throw when creating with pluginServer
+      expect(
+        () =>
+          new CodeHydraApiImpl(
+            appState,
+            viewManager,
+            dialog,
+            app,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            mockPluginServer as never
+          )
+      ).not.toThrow();
+    });
+  });
+
+  describe("success cases", () => {
+    it("should call sendCommand and return result data on success", async () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: true,
+        data: "command result",
+      }));
+      const api = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockPluginServer as never
+      );
+
+      const mockInternalProject = createInternalProject({
+        workspaces: [
+          {
+            name: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            branch: "feature-branch",
+            metadata: { base: "main" },
+          },
+        ],
+      });
+      vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+
+      const result = await api.workspaces.executeCommand(
+        TEST_PROJECT_ID,
+        TEST_WORKSPACE_NAME,
+        "workbench.action.files.save"
+      );
+
+      expect(result).toBe("command result");
+      expect(mockPluginServer.sendCommand).toHaveBeenCalledWith(
+        TEST_WORKSPACE_PATH,
+        "workbench.action.files.save",
+        undefined
+      );
+    });
+
+    it("should pass args to sendCommand when provided", async () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: true,
+        data: undefined,
+      }));
+      const api = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockPluginServer as never
+      );
+
+      const mockInternalProject = createInternalProject({
+        workspaces: [
+          {
+            name: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            branch: "feature-branch",
+            metadata: { base: "main" },
+          },
+        ],
+      });
+      vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+
+      await api.workspaces.executeCommand(TEST_PROJECT_ID, TEST_WORKSPACE_NAME, "vscode.open", [
+        "/path/to/file",
+        { preview: true },
+      ]);
+
+      expect(mockPluginServer.sendCommand).toHaveBeenCalledWith(
+        TEST_WORKSPACE_PATH,
+        "vscode.open",
+        ["/path/to/file", { preview: true }]
+      );
+    });
+  });
+
+  describe("error cases", () => {
+    it("should throw when project not found", async () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: true,
+        data: undefined,
+      }));
+      const api = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockPluginServer as never
+      );
+
+      vi.mocked(appState.getAllProjects).mockResolvedValue([]);
+
+      await expect(
+        api.workspaces.executeCommand(
+          "invalid-00000000" as ProjectId,
+          TEST_WORKSPACE_NAME,
+          "test.command"
+        )
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it("should throw when workspace not found", async () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: true,
+        data: undefined,
+      }));
+      const api = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockPluginServer as never
+      );
+
+      const mockInternalProject = createInternalProject({
+        workspaces: [], // No workspaces
+      });
+      vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+
+      await expect(
+        api.workspaces.executeCommand(
+          TEST_PROJECT_ID,
+          "nonexistent" as WorkspaceName,
+          "test.command"
+        )
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it("should throw 'Workspace not connected' when PluginServer is not available", async () => {
+      // Create API without pluginServer
+      const api = new CodeHydraApiImpl(appState, viewManager, dialog, app);
+
+      const mockInternalProject = createInternalProject({
+        workspaces: [
+          {
+            name: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            branch: "feature-branch",
+            metadata: { base: "main" },
+          },
+        ],
+      });
+      vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+
+      await expect(
+        api.workspaces.executeCommand(
+          TEST_PROJECT_ID,
+          TEST_WORKSPACE_NAME,
+          "workbench.action.files.save"
+        )
+      ).rejects.toThrow("Workspace not connected");
+    });
+
+    it("should throw error message when sendCommand returns failure", async () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: false,
+        error: "Command not found: invalid.command",
+      }));
+      const api = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockPluginServer as never
+      );
+
+      const mockInternalProject = createInternalProject({
+        workspaces: [
+          {
+            name: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            branch: "feature-branch",
+            metadata: { base: "main" },
+          },
+        ],
+      });
+      vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+
+      await expect(
+        api.workspaces.executeCommand(TEST_PROJECT_ID, TEST_WORKSPACE_NAME, "invalid.command")
+      ).rejects.toThrow("Command not found: invalid.command");
+    });
+
+    it("should throw timeout error when sendCommand returns timeout failure", async () => {
+      const mockPluginServer = createMockPluginServer(async () => ({
+        success: false,
+        error: "Command timed out",
+      }));
+      const api = new CodeHydraApiImpl(
+        appState,
+        viewManager,
+        dialog,
+        app,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockPluginServer as never
+      );
+
+      const mockInternalProject = createInternalProject({
+        workspaces: [
+          {
+            name: "feature-branch",
+            path: TEST_WORKSPACE_PATH,
+            branch: "feature-branch",
+            metadata: { base: "main" },
+          },
+        ],
+      });
+      vi.mocked(appState.getAllProjects).mockResolvedValue([mockInternalProject]);
+      vi.mocked(appState.getProject).mockReturnValue(mockInternalProject);
+
+      await expect(
+        api.workspaces.executeCommand(TEST_PROJECT_ID, TEST_WORKSPACE_NAME, "slow.command")
+      ).rejects.toThrow("Command timed out");
+    });
+  });
+});

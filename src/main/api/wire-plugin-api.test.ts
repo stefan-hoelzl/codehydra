@@ -43,6 +43,7 @@ function createMockApi(): ICodeHydraApi {
       getOpencodePort: vi.fn().mockResolvedValue(null),
       setMetadata: vi.fn(),
       getMetadata: vi.fn().mockResolvedValue({ base: "main" }),
+      executeCommand: vi.fn().mockResolvedValue(undefined),
     },
     ui: {
       selectFolder: vi.fn().mockResolvedValue(null),
@@ -233,6 +234,102 @@ describe("wirePluginApi", () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBe("Deletion failed");
+      }
+    });
+  });
+
+  describe("executeCommand handler", () => {
+    it("should resolve workspace path to projectId and workspaceName", async () => {
+      wirePluginApi(pluginServer, api, workspaceResolver, logger);
+      const handlers = pluginServer.registeredHandlers!;
+
+      await handlers.executeCommand("/home/user/.codehydra/workspaces/my-feature", {
+        command: "workbench.action.files.save",
+      });
+
+      expect(workspaceResolver.findProjectForWorkspace).toHaveBeenCalledWith(
+        "/home/user/.codehydra/workspaces/my-feature"
+      );
+    });
+
+    it("should return success result with command data", async () => {
+      vi.mocked(api.workspaces.executeCommand).mockResolvedValue("command result");
+      wirePluginApi(pluginServer, api, workspaceResolver, logger);
+      const handlers = pluginServer.registeredHandlers!;
+
+      const result = await handlers.executeCommand("/home/user/.codehydra/workspaces/my-feature", {
+        command: "test.command",
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toBe("command result");
+      }
+    });
+
+    it("should return success result with undefined when command returns nothing", async () => {
+      vi.mocked(api.workspaces.executeCommand).mockResolvedValue(undefined);
+      wirePluginApi(pluginServer, api, workspaceResolver, logger);
+      const handlers = pluginServer.registeredHandlers!;
+
+      const result = await handlers.executeCommand("/home/user/.codehydra/workspaces/my-feature", {
+        command: "workbench.action.files.saveAll",
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toBeUndefined();
+      }
+    });
+
+    it("should pass command and args to API", async () => {
+      wirePluginApi(pluginServer, api, workspaceResolver, logger);
+      const handlers = pluginServer.registeredHandlers!;
+
+      await handlers.executeCommand("/home/user/.codehydra/workspaces/my-feature", {
+        command: "vscode.open",
+        args: ["/path/to/file", { preview: true }],
+      });
+
+      expect(api.workspaces.executeCommand).toHaveBeenCalledWith(
+        expect.any(String), // projectId
+        "my-feature" as WorkspaceName,
+        "vscode.open",
+        ["/path/to/file", { preview: true }]
+      );
+    });
+
+    it("should return error result when workspace not found", async () => {
+      workspaceResolver = createMockWorkspaceResolver(undefined); // Not found
+      wirePluginApi(pluginServer, api, workspaceResolver, logger);
+      const handlers = pluginServer.registeredHandlers!;
+
+      const result = await handlers.executeCommand("/unknown/workspace", {
+        command: "test.command",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBe("Workspace not found");
+      }
+      // API should not be called when workspace not found
+      expect(api.workspaces.executeCommand).not.toHaveBeenCalled();
+    });
+
+    it("should return error result when API throws", async () => {
+      vi.mocked(api.workspaces.executeCommand).mockRejectedValue(
+        new Error("Command not found: invalid.command")
+      );
+      wirePluginApi(pluginServer, api, workspaceResolver, logger);
+      const handlers = pluginServer.registeredHandlers!;
+
+      const result = await handlers.executeCommand("/home/user/.codehydra/workspaces/my-feature", {
+        command: "invalid.command",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBe("Command not found: invalid.command");
       }
     });
   });
