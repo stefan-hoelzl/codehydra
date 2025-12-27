@@ -292,7 +292,11 @@ export class CoreModule implements IApiModule {
     // If this workspace is active, try to switch to next workspace immediately
     const isActive = this.deps.viewManager.getActiveWorkspacePath() === workspace.path;
     if (isActive) {
-      await this.switchToNextWorkspaceIfAvailable(projectPath, workspace.path);
+      const switched = await this.switchToNextWorkspaceIfAvailable(projectPath, workspace.path);
+      if (!switched) {
+        this.deps.viewManager.setActiveWorkspace(null, false);
+        this.api.emit("workspace:switched", null);
+      }
     }
 
     // Fire-and-forget: execute deletion asynchronously
