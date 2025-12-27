@@ -1,28 +1,12 @@
 // @vitest-environment node
 /**
- * Tests for API-based IPC handlers.
- * These handlers delegate to ICodeHydraApi methods.
+ * Tests for API event wiring and window title utilities.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ICodeHydraApi } from "../../shared/api/interfaces";
 import type { ProjectId, WorkspaceName, Project, Workspace } from "../../shared/api/types";
-
-// Mock functions at top level
-const mockHandle = vi.fn();
-
-// Mock Electron - must be at module scope
-vi.mock("electron", () => {
-  return {
-    ipcMain: {
-      handle: (...args: unknown[]) => mockHandle(...args),
-    },
-  };
-});
-
-// Import after mock
-import { registerApiHandlers, wireApiEvents, formatWindowTitle } from "./api-handlers";
-import { createSilentLogger } from "../../services/logging";
+import { wireApiEvents, formatWindowTitle } from "./api-handlers";
 
 // =============================================================================
 // Mock API Factory
@@ -39,7 +23,7 @@ function createMockApi(): ICodeHydraApi {
     },
     workspaces: {
       create: vi.fn(),
-      remove: vi.fn().mockResolvedValue({ branchDeleted: false }),
+      remove: vi.fn().mockResolvedValue({ started: true }),
       forceRemove: vi.fn().mockResolvedValue(undefined),
       get: vi.fn(),
       getStatus: vi.fn().mockResolvedValue({ isDirty: false, agent: { type: "none" } }),
@@ -62,6 +46,28 @@ function createMockApi(): ICodeHydraApi {
     dispose: vi.fn(),
   };
 }
+
+// =============================================================================
+// Test Data
+// =============================================================================
+
+const TEST_PROJECT_ID = "my-app-12345678" as ProjectId;
+const TEST_WORKSPACE_NAME = "feature-branch" as WorkspaceName;
+
+const TEST_PROJECT: Project = {
+  id: TEST_PROJECT_ID,
+  name: "my-app",
+  path: "/home/user/projects/my-app",
+  workspaces: [],
+};
+
+const TEST_WORKSPACE: Workspace = {
+  projectId: TEST_PROJECT_ID,
+  name: TEST_WORKSPACE_NAME,
+  branch: "feature-branch",
+  metadata: { base: "main" },
+  path: "/home/user/.codehydra/workspaces/feature-branch",
+};
 
 // =============================================================================
 // formatWindowTitle Tests
@@ -108,456 +114,8 @@ describe("formatWindowTitle", () => {
 });
 
 // =============================================================================
-// Test Data
+// wireApiEvents Tests
 // =============================================================================
-
-const TEST_PROJECT_ID = "my-app-12345678" as ProjectId;
-const TEST_WORKSPACE_NAME = "feature-branch" as WorkspaceName;
-
-const TEST_PROJECT: Project = {
-  id: TEST_PROJECT_ID,
-  name: "my-app",
-  path: "/home/user/projects/my-app",
-  workspaces: [],
-};
-
-const TEST_WORKSPACE: Workspace = {
-  projectId: TEST_PROJECT_ID,
-  name: TEST_WORKSPACE_NAME,
-  branch: "feature-branch",
-  metadata: { base: "main" },
-  path: "/home/user/.codehydra/workspaces/feature-branch",
-};
-
-// =============================================================================
-// Tests
-// =============================================================================
-
-describe("registerApiHandlers", () => {
-  let mockApi: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    mockApi = createMockApi();
-  });
-
-  it("registers all API handlers", () => {
-    registerApiHandlers(mockApi, createSilentLogger());
-
-    // Verify expected channels are registered
-    const registeredChannels = mockHandle.mock.calls.map((call) => call[0]);
-    expect(registeredChannels).toContain("api:project:open");
-    expect(registeredChannels).toContain("api:project:close");
-    expect(registeredChannels).toContain("api:project:list");
-    expect(registeredChannels).toContain("api:project:get");
-    expect(registeredChannels).toContain("api:project:fetch-bases");
-    expect(registeredChannels).toContain("api:workspace:create");
-    expect(registeredChannels).toContain("api:workspace:remove");
-    expect(registeredChannels).toContain("api:workspace:get");
-    expect(registeredChannels).toContain("api:workspace:get-status");
-    expect(registeredChannels).toContain("api:ui:select-folder");
-    expect(registeredChannels).toContain("api:ui:get-active-workspace");
-    expect(registeredChannels).toContain("api:ui:switch-workspace");
-    expect(registeredChannels).toContain("api:ui:set-mode");
-    // NOTE: Lifecycle handlers are registered separately via registerLifecycleHandlers()
-    // in bootstrap(), NOT in registerApiHandlers(). See lifecycle-handlers.ts.
-  });
-});
-
-describe("Project API handlers", () => {
-  let mockApi: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    mockApi = createMockApi();
-    registerApiHandlers(mockApi, createSilentLogger());
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  describe("api:project:open", () => {
-    it("delegates to api.projects.open", async () => {
-      vi.mocked(mockApi.projects.open).mockResolvedValue(TEST_PROJECT);
-
-      const handler = getHandler("api:project:open");
-      const result = await handler({}, { path: "/home/user/projects/my-app" });
-
-      expect(mockApi.projects.open).toHaveBeenCalledWith("/home/user/projects/my-app");
-      expect(result).toEqual(TEST_PROJECT);
-    });
-
-    it("throws validation error for missing path", async () => {
-      const handler = getHandler("api:project:open");
-
-      await expect(handler({}, {})).rejects.toThrow(/path/i);
-      expect(mockApi.projects.open).not.toHaveBeenCalled();
-    });
-
-    it("throws validation error for non-string path", async () => {
-      const handler = getHandler("api:project:open");
-
-      await expect(handler({}, { path: 123 })).rejects.toThrow(/path/i);
-      expect(mockApi.projects.open).not.toHaveBeenCalled();
-    });
-
-    it("throws validation error for relative path", async () => {
-      const handler = getHandler("api:project:open");
-
-      await expect(handler({}, { path: "relative/path" })).rejects.toThrow(/absolute/i);
-      expect(mockApi.projects.open).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("api:project:close", () => {
-    it("delegates to api.projects.close", async () => {
-      const handler = getHandler("api:project:close");
-      await handler({}, { projectId: TEST_PROJECT_ID });
-
-      expect(mockApi.projects.close).toHaveBeenCalledWith(TEST_PROJECT_ID);
-    });
-
-    it("throws validation error for invalid projectId", async () => {
-      const handler = getHandler("api:project:close");
-
-      await expect(handler({}, { projectId: "invalid" })).rejects.toThrow(/projectId/i);
-      expect(mockApi.projects.close).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("api:project:list", () => {
-    it("delegates to api.projects.list", async () => {
-      vi.mocked(mockApi.projects.list).mockResolvedValue([TEST_PROJECT]);
-
-      const handler = getHandler("api:project:list");
-      const result = await handler({}, undefined);
-
-      expect(mockApi.projects.list).toHaveBeenCalled();
-      expect(result).toEqual([TEST_PROJECT]);
-    });
-  });
-
-  describe("api:project:get", () => {
-    it("delegates to api.projects.get", async () => {
-      vi.mocked(mockApi.projects.get).mockResolvedValue(TEST_PROJECT);
-
-      const handler = getHandler("api:project:get");
-      const result = await handler({}, { projectId: TEST_PROJECT_ID });
-
-      expect(mockApi.projects.get).toHaveBeenCalledWith(TEST_PROJECT_ID);
-      expect(result).toEqual(TEST_PROJECT);
-    });
-  });
-
-  describe("api:project:fetch-bases", () => {
-    it("delegates to api.projects.fetchBases", async () => {
-      const bases = [{ name: "main", isRemote: false }];
-      vi.mocked(mockApi.projects.fetchBases).mockResolvedValue({ bases });
-
-      const handler = getHandler("api:project:fetch-bases");
-      const result = await handler({}, { projectId: TEST_PROJECT_ID });
-
-      expect(mockApi.projects.fetchBases).toHaveBeenCalledWith(TEST_PROJECT_ID);
-      expect(result).toEqual({ bases });
-    });
-  });
-});
-
-describe("Workspace API handlers", () => {
-  let mockApi: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    mockApi = createMockApi();
-    registerApiHandlers(mockApi, createSilentLogger());
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  describe("api:workspace:create", () => {
-    it("delegates to api.workspaces.create", async () => {
-      vi.mocked(mockApi.workspaces.create).mockResolvedValue(TEST_WORKSPACE);
-
-      const handler = getHandler("api:workspace:create");
-      const result = await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, name: "feature-branch", base: "main" }
-      );
-
-      expect(mockApi.workspaces.create).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        "feature-branch",
-        "main"
-      );
-      expect(result).toEqual(TEST_WORKSPACE);
-    });
-
-    it("throws validation error for missing name", async () => {
-      const handler = getHandler("api:workspace:create");
-
-      await expect(handler({}, { projectId: TEST_PROJECT_ID, base: "main" })).rejects.toThrow(
-        /name/i
-      );
-    });
-
-    it("throws validation error for empty name", async () => {
-      const handler = getHandler("api:workspace:create");
-
-      await expect(
-        handler({}, { projectId: TEST_PROJECT_ID, name: "", base: "main" })
-      ).rejects.toThrow(/name/i);
-    });
-  });
-
-  describe("api:workspace:remove", () => {
-    it("delegates to api.workspaces.remove with keepBranch default", async () => {
-      const handler = getHandler("api:workspace:remove");
-      await handler({}, { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME });
-
-      // keepBranch defaults to true in the handler
-      expect(mockApi.workspaces.remove).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        true
-      );
-    });
-
-    it("passes keepBranch=false when specified", async () => {
-      const handler = getHandler("api:workspace:remove");
-      await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME, keepBranch: false }
-      );
-
-      expect(mockApi.workspaces.remove).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        false
-      );
-    });
-  });
-
-  describe("api:workspace:get", () => {
-    it("delegates to api.workspaces.get", async () => {
-      vi.mocked(mockApi.workspaces.get).mockResolvedValue(TEST_WORKSPACE);
-
-      const handler = getHandler("api:workspace:get");
-      const result = await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME }
-      );
-
-      expect(mockApi.workspaces.get).toHaveBeenCalledWith(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
-      expect(result).toEqual(TEST_WORKSPACE);
-    });
-  });
-
-  describe("api:workspace:get-status", () => {
-    it("delegates to api.workspaces.getStatus", async () => {
-      const status = {
-        isDirty: true,
-        agent: { type: "busy" as const, counts: { idle: 0, busy: 1, total: 1 } },
-      };
-      vi.mocked(mockApi.workspaces.getStatus).mockResolvedValue(status);
-
-      const handler = getHandler("api:workspace:get-status");
-      const result = await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME }
-      );
-
-      expect(mockApi.workspaces.getStatus).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME
-      );
-      expect(result).toEqual(status);
-    });
-  });
-
-  describe("api:workspace:get-opencode-port", () => {
-    it("should reject with validation error when projectId format is invalid", async () => {
-      const handler = getHandler("api:workspace:get-opencode-port");
-
-      await expect(
-        handler({}, { projectId: "invalid", workspaceName: TEST_WORKSPACE_NAME })
-      ).rejects.toThrow(/projectId/i);
-      expect(mockApi.workspaces.getOpencodePort).not.toHaveBeenCalled();
-    });
-
-    it("should reject with validation error when workspaceName is empty", async () => {
-      const handler = getHandler("api:workspace:get-opencode-port");
-
-      await expect(handler({}, { projectId: TEST_PROJECT_ID, workspaceName: "" })).rejects.toThrow(
-        /workspaceName/i
-      );
-      expect(mockApi.workspaces.getOpencodePort).not.toHaveBeenCalled();
-    });
-
-    it("should delegate to api.workspaces.getOpencodePort with validated params", async () => {
-      vi.mocked(mockApi.workspaces.getOpencodePort).mockResolvedValue(12345);
-
-      const handler = getHandler("api:workspace:get-opencode-port");
-      const result = await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME }
-      );
-
-      expect(mockApi.workspaces.getOpencodePort).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME
-      );
-      expect(result).toBe(12345);
-    });
-
-    it("should return null when API returns null", async () => {
-      vi.mocked(mockApi.workspaces.getOpencodePort).mockResolvedValue(null);
-
-      const handler = getHandler("api:workspace:get-opencode-port");
-      const result = await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME }
-      );
-
-      expect(result).toBeNull();
-    });
-  });
-});
-
-describe("UI API handlers", () => {
-  let mockApi: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    mockApi = createMockApi();
-    registerApiHandlers(mockApi, createSilentLogger());
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  describe("api:ui:select-folder", () => {
-    it("delegates to api.ui.selectFolder", async () => {
-      vi.mocked(mockApi.ui.selectFolder).mockResolvedValue("/selected/path");
-
-      const handler = getHandler("api:ui:select-folder");
-      const result = await handler({}, undefined);
-
-      expect(mockApi.ui.selectFolder).toHaveBeenCalled();
-      expect(result).toBe("/selected/path");
-    });
-  });
-
-  describe("api:ui:get-active-workspace", () => {
-    it("delegates to api.ui.getActiveWorkspace", async () => {
-      const ref = {
-        projectId: TEST_PROJECT_ID,
-        workspaceName: TEST_WORKSPACE_NAME,
-        path: "/test/path",
-      };
-      vi.mocked(mockApi.ui.getActiveWorkspace).mockResolvedValue(ref);
-
-      const handler = getHandler("api:ui:get-active-workspace");
-      const result = await handler({}, undefined);
-
-      expect(mockApi.ui.getActiveWorkspace).toHaveBeenCalled();
-      expect(result).toEqual(ref);
-    });
-  });
-
-  describe("api:ui:switch-workspace", () => {
-    it("delegates to api.ui.switchWorkspace", async () => {
-      const handler = getHandler("api:ui:switch-workspace");
-      await handler({}, { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME });
-
-      expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        true // default focus
-      );
-    });
-
-    it("passes focus=false when specified", async () => {
-      const handler = getHandler("api:ui:switch-workspace");
-      await handler(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME, focus: false }
-      );
-
-      expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        false
-      );
-    });
-  });
-
-  describe("api:ui:set-mode", () => {
-    it("delegates to api.ui.setMode", async () => {
-      const handler = getHandler("api:ui:set-mode");
-      await handler({}, { mode: "shortcut" });
-
-      expect(mockApi.ui.setMode).toHaveBeenCalledWith("shortcut");
-    });
-
-    it("accepts 'hover' mode", async () => {
-      const handler = getHandler("api:ui:set-mode");
-      await handler({}, { mode: "hover" });
-
-      expect(mockApi.ui.setMode).toHaveBeenCalledWith("hover");
-    });
-
-    it("throws validation error for missing mode", async () => {
-      const handler = getHandler("api:ui:set-mode");
-
-      await expect(handler({}, {})).rejects.toThrow(/mode/i);
-      expect(mockApi.ui.setMode).not.toHaveBeenCalled();
-    });
-
-    it("throws validation error for invalid mode", async () => {
-      const handler = getHandler("api:ui:set-mode");
-
-      await expect(handler({}, { mode: "invalid" })).rejects.toThrow(/mode/i);
-      expect(mockApi.ui.setMode).not.toHaveBeenCalled();
-    });
-  });
-});
-
-// NOTE: Lifecycle API handlers tests are in lifecycle-handlers.test.ts.
-// Lifecycle handlers are registered separately via registerLifecycleHandlers() in bootstrap().
-
-describe("Error serialization", () => {
-  let mockApi: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    mockApi = createMockApi();
-    registerApiHandlers(mockApi, createSilentLogger());
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  it("propagates API errors as Error instances", async () => {
-    vi.mocked(mockApi.projects.open).mockRejectedValue(new Error("Project not found"));
-
-    const handler = getHandler("api:project:open");
-
-    await expect(handler({}, { path: "/test/path" })).rejects.toThrow("Project not found");
-  });
-});
 
 describe("wireApiEvents", () => {
   let mockApi: ICodeHydraApi;
@@ -565,7 +123,6 @@ describe("wireApiEvents", () => {
   let eventHandlers: Map<string, (event: unknown) => void>;
 
   beforeEach(() => {
-    mockHandle.mockClear();
     eventHandlers = new Map();
 
     mockApi = {
@@ -594,6 +151,7 @@ describe("wireApiEvents", () => {
     expect(mockApi.on).toHaveBeenCalledWith("workspace:removed", expect.any(Function));
     expect(mockApi.on).toHaveBeenCalledWith("workspace:switched", expect.any(Function));
     expect(mockApi.on).toHaveBeenCalledWith("workspace:status-changed", expect.any(Function));
+    expect(mockApi.on).toHaveBeenCalledWith("workspace:metadata-changed", expect.any(Function));
     expect(mockApi.on).toHaveBeenCalledWith("ui:mode-changed", expect.any(Function));
     expect(mockApi.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
   });
@@ -735,112 +293,6 @@ describe("wireApiEvents", () => {
       });
 
       expect(mockSetTitle).toHaveBeenCalledWith("CodeHydra - my-project / feature-x");
-    });
-  });
-});
-
-// =============================================================================
-// Tests: Workspace Metadata IPC Handlers
-// =============================================================================
-
-describe("Workspace Metadata IPC Handlers", () => {
-  let mockApi: ICodeHydraApi;
-  let registeredHandlers: Map<string, (...args: unknown[]) => Promise<unknown>>;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    registeredHandlers = new Map();
-
-    mockHandle.mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
-      registeredHandlers.set(channel, handler as (...args: unknown[]) => Promise<unknown>);
-    });
-
-    mockApi = createMockApi();
-    registerApiHandlers(mockApi, createSilentLogger());
-  });
-
-  describe("api:workspace:set-metadata handler", () => {
-    it("validates projectId format", async () => {
-      const handler = registeredHandlers.get("api:workspace:set-metadata");
-      expect(handler).toBeDefined();
-
-      await expect(
-        handler!(
-          {},
-          { projectId: "invalid", workspaceName: TEST_WORKSPACE_NAME, key: "note", value: "test" }
-        )
-      ).rejects.toThrow(/projectId/);
-    });
-
-    it("validates workspaceName format", async () => {
-      const handler = registeredHandlers.get("api:workspace:set-metadata");
-      expect(handler).toBeDefined();
-
-      await expect(
-        handler!(
-          {},
-          { projectId: TEST_PROJECT_ID, workspaceName: "-invalid", key: "note", value: "test" }
-        )
-      ).rejects.toThrow(/workspaceName/);
-    });
-
-    it("validates key format (rejects underscore)", async () => {
-      const handler = registeredHandlers.get("api:workspace:set-metadata");
-      expect(handler).toBeDefined();
-
-      await expect(
-        handler!(
-          {},
-          {
-            projectId: TEST_PROJECT_ID,
-            workspaceName: TEST_WORKSPACE_NAME,
-            key: "my_key",
-            value: "test",
-          }
-        )
-      ).rejects.toThrow(/key/);
-    });
-
-    it("calls api.workspaces.setMetadata", async () => {
-      const handler = registeredHandlers.get("api:workspace:set-metadata");
-      expect(handler).toBeDefined();
-
-      await handler!(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-          key: "note",
-          value: "test value",
-        }
-      );
-
-      expect(mockApi.workspaces.setMetadata).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        "note",
-        "test value"
-      );
-    });
-  });
-
-  describe("api:workspace:get-metadata handler", () => {
-    it("calls api.workspaces.getMetadata", async () => {
-      vi.mocked(mockApi.workspaces.getMetadata).mockResolvedValue({ base: "main", note: "WIP" });
-
-      const handler = registeredHandlers.get("api:workspace:get-metadata");
-      expect(handler).toBeDefined();
-
-      const result = await handler!(
-        {},
-        { projectId: TEST_PROJECT_ID, workspaceName: TEST_WORKSPACE_NAME }
-      );
-
-      expect(mockApi.workspaces.getMetadata).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME
-      );
-      expect(result).toEqual({ base: "main", note: "WIP" });
     });
   });
 });

@@ -579,7 +579,7 @@ All methods throw `FileSystemError` (extends `ServiceError`) with mapped error c
 
 ## API Layer Architecture
 
-The application uses a unified API layer (`ICodeHydraApi`) that abstracts all CodeHydra operations. This enables multiple consumers (UI, future MCP Server, CLI) without duplicating business logic.
+The application uses a registry-based API layer (`ApiRegistry`) where modules self-register their methods and IPC handlers. This enables multiple consumers (UI, MCP Server, Plugin API) without duplicating business logic.
 
 ### Architecture Overview
 
@@ -587,36 +587,29 @@ The application uses a unified API layer (`ICodeHydraApi`) that abstracts all Co
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                            Consumers                                     │
 ├─────────────────────┬─────────────────────┬─────────────────────────────┤
-│   UI (Renderer)     │   MCP Server        │   Future CLI                │
-│   FULL API          │   CORE API          │   CORE API                  │
+│   UI (Renderer)     │   MCP Server        │   Plugin API                │
+│   FULL API          │   CORE API          │   WORKSPACE API             │
 └──────────┬──────────┴──────────┬──────────┴──────────┬──────────────────┘
            │                     │                     │
            ▼                     ▼                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         IPC Adapter Layer                                │
-│  (Thin adapters: validate input → call API → serialize response)        │
+│                        ApiRegistry + IPC                                 │
+│  (Auto-generates IPC handlers when methods are registered)              │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         ICodeHydraApi                                    │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        │
-│  │ IProjectApi │ │IWorkspaceApi│ │   IUiApi    │ │ILifecycleApi│        │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘        │
-│                           + on(event, handler)                           │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                 CodeHydraApiImpl (src/main/api/)                         │
-│  - Lives in main process (requires Electron for IUiApi)                 │
-│  - Wraps services (AppState, WorkspaceProvider, ViewManager, etc.)      │
-│  - Resolves IDs by iterating open projects (<10, no map needed)         │
-│  - Emits events via callback subscriptions (no intermediate EventEmitter)│
-│  - Implements IDisposable for cleanup                                   │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │
-                                  ▼
+         ┌────────────────────────┼────────────────────────┐
+         ▼                        ▼                        ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ LifecycleModule │    │   CoreModule    │    │    UiModule     │
+│ (bootstrap)     │    │ (startServices) │    │ (startServices) │
+│                 │    │                 │    │                 │
+│ lifecycle.*     │    │ projects.*      │    │ ui.*            │
+│ (3 methods)     │    │ workspaces.*    │    │ (4 methods)     │
+│                 │    │ (13 methods)    │    │                 │
+└────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+         │                      │                      │
+         └──────────────────────┼──────────────────────┘
+                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           Services                                       │
 │  AppState, GitWorktreeProvider, AgentStatusManager, ViewManager, etc.   │
@@ -625,11 +618,11 @@ The application uses a unified API layer (`ICodeHydraApi`) that abstracts all Co
 
 ### Layer Ownership
 
-| Component          | Owns                                             | Does NOT Own                           |
-| ------------------ | ------------------------------------------------ | -------------------------------------- |
-| `AppState`         | Project/workspace state, provider registry       | Event emission, ID generation          |
-| `CodeHydraApiImpl` | ID↔path resolution, event emission, API contract | Business logic (delegates to services) |
-| `IPC Handlers`     | Input validation, IPC serialization              | Business logic, state                  |
+| Component     | Owns                                             | Does NOT Own                       |
+| ------------- | ------------------------------------------------ | ---------------------------------- |
+| `AppState`    | Project/workspace state, provider registry       | Event emission, ID generation      |
+| `ApiRegistry` | Method registration, IPC auto-generation, events | Business logic (in modules)        |
+| `Modules`     | Business logic, ID resolution, event emission    | IPC serialization (auto-generated) |
 
 ### API Interfaces
 

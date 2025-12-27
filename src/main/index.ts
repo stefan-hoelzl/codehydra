@@ -35,17 +35,12 @@ import { ViewManager } from "./managers/view-manager";
 import { BadgeManager } from "./managers/badge-manager";
 import { DefaultElectronAppApi } from "./managers/electron-app-api";
 import { AppState } from "./app-state";
-import {
-  registerApiHandlers,
-  wireApiEvents,
-  registerLifecycleHandlers,
-  formatWindowTitle,
-  registerLogHandlers,
-} from "./ipc";
-import { CodeHydraApiImpl } from "./api/codehydra-api";
-import { LifecycleApi } from "./api/lifecycle-api";
+import { wireApiEvents, formatWindowTitle, registerLogHandlers } from "./ipc";
+import { initializeBootstrap, type BootstrapResult } from "./bootstrap";
+import type { CoreModuleDeps } from "./modules/core";
+import type { UiModuleDeps } from "./modules/ui";
 import { generateProjectId } from "./api/id-utils";
-import type { ICodeHydraApi, ILifecycleApi, Unsubscribe } from "../shared/api/interfaces";
+import type { ICodeHydraApi, Unsubscribe } from "../shared/api/interfaces";
 import type { WorkspaceName, WorkspaceStatus } from "../shared/api/types";
 import { ApiIpcChannels } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
@@ -195,10 +190,10 @@ let processRunner: ExecaProcessRunner | null = null;
 let vscodeSetupService: VscodeSetupService | null = null;
 
 /**
- * LifecycleApi instance created in bootstrap(), reused by CodeHydraApiImpl.
- * Created early to make lifecycle handlers available before startServices() runs.
+ * Bootstrap result containing API registry and modules.
+ * Created in bootstrap() with initializeBootstrap().
  */
-let lifecycleApi: ILifecycleApi | null = null;
+let bootstrapResult: (BootstrapResult & { startServices: () => void }) | null = null;
 
 /**
  * Flag to track if services have been started.
@@ -211,7 +206,7 @@ let servicesStarted = false;
  * This is the second phase of the two-phase startup:
  * bootstrap() → startServices()
  *
- * CRITICAL: Called by LifecycleApi's onSetupComplete callback BEFORE
+ * CRITICAL: Called by LifecycleModule's onSetupComplete callback BEFORE
  * returning the setup result to the renderer. This ensures IPC handlers
  * are registered before MainView mounts.
  */
@@ -332,49 +327,17 @@ async function startServices(): Promise<void> {
   appState.setAgentStatusManager(agentStatusManager);
   appState.setServerManager(serverManager);
 
-  // Create and register API-based handlers
-  // Reuse the existing lifecycleApi from bootstrap() if available
-  // Capture viewManager for deletion progress emission
-  const viewManagerForDeletion = viewManager;
+  // Guard: bootstrapResult must be initialized by bootstrap()
+  if (!bootstrapResult) {
+    throw new Error("Bootstrap not initialized - startServices called before bootstrap");
+  }
 
-  // Create killTerminalsCallback if PluginServer is available
-  // This callback:
-  // 1. Sends terminal.killAll command to kill workspace terminal processes
-  // 2. Sends shutdown event to terminate extension host (releases file handles)
-  const pluginLogger = loggingService.createLogger("plugin");
-  const killTerminalsCallback = pluginServer
-    ? async (workspacePath: string) => {
-        // Step 1: Kill terminal processes
-        await sendShutdownCommand(pluginServer!, workspacePath, pluginLogger);
-        // Step 2: Shutdown extension host (releases file watchers, terminates process)
-        await pluginServer!.sendExtensionHostShutdown(workspacePath);
-      }
-    : undefined;
+  // Create remaining modules (CoreModule, UiModule)
+  // The deps factory functions reference module-level appState/viewManager which are now set
+  bootstrapResult.startServices();
 
-  codeHydraApi = new CodeHydraApiImpl(
-    appState,
-    viewManager,
-    dialog,
-    app,
-    vscodeSetupService ?? undefined,
-    lifecycleApi ?? undefined,
-    // Deletion progress callback - emits to renderer
-    (progress) => {
-      try {
-        viewManagerForDeletion
-          ?.getUIWebContents()
-          ?.send(ApiIpcChannels.WORKSPACE_DELETION_PROGRESS, progress);
-      } catch {
-        // Log but don't throw - deletion continues even if UI disconnected
-      }
-    },
-    killTerminalsCallback,
-    pluginServer ?? undefined,
-    loggingService.createLogger("api")
-  );
-
-  // Register API handlers
-  registerApiHandlers(codeHydraApi, loggingService.createLogger("api"));
+  // Get the typed API interface (all methods are now registered)
+  codeHydraApi = bootstrapResult.getInterface();
 
   // Wire PluginServer to CodeHydraApi (if PluginServer is running)
   if (pluginServer) {
@@ -404,8 +367,7 @@ async function startServices(): Promise<void> {
   );
 
   // Wire agent status changes to API events
-  // This bridges the AgentStatusManager callback to the v2 API event system
-  const api = codeHydraApi as CodeHydraApiImpl;
+  // This bridges the AgentStatusManager callback to the registry event system
   agentStatusCleanup = agentStatusManager.onStatusChanged((workspacePath, aggregatedStatus) => {
     // Find the project containing this workspace
     const project = appStateRef.findProjectForWorkspace(workspacePath);
@@ -435,8 +397,8 @@ async function startServices(): Promise<void> {
             },
           };
 
-    // Emit through the API
-    api.emit("workspace:status-changed", {
+    // Emit through the registry
+    bootstrapResult?.registry.emit("workspace:status-changed", {
       projectId,
       workspaceName,
       path: workspacePath,
@@ -495,7 +457,7 @@ async function startServices(): Promise<void> {
 
 // NOTE: Legacy setup handlers (registerSetupReadyHandler, registerSetupRetryAndQuitHandlers,
 // runSetupProcess, createSetupEmitters) have been removed. Setup is now handled entirely
-// through the LifecycleApi and registerLifecycleHandlers().
+// through the LifecycleModule (which registers lifecycle.* IPC handlers).
 
 /**
  * Bootstraps the application.
@@ -509,7 +471,7 @@ async function startServices(): Promise<void> {
  * 3. Regenerate wrapper scripts (cheap operation on every startup)
  * 4. Run preflight to determine if setup is needed
  * 5. Create WindowManager and ViewManager
- * 6. Create LifecycleApi and register lifecycle handlers
+ * 6. Initialize bootstrap with ApiRegistry and LifecycleModule
  * 7. If setup complete, start services immediately
  * 8. Load UI (renderer will call lifecycle.getState() in onMount)
  *    - If "ready": renderer shows MainView
@@ -528,7 +490,7 @@ async function bootstrap(): Promise<void> {
   // 1. Disable application menu
   Menu.setApplicationMenu(null);
 
-  // 2. Create VscodeSetupService early (needed for LifecycleApi)
+  // 2. Create VscodeSetupService early (needed for LifecycleModule)
   // Note: Process tree provider is created lazily in startServices() using the factory
 
   // Store processRunner in module-level variable for reuse by CodeServerManager
@@ -608,27 +570,81 @@ async function bootstrap(): Promise<void> {
   // Capture viewManager for closure (TypeScript narrow refinement doesn't persist)
   const viewManagerRef = viewManager;
 
-  // 8. Create LifecycleApi - this must happen BEFORE loading UI
-  // The LifecycleApi handles setup flow and is reused by CodeHydraApiImpl
-  lifecycleApi = new LifecycleApi(
-    vscodeSetupService,
-    app,
-    // onSetupComplete callback - starts services when setup completes
-    async () => {
-      appLogger.info("Setup complete");
-      await startServices();
-      appLogger.info("Services started");
+  // 8. Initialize bootstrap with API registry and modules
+  // LifecycleModule is created immediately (handles lifecycle.* IPC)
+  // CoreModule and UiModule are created when startServices() calls bootstrapResult.startServices()
+  bootstrapResult = initializeBootstrap({
+    logger: loggingService.createLogger("api"),
+    // Lifecycle module deps - available now
+    lifecycleDeps: {
+      vscodeSetup: vscodeSetupService ?? undefined,
+      app,
+      onSetupComplete: async () => {
+        appLogger.info("Setup complete");
+        await startServices();
+        appLogger.info("Services started");
+      },
+      logger: loggingService.createLogger("lifecycle"),
     },
-    // emitProgress callback - sends progress events to renderer
-    (progress) => {
-      viewManagerRef.getUIView().webContents.send(ApiIpcChannels.SETUP_PROGRESS, progress);
+    // Core module deps - factory that captures module-level appState
+    // Called when bootstrapResult.startServices() runs in startServices()
+    coreDepsFn: (): CoreModuleDeps => {
+      if (!appState || !viewManager) {
+        throw new Error("Core deps not ready - appState/viewManager not initialized");
+      }
+      const pluginLogger = loggingService.createLogger("plugin");
+      const baseDeps = {
+        appState,
+        viewManager,
+        emitDeletionProgress: (progress: import("../shared/api/types").DeletionProgress) => {
+          try {
+            viewManagerRef
+              ?.getUIWebContents()
+              ?.send(ApiIpcChannels.WORKSPACE_DELETION_PROGRESS, progress);
+          } catch {
+            // Log but don't throw - deletion continues even if UI disconnected
+          }
+        },
+        logger: loggingService.createLogger("api"),
+      };
+      // Add killTerminalsCallback only if PluginServer is available
+      // This callback:
+      // 1. Sends terminal.killAll command to kill workspace terminal processes
+      // 2. Sends shutdown event to terminate extension host (releases file handles)
+      if (pluginServer) {
+        return {
+          ...baseDeps,
+          pluginServer,
+          killTerminalsCallback: async (workspacePath: string) => {
+            // Step 1: Kill terminal processes
+            await sendShutdownCommand(pluginServer!, workspacePath, pluginLogger);
+            // Step 2: Shutdown extension host (releases file watchers, terminates process)
+            await pluginServer!.sendExtensionHostShutdown(workspacePath);
+          },
+        };
+      }
+      return baseDeps;
     },
-    loggingService.createLogger("lifecycle")
-  );
+    // UI module deps - factory that captures module-level appState
+    uiDepsFn: (): UiModuleDeps => {
+      if (!appState || !viewManager) {
+        throw new Error("UI deps not ready - appState/viewManager not initialized");
+      }
+      return {
+        appState,
+        viewManager,
+        // Wrap Electron dialog to match MinimalDialog interface
+        dialog: {
+          showOpenDialog: async (options: { properties: string[] }) => {
+            return dialog.showOpenDialog(options as Parameters<typeof dialog.showOpenDialog>[0]);
+          },
+        },
+      };
+    },
+  }) as BootstrapResult & { startServices: () => void };
 
-  // 9. Register lifecycle handlers EARLY (before loading UI)
-  // These handlers delegate to LifecycleApi
-  registerLifecycleHandlers(lifecycleApi);
+  // Note: IPC handlers for lifecycle.* are now registered by LifecycleModule
+  // No need to call registerLifecycleHandlers() separately
 
   // 10. If setup is complete, start services immediately
   // This is done BEFORE loading UI so handlers are ready when MainView mounts
@@ -704,11 +720,12 @@ async function cleanup(): Promise<void> {
     agentStatusCleanup = null;
   }
 
-  // Dispose CodeHydra API
-  if (codeHydraApi) {
-    codeHydraApi.dispose();
-    codeHydraApi = null;
+  // Dispose API registry and modules
+  if (bootstrapResult) {
+    await bootstrapResult.dispose();
+    bootstrapResult = null;
   }
+  codeHydraApi = null;
 
   // Destroy all views
   if (viewManager) {

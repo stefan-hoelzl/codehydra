@@ -510,14 +510,14 @@ bootstrap()
 
 ## IPC Patterns
 
-IPC handlers are thin adapters over `ICodeHydraApi`. Key patterns:
+IPC handlers are auto-registered by the `ApiRegistry` when modules register their methods. Key patterns:
 
+- **Module Registration**: Modules call `api.register(path, handler, { ipc: channel })` to register IPC handlers
 - **Fire-and-forget**: Use `void api.call()` for non-blocking UI state changes
-- **API Layer**: All business logic in API implementation, IPC handlers only validate and delegate
 - **ID Generation**: Deterministic `<name>-<hash8>` format for projects and workspaces
 - **v2 API Usage**: Renderer uses `api.v2.*` for all operations after setup
 
-**Full details**: See [IPC Patterns](docs/PATTERNS.md#ipc-patterns) for code examples.
+**Full details**: See [Module Registration Pattern](docs/PATTERNS.md#module-registration-pattern) for code examples.
 
 ## VSCode Elements Patterns
 

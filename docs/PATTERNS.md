@@ -28,44 +28,63 @@ This pattern is used when:
 2. Immediate UI response is more important than confirmation
 3. The renderer should not block on the main process
 
-### API Layer Pattern
+### Module Registration Pattern
 
-IPC handlers are thin adapters over `ICodeHydraApi`. All business logic lives in the API implementation:
+The API uses a registry pattern where modules self-register their methods and IPC handlers.
 
-```typescript
-// IPC handler (thin adapter) - src/main/ipc/api-handlers.ts
-ipcMain.handle("api:project:open", async (_event, { path }: { path: string }) => {
-  // 1. Validate input
-  if (!path || typeof path !== "string") {
-    throw new ValidationError([{ path: ["path"], message: "Path required" }]);
-  }
-  if (!pathModule.isAbsolute(path)) {
-    throw new ValidationError([{ path: ["path"], message: "Path must be absolute" }]);
-  }
-  // 2. Delegate to API
-  return await api.projects.open(path);
-});
+**Architecture:**
+
+```
+ApiRegistry (created in bootstrap)
+    │
+    ├── LifecycleModule (created in bootstrap)
+    │   └── registers: lifecycle.getState, lifecycle.setup, lifecycle.quit
+    │
+    ├── CoreModule (created in startServices)
+    │   └── registers: projects.*, workspaces.*
+    │
+    └── UiModule (created in startServices)
+        └── registers: ui.*
 ```
 
-The API implementation (`CodeHydraApiImpl`) wraps services and handles event emission:
+**Module Registration:**
 
 ```typescript
-// API implementation - src/main/api/codehydra-api.ts
-class CodeHydraApiImpl implements ICodeHydraApi {
-  async open(absolutePath: string): Promise<Project> {
-    // Delegate to service
-    const project = await this.appState.openProject(absolutePath);
+// src/main/modules/core/index.ts
+export class CoreModule implements IApiModule {
+  constructor(
+    private readonly api: IApiRegistry,
+    private readonly deps: CoreModuleDeps
+  ) {
+    this.registerMethods();
+  }
 
-    // Generate ID for external consumers
-    const projectId = generateProjectId(absolutePath);
+  private registerMethods(): void {
+    // Register method with automatic IPC handler
+    this.api.register("projects.open", this.projectOpen.bind(this), {
+      ipc: ApiIpcChannels.PROJECT_OPEN,
+    });
+    // ... more registrations
+  }
 
-    // Emit event
-    this.emit("project:opened", { project: { ...project, id: projectId } });
+  private async projectOpen(payload: ProjectOpenPayload): Promise<Project> {
+    const internalProject = await this.deps.appState.openProject(payload.path);
+    const apiProject = this.toApiProject(internalProject);
 
-    return { ...project, id: projectId };
+    // Emit event through registry
+    this.api.emit("project:opened", { project: apiProject });
+
+    return apiProject;
   }
 }
 ```
+
+**Key Points:**
+
+- IPC handlers are auto-generated when `ipc` option is provided to `register()`
+- All methods use payload objects (e.g., `{ path: string }`) not positional args
+- `getInterface()` returns `ICodeHydraApi` for external consumers (converts payload → positional)
+- Events are emitted through the registry with type-safe payloads
 
 ### ID Generation Pattern
 

@@ -1,0 +1,203 @@
+/**
+ * UiModule - Handles UI-related operations.
+ *
+ * Responsibilities:
+ * - selectFolder: Show folder selection dialog
+ * - getActiveWorkspace: Get currently active workspace
+ * - switchWorkspace: Switch to a different workspace
+ * - setMode: Set UI mode (workspace, shortcut, dialog, hover)
+ *
+ * Created in startServices() after setup is complete.
+ */
+
+import type {
+  IApiRegistry,
+  IApiModule,
+  EmptyPayload,
+  UiSwitchWorkspacePayload,
+  UiSetModePayload,
+} from "../../api/registry-types";
+import type { ProjectId, WorkspaceName, WorkspaceRef } from "../../../shared/api/types";
+import type { AppState } from "../../app-state";
+import type { IViewManager } from "../../managers/view-manager.interface";
+import type { Unsubscribe } from "../../../shared/api/interfaces";
+import { ApiIpcChannels } from "../../../shared/ipc";
+import { generateProjectId } from "../../api/id-utils";
+import * as path from "node:path";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+/**
+ * Minimal dialog interface required by UiModule.
+ */
+export interface MinimalDialog {
+  showOpenDialog(options: { properties: string[] }): Promise<{
+    canceled: boolean;
+    filePaths: string[];
+  }>;
+}
+
+/**
+ * Dependencies for UiModule.
+ */
+export interface UiModuleDeps {
+  /** Application state manager */
+  readonly appState: AppState;
+  /** View manager for workspace views */
+  readonly viewManager: IViewManager;
+  /** Electron dialog for folder selection */
+  readonly dialog: MinimalDialog;
+}
+
+// =============================================================================
+// Module Implementation
+// =============================================================================
+
+/**
+ * UiModule handles UI-related operations.
+ *
+ * Registered methods:
+ * - ui.selectFolder: Show folder selection dialog
+ * - ui.getActiveWorkspace: Get currently active workspace
+ * - ui.switchWorkspace: Switch to a different workspace
+ * - ui.setMode: Set UI mode
+ *
+ * Events emitted:
+ * - workspace:switched: When active workspace changes
+ * - ui:mode-changed: When UI mode changes (via ViewManager subscription)
+ */
+export class UiModule implements IApiModule {
+  // Cleanup function for ViewManager mode change subscription
+  private readonly unsubscribeModeChange: Unsubscribe;
+
+  /**
+   * Create a new UiModule.
+   *
+   * @param api The API registry to register methods on
+   * @param deps Module dependencies
+   */
+  constructor(
+    private readonly api: IApiRegistry,
+    private readonly deps: UiModuleDeps
+  ) {
+    this.registerMethods();
+
+    // Wire ViewManager mode changes to API events
+    this.unsubscribeModeChange = this.deps.viewManager.onModeChange((event) => {
+      this.api.emit("ui:mode-changed", event);
+    });
+  }
+
+  /**
+   * Register all UI methods with the API registry.
+   */
+  private registerMethods(): void {
+    this.api.register("ui.selectFolder", this.selectFolder.bind(this), {
+      ipc: ApiIpcChannels.UI_SELECT_FOLDER,
+    });
+    this.api.register("ui.getActiveWorkspace", this.getActiveWorkspace.bind(this), {
+      ipc: ApiIpcChannels.UI_GET_ACTIVE_WORKSPACE,
+    });
+    this.api.register("ui.switchWorkspace", this.switchWorkspace.bind(this), {
+      ipc: ApiIpcChannels.UI_SWITCH_WORKSPACE,
+    });
+    this.api.register("ui.setMode", this.setMode.bind(this), {
+      ipc: ApiIpcChannels.UI_SET_MODE,
+    });
+  }
+
+  // ===========================================================================
+  // UI Methods
+  // ===========================================================================
+
+  private async selectFolder(payload: EmptyPayload): Promise<string | null> {
+    void payload; // Required by MethodHandler interface but unused for no-arg methods
+    const result = await this.deps.dialog.showOpenDialog({
+      properties: ["openDirectory"],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  }
+
+  private async getActiveWorkspace(payload: EmptyPayload): Promise<WorkspaceRef | null> {
+    void payload; // Required by MethodHandler interface but unused for no-arg methods
+    const activeWorkspacePath = this.deps.viewManager.getActiveWorkspacePath();
+    if (!activeWorkspacePath) {
+      return null;
+    }
+
+    const project = this.deps.appState.findProjectForWorkspace(activeWorkspacePath);
+    if (!project) {
+      return null;
+    }
+
+    const projectId = generateProjectId(project.path);
+    const workspaceName = path.basename(activeWorkspacePath) as WorkspaceName;
+
+    return {
+      projectId,
+      workspaceName,
+      path: activeWorkspacePath,
+    };
+  }
+
+  private async switchWorkspace(payload: UiSwitchWorkspacePayload): Promise<void> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => path.basename(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    const focus = payload.focus ?? true;
+    this.deps.viewManager.setActiveWorkspace(workspace.path, focus);
+
+    this.api.emit("workspace:switched", {
+      projectId: payload.projectId,
+      workspaceName: payload.workspaceName,
+      path: workspace.path,
+    });
+  }
+
+  private async setMode(payload: UiSetModePayload): Promise<void> {
+    this.deps.viewManager.setMode(payload.mode);
+  }
+
+  // ===========================================================================
+  // Helper Methods
+  // ===========================================================================
+
+  private async resolveProjectPath(projectId: ProjectId): Promise<string | undefined> {
+    const projects = await this.deps.appState.getAllProjects();
+    for (const project of projects) {
+      if (generateProjectId(project.path) === projectId) {
+        return project.path;
+      }
+    }
+    return undefined;
+  }
+
+  // ===========================================================================
+  // IApiModule Implementation
+  // ===========================================================================
+
+  dispose(): void {
+    this.unsubscribeModeChange();
+  }
+}

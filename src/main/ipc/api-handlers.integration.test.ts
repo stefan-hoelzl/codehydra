@@ -1,13 +1,16 @@
 /**
- * Integration tests for API-based IPC handlers.
+ * Integration tests for API event wiring.
  *
- * These tests verify the full event flow from API through IPC handlers
+ * These tests verify the full event flow from API through wireApiEvents
  * to the renderer (mocked via webContents.send).
  *
  * Tests cover:
  * - API → IPC → Renderer event flow
- * - Handler + API integration
- * - Error handling across IPC boundaries
+ * - Event forwarding for all event types
+ * - Cleanup and error handling
+ *
+ * Note: IPC handler tests are now in the module tests (lifecycle, core, ui)
+ * since IPC handlers are auto-registered by the ApiRegistry.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -19,25 +22,7 @@ import type {
   Workspace,
   WorkspaceRef,
 } from "../../shared/api/types";
-
-// =============================================================================
-// Mock Setup
-// =============================================================================
-
-const mockHandle = vi.fn();
-const mockRemoveHandler = vi.fn();
-
-// Mock Electron
-vi.mock("electron", () => ({
-  ipcMain: {
-    handle: (...args: unknown[]) => mockHandle(...args),
-    removeHandler: (...args: unknown[]) => mockRemoveHandler(...args),
-  },
-}));
-
-// Import after mock
-import { registerApiHandlers, wireApiEvents } from "./api-handlers";
-import { createSilentLogger } from "../../services/logging";
+import { wireApiEvents } from "./api-handlers";
 
 // =============================================================================
 // Test Data
@@ -163,9 +148,6 @@ describe("API → IPC → Renderer event flow", () => {
   let cleanup: () => void;
 
   beforeEach(() => {
-    mockHandle.mockClear();
-    mockRemoveHandler.mockClear();
-
     const mock = createMockApiWithEvents();
     api = mock.api;
     emitEvent = mock.emitEvent;
@@ -266,302 +248,5 @@ describe("API → IPC → Renderer event flow", () => {
     emitEvent("project:opened", { project: TEST_PROJECT });
 
     expect(mockWebContents.send).not.toHaveBeenCalled();
-  });
-});
-
-describe("Handler + API integration", () => {
-  let api: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    const mock = createMockApiWithEvents();
-    api = mock.api;
-    registerApiHandlers(api, createSilentLogger());
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  describe("Project operations", () => {
-    it("should call API and return result for project open", async () => {
-      const handler = getHandler("api:project:open");
-      const result = await handler({}, { path: TEST_PATH });
-
-      expect(api.projects.open).toHaveBeenCalledWith(TEST_PATH);
-      expect(result).toEqual(TEST_PROJECT);
-    });
-
-    it("should call API and return result for project list", async () => {
-      const handler = getHandler("api:project:list");
-      const result = await handler({}, undefined);
-
-      expect(api.projects.list).toHaveBeenCalled();
-      expect(result).toEqual([TEST_PROJECT]);
-    });
-
-    it("should call API and return result for project close", async () => {
-      const handler = getHandler("api:project:close");
-      await handler({}, { projectId: TEST_PROJECT_ID });
-
-      expect(api.projects.close).toHaveBeenCalledWith(TEST_PROJECT_ID);
-    });
-
-    it("should call API and return result for fetchBases", async () => {
-      const bases = [{ name: "main", isRemote: false }];
-      vi.mocked(api.projects.fetchBases).mockResolvedValue({ bases });
-
-      const handler = getHandler("api:project:fetch-bases");
-      const result = await handler({}, { projectId: TEST_PROJECT_ID });
-
-      expect(api.projects.fetchBases).toHaveBeenCalledWith(TEST_PROJECT_ID);
-      expect(result).toEqual({ bases });
-    });
-  });
-
-  describe("Workspace operations", () => {
-    it("should call API and return result for workspace create", async () => {
-      const handler = getHandler("api:workspace:create");
-      const result = await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          name: "feature-branch",
-          base: "main",
-        }
-      );
-
-      expect(api.workspaces.create).toHaveBeenCalledWith(TEST_PROJECT_ID, "feature-branch", "main");
-      expect(result).toEqual(TEST_WORKSPACE);
-    });
-
-    it("should call API and return result for workspace remove", async () => {
-      vi.mocked(api.workspaces.remove).mockResolvedValue({ started: true });
-
-      const handler = getHandler("api:workspace:remove");
-      const result = await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-          keepBranch: false,
-        }
-      );
-
-      expect(api.workspaces.remove).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        false
-      );
-      expect(result).toEqual({ started: true });
-    });
-
-    it("should call API and return result for workspace getStatus", async () => {
-      const status = {
-        isDirty: true,
-        agent: { type: "busy" as const, counts: { idle: 0, busy: 1, total: 1 } },
-      };
-      vi.mocked(api.workspaces.getStatus).mockResolvedValue(status);
-
-      const handler = getHandler("api:workspace:get-status");
-      const result = await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-        }
-      );
-
-      expect(api.workspaces.getStatus).toHaveBeenCalledWith(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
-      expect(result).toEqual(status);
-    });
-
-    it("should call API for setMetadata", async () => {
-      const handler = getHandler("api:workspace:set-metadata");
-      await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-          key: "note",
-          value: "WIP feature",
-        }
-      );
-
-      expect(api.workspaces.setMetadata).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        "note",
-        "WIP feature"
-      );
-    });
-
-    it("should call API and return result for getMetadata", async () => {
-      const metadata = { base: "main", note: "test note" };
-      vi.mocked(api.workspaces.getMetadata).mockResolvedValue(metadata);
-
-      const handler = getHandler("api:workspace:get-metadata");
-      const result = await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-        }
-      );
-
-      expect(api.workspaces.getMetadata).toHaveBeenCalledWith(TEST_PROJECT_ID, TEST_WORKSPACE_NAME);
-      expect(result).toEqual(metadata);
-    });
-
-    it("should call API and return result for getOpencodePort", async () => {
-      vi.mocked(api.workspaces.getOpencodePort).mockResolvedValue(12345);
-
-      const handler = getHandler("api:workspace:get-opencode-port");
-      const result = await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-        }
-      );
-
-      expect(api.workspaces.getOpencodePort).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME
-      );
-      expect(result).toEqual(12345);
-    });
-
-    it("should call API and return null for getOpencodePort when no server running", async () => {
-      vi.mocked(api.workspaces.getOpencodePort).mockResolvedValue(null);
-
-      const handler = getHandler("api:workspace:get-opencode-port");
-      const result = await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-        }
-      );
-
-      expect(api.workspaces.getOpencodePort).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME
-      );
-      expect(result).toBeNull();
-    });
-  });
-
-  describe("UI operations", () => {
-    it("should call API and return result for selectFolder", async () => {
-      vi.mocked(api.ui.selectFolder).mockResolvedValue("/selected/path");
-
-      const handler = getHandler("api:ui:select-folder");
-      const result = await handler({}, undefined);
-
-      expect(api.ui.selectFolder).toHaveBeenCalled();
-      expect(result).toBe("/selected/path");
-    });
-
-    it("should call API and return result for getActiveWorkspace", async () => {
-      vi.mocked(api.ui.getActiveWorkspace).mockResolvedValue(TEST_WORKSPACE_REF);
-
-      const handler = getHandler("api:ui:get-active-workspace");
-      const result = await handler({}, undefined);
-
-      expect(api.ui.getActiveWorkspace).toHaveBeenCalled();
-      expect(result).toEqual(TEST_WORKSPACE_REF);
-    });
-
-    it("should call API for switchWorkspace", async () => {
-      const handler = getHandler("api:ui:switch-workspace");
-      await handler(
-        {},
-        {
-          projectId: TEST_PROJECT_ID,
-          workspaceName: TEST_WORKSPACE_NAME,
-          focus: false,
-        }
-      );
-
-      expect(api.ui.switchWorkspace).toHaveBeenCalledWith(
-        TEST_PROJECT_ID,
-        TEST_WORKSPACE_NAME,
-        false
-      );
-    });
-  });
-
-  // NOTE: Lifecycle handlers are tested in lifecycle-handlers.test.ts
-  // They are registered separately via registerLifecycleHandlers() in bootstrap(),
-  // not via registerApiHandlers(), so they are not tested here.
-});
-
-describe("Error handling across IPC boundaries", () => {
-  let api: ICodeHydraApi;
-
-  beforeEach(() => {
-    mockHandle.mockClear();
-    const mock = createMockApiWithEvents();
-    api = mock.api;
-    registerApiHandlers(api, createSilentLogger());
-  });
-
-  function getHandler(channel: string): (event: unknown, payload: unknown) => Promise<unknown> {
-    const call = mockHandle.mock.calls.find((c) => c[0] === channel);
-    if (!call) throw new Error(`Handler for ${channel} not found`);
-    return call[1];
-  }
-
-  it("should propagate API errors through handlers", async () => {
-    vi.mocked(api.projects.open).mockRejectedValue(new Error("Not a git repository"));
-
-    const handler = getHandler("api:project:open");
-
-    await expect(handler({}, { path: "/invalid/path" })).rejects.toThrow("Not a git repository");
-  });
-
-  it("should propagate workspace errors through handlers", async () => {
-    vi.mocked(api.workspaces.create).mockRejectedValue(new Error("Branch already exists"));
-
-    const handler = getHandler("api:workspace:create");
-
-    await expect(
-      handler({}, { projectId: TEST_PROJECT_ID, name: "feature", base: "main" })
-    ).rejects.toThrow("Branch already exists");
-  });
-
-  it("should throw validation error for invalid input before calling API", async () => {
-    const handler = getHandler("api:project:open");
-
-    await expect(handler({}, { path: "relative/path" })).rejects.toThrow(/absolute/i);
-    expect(api.projects.open).not.toHaveBeenCalled();
-  });
-
-  it("should throw validation error for missing required fields", async () => {
-    const handler = getHandler("api:workspace:create");
-
-    await expect(handler({}, { projectId: TEST_PROJECT_ID, base: "main" })).rejects.toThrow(
-      /name/i
-    );
-    expect(api.workspaces.create).not.toHaveBeenCalled();
-  });
-
-  it("should throw validation error for invalid ProjectId format", async () => {
-    const handler = getHandler("api:project:close");
-
-    await expect(handler({}, { projectId: "invalid" })).rejects.toThrow(/projectId/i);
-    expect(api.projects.close).not.toHaveBeenCalled();
-  });
-
-  it("should throw validation error for invalid WorkspaceName format", async () => {
-    const handler = getHandler("api:workspace:remove");
-
-    await expect(handler({}, { projectId: TEST_PROJECT_ID, workspaceName: "" })).rejects.toThrow(
-      /workspaceName/i
-    );
-    expect(api.workspaces.remove).not.toHaveBeenCalled();
   });
 });

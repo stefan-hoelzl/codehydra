@@ -1,0 +1,817 @@
+/**
+ * CoreModule - Handles project and workspace operations.
+ *
+ * Responsibilities:
+ * - Project operations: open, close, list, get, fetchBases
+ * - Workspace operations: create, remove, forceRemove, get, getStatus,
+ *   getOpencodePort, setMetadata, getMetadata
+ *
+ * Created in startServices() after setup is complete.
+ */
+
+import * as path from "node:path";
+import type {
+  IApiRegistry,
+  IApiModule,
+  ProjectOpenPayload,
+  ProjectIdPayload,
+  WorkspaceCreatePayload,
+  WorkspaceRemovePayload,
+  WorkspaceRefPayload,
+  WorkspaceSetMetadataPayload,
+  WorkspaceExecuteCommandPayload,
+  EmptyPayload,
+} from "../../api/registry-types";
+import type { PluginResult } from "../../../shared/plugin-protocol";
+import type {
+  ProjectId,
+  WorkspaceName,
+  Project,
+  Workspace,
+  WorkspaceStatus,
+  BaseInfo,
+  DeletionProgress,
+  DeletionOperation,
+  DeletionOperationId,
+} from "../../../shared/api/types";
+import type { WorkspacePath } from "../../../shared/ipc";
+import type { AppState } from "../../app-state";
+import type { IViewManager } from "../../managers/view-manager.interface";
+import type { Logger } from "../../../services/logging/index";
+import { ApiIpcChannels } from "../../../shared/ipc";
+import { createSilentLogger } from "../../../services/logging";
+import { generateProjectId } from "../../api/id-utils";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+/**
+ * Minimal interface for PluginServer's sendCommand method.
+ * Used for dependency injection to execute VS Code commands in workspaces.
+ */
+export interface IPluginServer {
+  sendCommand(
+    workspacePath: string,
+    command: string,
+    args?: readonly unknown[]
+  ): Promise<PluginResult<unknown>>;
+}
+
+/**
+ * Callback for emitting deletion progress events.
+ */
+export type DeletionProgressCallback = (progress: DeletionProgress) => void;
+
+/**
+ * Callback for killing terminals before workspace deletion.
+ * Called with workspace path, should be best-effort (never throw).
+ */
+export type KillTerminalsCallback = (workspacePath: string) => Promise<void>;
+
+/**
+ * Dependencies for CoreModule.
+ */
+export interface CoreModuleDeps {
+  /** Application state manager */
+  readonly appState: AppState;
+  /** View manager for workspace views */
+  readonly viewManager: IViewManager;
+  /** Callback for deletion progress events */
+  readonly emitDeletionProgress: DeletionProgressCallback;
+  /** Callback to kill terminals before workspace deletion */
+  readonly killTerminalsCallback?: KillTerminalsCallback;
+  /** Plugin server for executing VS Code commands in workspaces */
+  readonly pluginServer?: IPluginServer;
+  /** Optional logger */
+  readonly logger?: Logger;
+}
+
+// =============================================================================
+// Module Implementation
+// =============================================================================
+
+/**
+ * CoreModule handles project and workspace operations.
+ *
+ * Registered methods:
+ * - projects.*: open, close, list, get, fetchBases
+ * - workspaces.*: create, remove, forceRemove, get, getStatus,
+ *   getOpencodePort, setMetadata, getMetadata
+ *
+ * Events emitted:
+ * - project:opened, project:closed, project:bases-updated
+ * - workspace:created, workspace:removed, workspace:switched,
+ *   workspace:status-changed, workspace:metadata-changed
+ */
+export class CoreModule implements IApiModule {
+  private readonly logger: Logger;
+
+  // Track in-progress deletions to prevent double-deletion
+  private readonly inProgressDeletions = new Set<string>();
+
+  /**
+   * Create a new CoreModule.
+   *
+   * @param api The API registry to register methods on
+   * @param deps Module dependencies
+   */
+  constructor(
+    private readonly api: IApiRegistry,
+    private readonly deps: CoreModuleDeps
+  ) {
+    this.logger = deps.logger ?? createSilentLogger();
+    this.registerMethods();
+  }
+
+  /**
+   * Register all project and workspace methods with the API registry.
+   */
+  private registerMethods(): void {
+    // Project methods
+    this.api.register("projects.open", this.projectOpen.bind(this), {
+      ipc: ApiIpcChannels.PROJECT_OPEN,
+    });
+    this.api.register("projects.close", this.projectClose.bind(this), {
+      ipc: ApiIpcChannels.PROJECT_CLOSE,
+    });
+    this.api.register("projects.list", this.projectList.bind(this), {
+      ipc: ApiIpcChannels.PROJECT_LIST,
+    });
+    this.api.register("projects.get", this.projectGet.bind(this), {
+      ipc: ApiIpcChannels.PROJECT_GET,
+    });
+    this.api.register("projects.fetchBases", this.projectFetchBases.bind(this), {
+      ipc: ApiIpcChannels.PROJECT_FETCH_BASES,
+    });
+
+    // Workspace methods
+    this.api.register("workspaces.create", this.workspaceCreate.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_CREATE,
+    });
+    this.api.register("workspaces.remove", this.workspaceRemove.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_REMOVE,
+    });
+    this.api.register("workspaces.forceRemove", this.workspaceForceRemove.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_FORCE_REMOVE,
+    });
+    this.api.register("workspaces.get", this.workspaceGet.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_GET,
+    });
+    this.api.register("workspaces.getStatus", this.workspaceGetStatus.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_GET_STATUS,
+    });
+    this.api.register("workspaces.getOpencodePort", this.workspaceGetOpencodePort.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_GET_OPENCODE_PORT,
+    });
+    this.api.register("workspaces.setMetadata", this.workspaceSetMetadata.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_SET_METADATA,
+    });
+    this.api.register("workspaces.getMetadata", this.workspaceGetMetadata.bind(this), {
+      ipc: ApiIpcChannels.WORKSPACE_GET_METADATA,
+    });
+
+    // executeCommand is not exposed via IPC (only used by MCP/Plugin)
+    this.api.register("workspaces.executeCommand", this.workspaceExecuteCommand.bind(this));
+  }
+
+  // ===========================================================================
+  // Project Methods
+  // ===========================================================================
+
+  private async projectOpen(payload: ProjectOpenPayload): Promise<Project> {
+    const internalProject = await this.deps.appState.openProject(payload.path);
+    const apiProject = this.toApiProject(internalProject);
+
+    this.api.emit("project:opened", { project: apiProject });
+
+    return apiProject;
+  }
+
+  private async projectClose(payload: ProjectIdPayload): Promise<void> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    await this.deps.appState.closeProject(projectPath);
+    this.api.emit("project:closed", { projectId: payload.projectId });
+  }
+
+  private async projectList(payload: EmptyPayload): Promise<readonly Project[]> {
+    void payload; // Required by MethodHandler interface but unused for no-arg methods
+    const internalProjects = await this.deps.appState.getAllProjects();
+    return internalProjects.map((p) => this.toApiProject(p, p.defaultBaseBranch));
+  }
+
+  private async projectGet(payload: ProjectIdPayload): Promise<Project | undefined> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) return undefined;
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) return undefined;
+
+    const defaultBaseBranch = await this.deps.appState.getDefaultBaseBranch(projectPath);
+    return this.toApiProject(internalProject, defaultBaseBranch);
+  }
+
+  private async projectFetchBases(
+    payload: ProjectIdPayload
+  ): Promise<{ readonly bases: readonly BaseInfo[] }> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const provider = this.deps.appState.getWorkspaceProvider(projectPath);
+    if (!provider) {
+      throw new Error(`No workspace provider for project: ${payload.projectId}`);
+    }
+
+    // Get current bases (cached)
+    const bases = await provider.listBases();
+
+    // Trigger background fetch - don't await
+    void this.fetchBasesInBackground(payload.projectId, provider);
+
+    return { bases };
+  }
+
+  // ===========================================================================
+  // Workspace Methods
+  // ===========================================================================
+
+  private async workspaceCreate(payload: WorkspaceCreatePayload): Promise<Workspace> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const provider = this.deps.appState.getWorkspaceProvider(projectPath);
+    if (!provider) {
+      throw new Error(`No workspace provider for project: ${payload.projectId}`);
+    }
+
+    const internalWorkspace = await provider.createWorkspace(payload.name, payload.base);
+
+    this.deps.appState.addWorkspace(projectPath, internalWorkspace);
+    this.deps.appState.setLastBaseBranch(projectPath, payload.base);
+
+    const workspace = this.toApiWorkspace(payload.projectId, internalWorkspace);
+    this.api.emit("workspace:created", { projectId: payload.projectId, workspace });
+
+    return workspace;
+  }
+
+  private async workspaceRemove(payload: WorkspaceRemovePayload): Promise<{ started: true }> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    // Check if deletion already in progress - return early (idempotent)
+    if (this.inProgressDeletions.has(workspace.path)) {
+      return { started: true };
+    }
+
+    // Mark as in-progress
+    this.inProgressDeletions.add(workspace.path);
+
+    // If this workspace is active, try to switch to next workspace immediately
+    const isActive = this.deps.viewManager.getActiveWorkspacePath() === workspace.path;
+    if (isActive) {
+      await this.switchToNextWorkspaceIfAvailable(projectPath, workspace.path);
+    }
+
+    // Fire-and-forget: execute deletion asynchronously
+    const keepBranch = payload.keepBranch ?? true;
+    void this.executeDeletion(
+      payload.projectId,
+      projectPath,
+      workspace.path as WorkspacePath,
+      payload.workspaceName,
+      keepBranch
+    );
+
+    return { started: true };
+  }
+
+  private async workspaceForceRemove(payload: WorkspaceRefPayload): Promise<void> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    const wasActive = this.deps.viewManager.getActiveWorkspacePath() === workspace.path;
+
+    if (wasActive) {
+      const switched = await this.switchToNextWorkspaceIfAvailable(projectPath, workspace.path);
+      if (!switched) {
+        this.deps.viewManager.setActiveWorkspace(null, false);
+        this.api.emit("workspace:switched", null);
+      }
+    }
+
+    await this.deps.appState.removeWorkspace(projectPath, workspace.path);
+    this.inProgressDeletions.delete(workspace.path);
+
+    this.api.emit("workspace:removed", {
+      projectId: payload.projectId,
+      workspaceName: payload.workspaceName,
+      path: workspace.path,
+    });
+  }
+
+  private async workspaceGet(payload: WorkspaceRefPayload): Promise<Workspace | undefined> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) return undefined;
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) return undefined;
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) return undefined;
+
+    return this.toApiWorkspace(payload.projectId, workspace);
+  }
+
+  private async workspaceGetStatus(payload: WorkspaceRefPayload): Promise<WorkspaceStatus> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    const provider = this.deps.appState.getWorkspaceProvider(projectPath);
+    const isDirty = provider ? await provider.isDirty(workspace.path) : false;
+
+    const agentStatusManager = this.deps.appState.getAgentStatusManager();
+    if (!agentStatusManager) {
+      return { isDirty, agent: { type: "none" } };
+    }
+
+    const agentStatus = agentStatusManager.getStatus(workspace.path as WorkspacePath);
+    if (!agentStatus || agentStatus.status === "none") {
+      return { isDirty, agent: { type: "none" } };
+    }
+
+    return {
+      isDirty,
+      agent: {
+        type: agentStatus.status,
+        counts: {
+          idle: agentStatus.counts.idle,
+          busy: agentStatus.counts.busy,
+          total: agentStatus.counts.idle + agentStatus.counts.busy,
+        },
+      },
+    };
+  }
+
+  private async workspaceGetOpencodePort(payload: WorkspaceRefPayload): Promise<number | null> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    const serverManager = this.deps.appState.getServerManager();
+    const port = serverManager?.getPort(workspace.path);
+    return port || null;
+  }
+
+  private async workspaceSetMetadata(payload: WorkspaceSetMetadataPayload): Promise<void> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    const provider = this.deps.appState.getWorkspaceProvider(projectPath);
+    if (!provider) {
+      throw new Error(`No workspace provider for project: ${payload.projectId}`);
+    }
+
+    await provider.setMetadata(workspace.path, payload.key, payload.value);
+
+    this.api.emit("workspace:metadata-changed", {
+      projectId: payload.projectId,
+      workspaceName: payload.workspaceName,
+      key: payload.key,
+      value: payload.value,
+    });
+  }
+
+  private async workspaceGetMetadata(
+    payload: WorkspaceRefPayload
+  ): Promise<Readonly<Record<string, string>>> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    const provider = this.deps.appState.getWorkspaceProvider(projectPath);
+    if (!provider) {
+      throw new Error(`No workspace provider for project: ${payload.projectId}`);
+    }
+
+    return provider.getMetadata(workspace.path);
+  }
+
+  private async workspaceExecuteCommand(payload: WorkspaceExecuteCommandPayload): Promise<unknown> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const internalProject = this.deps.appState.getProject(projectPath);
+    if (!internalProject) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = internalProject.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    if (!this.deps.pluginServer) {
+      throw new Error("Plugin server not available");
+    }
+
+    const result = await this.deps.pluginServer.sendCommand(
+      workspace.path,
+      payload.command,
+      payload.args
+    );
+
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+
+    return result.data;
+  }
+
+  // ===========================================================================
+  // Helper Methods
+  // ===========================================================================
+
+  private async resolveProjectPath(projectId: ProjectId): Promise<string | undefined> {
+    const projects = await this.deps.appState.getAllProjects();
+    for (const project of projects) {
+      if (generateProjectId(project.path) === projectId) {
+        return project.path;
+      }
+    }
+    return undefined;
+  }
+
+  private toApiProject(
+    internalProject: {
+      path: string;
+      name: string;
+      workspaces: ReadonlyArray<{
+        path: string;
+        branch?: string | null;
+        metadata: Readonly<Record<string, string>>;
+      }>;
+    },
+    defaultBaseBranch?: string
+  ): Project {
+    const projectId = generateProjectId(internalProject.path);
+    return {
+      id: projectId,
+      name: internalProject.name,
+      path: internalProject.path,
+      workspaces: internalProject.workspaces.map((w) => this.toApiWorkspace(projectId, w)),
+      ...(defaultBaseBranch !== undefined && { defaultBaseBranch }),
+    };
+  }
+
+  private toApiWorkspace(
+    projectId: ProjectId,
+    internalWorkspace: {
+      path: string;
+      branch?: string | null;
+      metadata: Readonly<Record<string, string>>;
+    }
+  ): Workspace {
+    const name = this.extractWorkspaceName(internalWorkspace.path) as WorkspaceName;
+    return {
+      projectId,
+      name,
+      branch: internalWorkspace.branch ?? null,
+      metadata: internalWorkspace.metadata,
+      path: internalWorkspace.path,
+    };
+  }
+
+  private extractWorkspaceName(workspacePath: string): string {
+    return path.basename(workspacePath);
+  }
+
+  private async switchToNextWorkspaceIfAvailable(
+    currentProjectPath: string,
+    excludeWorkspacePath: string
+  ): Promise<boolean> {
+    const allProjects = await this.deps.appState.getAllProjects();
+
+    // First, try to find another workspace in the same project
+    const currentProject = allProjects.find((p) => p.path === currentProjectPath);
+    if (currentProject) {
+      const otherWorkspace = currentProject.workspaces.find((w) => w.path !== excludeWorkspacePath);
+      if (otherWorkspace) {
+        const projectId = generateProjectId(currentProjectPath);
+        const workspaceName = this.extractWorkspaceName(otherWorkspace.path) as WorkspaceName;
+        this.deps.viewManager.setActiveWorkspace(otherWorkspace.path, false);
+        this.api.emit("workspace:switched", {
+          projectId,
+          workspaceName,
+          path: otherWorkspace.path,
+        });
+        return true;
+      }
+    }
+
+    // Second, try to find a workspace from another project
+    for (const project of allProjects) {
+      if (project.path === currentProjectPath) continue;
+      const firstWorkspace = project.workspaces[0];
+      if (firstWorkspace) {
+        const projectId = generateProjectId(project.path);
+        const workspaceName = this.extractWorkspaceName(firstWorkspace.path) as WorkspaceName;
+        this.deps.viewManager.setActiveWorkspace(firstWorkspace.path, false);
+        this.api.emit("workspace:switched", {
+          projectId,
+          workspaceName,
+          path: firstWorkspace.path,
+        });
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private async fetchBasesInBackground(
+    projectId: ProjectId,
+    provider: { updateBases(): Promise<unknown>; listBases(): Promise<readonly BaseInfo[]> }
+  ): Promise<void> {
+    try {
+      await provider.updateBases();
+      const updatedBases = await provider.listBases();
+      this.api.emit("project:bases-updated", { projectId, bases: updatedBases });
+    } catch (error) {
+      this.logger.error(
+        "Failed to fetch bases for project",
+        { projectId },
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  // ===========================================================================
+  // Deletion Execution
+  // ===========================================================================
+
+  private async executeDeletion(
+    projectId: ProjectId,
+    projectPath: string,
+    workspacePath: WorkspacePath,
+    workspaceName: WorkspaceName,
+    keepBranch: boolean
+  ): Promise<void> {
+    const operations: DeletionOperation[] = [
+      { id: "kill-terminals", label: "Terminating processes", status: "pending" },
+      { id: "stop-server", label: "Stopping OpenCode server", status: "pending" },
+      { id: "cleanup-vscode", label: "Closing VS Code view", status: "pending" },
+      { id: "cleanup-workspace", label: "Removing workspace", status: "pending" },
+    ];
+
+    const emitProgress = (completed: boolean, hasErrors: boolean): void => {
+      this.deps.emitDeletionProgress({
+        workspacePath,
+        workspaceName,
+        projectId,
+        keepBranch,
+        operations: [...operations],
+        completed,
+        hasErrors,
+      });
+    };
+
+    const updateOp = (
+      id: DeletionOperationId,
+      status: "pending" | "in-progress" | "done" | "error",
+      error?: string
+    ): void => {
+      const idx = operations.findIndex((op) => op.id === id);
+      const existing = operations[idx];
+      if (idx !== -1 && existing) {
+        operations[idx] = {
+          id: existing.id,
+          label: existing.label,
+          status,
+          ...(error !== undefined && { error }),
+        };
+      }
+    };
+
+    try {
+      emitProgress(false, false);
+
+      // Operation 1: Kill terminals
+      updateOp("kill-terminals", "in-progress");
+      emitProgress(false, false);
+
+      if (this.deps.killTerminalsCallback) {
+        try {
+          await this.deps.killTerminalsCallback(workspacePath);
+          updateOp("kill-terminals", "done");
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          this.logger.warn("Kill terminals failed", { workspacePath, error: errorMessage });
+          updateOp("kill-terminals", "done");
+        }
+      } else {
+        updateOp("kill-terminals", "done");
+      }
+      emitProgress(false, false);
+
+      // Operation 2: Stop OpenCode server
+      updateOp("stop-server", "in-progress");
+      emitProgress(false, false);
+
+      try {
+        const serverManager = this.deps.appState.getServerManager();
+        if (serverManager) {
+          const stopResult = await serverManager.stopServer(workspacePath);
+          if (stopResult.success) {
+            updateOp("stop-server", "done");
+          } else {
+            updateOp("stop-server", "error", stopResult.error ?? "Failed to stop server");
+          }
+        } else {
+          updateOp("stop-server", "done");
+        }
+        emitProgress(
+          false,
+          operations.some((op) => op.status === "error")
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Server stop failed";
+        updateOp("stop-server", "error", message);
+        emitProgress(false, true);
+      }
+
+      // Operation 3: Cleanup VS Code view
+      updateOp("cleanup-vscode", "in-progress");
+      emitProgress(
+        false,
+        operations.some((op) => op.status === "error")
+      );
+
+      try {
+        await this.deps.viewManager.destroyWorkspaceView(workspacePath);
+        updateOp("cleanup-vscode", "done");
+        emitProgress(
+          false,
+          operations.some((op) => op.status === "error")
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "View cleanup failed";
+        updateOp("cleanup-vscode", "error", message);
+        emitProgress(false, true);
+      }
+
+      // Operation 4: Cleanup workspace (git worktree removal)
+      updateOp("cleanup-workspace", "in-progress");
+      emitProgress(
+        false,
+        operations.some((op) => op.status === "error")
+      );
+
+      try {
+        const provider = this.deps.appState.getWorkspaceProvider(projectPath);
+        if (provider) {
+          await provider.removeWorkspace(workspacePath, !keepBranch);
+        }
+        updateOp("cleanup-workspace", "done");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Workspace cleanup failed";
+        updateOp("cleanup-workspace", "error", message);
+      }
+
+      // Finalize
+      const hasErrors = operations.some((op) => op.status === "error");
+      emitProgress(true, hasErrors);
+
+      if (!hasErrors) {
+        await this.deps.appState.removeWorkspace(projectPath, workspacePath);
+        this.api.emit("workspace:removed", {
+          projectId,
+          workspaceName,
+          path: workspacePath,
+        });
+      }
+    } catch (error) {
+      this.logger.error(
+        "Unexpected error during workspace deletion",
+        { workspacePath, workspaceName },
+        error instanceof Error ? error : undefined
+      );
+      const message = error instanceof Error ? error.message : "Deletion failed";
+
+      for (let i = 0; i < operations.length; i++) {
+        const op = operations[i];
+        if (op && op.status === "in-progress") {
+          operations[i] = { id: op.id, label: op.label, status: "error", error: message };
+        }
+      }
+
+      emitProgress(true, true);
+    } finally {
+      this.inProgressDeletions.delete(workspacePath);
+    }
+  }
+
+  // ===========================================================================
+  // IApiModule Implementation
+  // ===========================================================================
+
+  dispose(): void {
+    // No resources to dispose (IPC handlers cleaned up by ApiRegistry)
+  }
+}
