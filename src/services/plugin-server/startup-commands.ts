@@ -28,6 +28,7 @@ const STARTUP_COMMAND_TIMEOUT_MS = 5000;
  * - Close sidebars to maximize editor space
  * - Open OpenCode terminal for AI workflow
  * - Unlock editor groups for flexible tab management
+ * - Focus terminal to ensure OpenCode input is ready for typing
  */
 export const STARTUP_COMMANDS = [
   "workbench.action.closeSidebar", // Hide left sidebar to maximize editor
@@ -35,6 +36,7 @@ export const STARTUP_COMMANDS = [
   "opencode.openTerminal", // Open OpenCode terminal for AI workflow
   "workbench.action.unlockEditorGroup", // Unlock editor group for tab reuse
   "workbench.action.closeEditorsInOtherGroups", // Clean up empty editor groups
+  "workbench.action.terminal.focus", // Ensure terminal input is focused
 ] as const;
 
 /**
