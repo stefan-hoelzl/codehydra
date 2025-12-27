@@ -451,6 +451,31 @@ function connectToPluginServer(port, workspacePath) {
     }
   });
 
+  // Handle shutdown request for workspace deletion
+  // This terminates the extension host to release file handles
+  socket.on("shutdown", (ack) => {
+    log("Shutdown command received, workspace: " + currentWorkspacePath);
+
+    // Graceful: try to remove workspace folders (releases file watchers)
+    try {
+      const folders = vscode.workspace.workspaceFolders;
+      if (folders && folders.length > 0) {
+        vscode.workspace.updateWorkspaceFolders(0, folders.length);
+        log("Removed " + folders.length + " workspace folder(s)");
+      }
+    } catch (err) {
+      logError("Graceful shutdown failed: " + (err instanceof Error ? err.message : String(err)));
+      // Continue anyway - we're exiting
+    }
+
+    // Send ack before exit
+    ack({ success: true, data: undefined });
+
+    // Use setImmediate to allow ack to flush before exit
+    log("Exiting extension host");
+    setImmediate(() => process.exit(0));
+  });
+
   // All handlers registered, now connect
   socket.connect();
 }

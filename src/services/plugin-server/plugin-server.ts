@@ -26,6 +26,7 @@ import {
   type DeleteWorkspaceResponse,
   type PluginConfig,
   COMMAND_TIMEOUT_MS,
+  SHUTDOWN_DISCONNECT_TIMEOUT_MS,
   normalizeWorkspacePath,
   validateSetMetadataRequest,
   validateDeleteWorkspaceRequest,
@@ -349,6 +350,70 @@ export class PluginServer {
    */
   onApiCall(handlers: ApiCallHandlers): void {
     this.apiHandlers = handlers;
+  }
+
+  /**
+   * Send shutdown command and wait for extension host to disconnect.
+   *
+   * This is a best-effort operation for workspace deletion cleanup.
+   * Waits for socket disconnect (not just ack) as confirmation that
+   * the extension host process has terminated.
+   *
+   * @param workspacePath - Normalized workspace path
+   * @param options - Optional configuration
+   * @returns Promise that resolves when disconnected or timeout
+   */
+  async sendExtensionHostShutdown(
+    workspacePath: string,
+    options?: { timeoutMs?: number }
+  ): Promise<void> {
+    const timeoutMs = options?.timeoutMs ?? SHUTDOWN_DISCONNECT_TIMEOUT_MS;
+    const normalized = normalizeWorkspacePath(workspacePath);
+    const socket = this.connections.get(normalized);
+
+    if (!socket) {
+      this.logger.debug("Shutdown skipped: workspace not connected", { workspace: normalized });
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      let resolved = false;
+
+      const cleanup = (): void => {
+        if (!resolved) {
+          resolved = true;
+          socket.off("disconnect", disconnectHandler);
+          clearTimeout(timeoutId);
+        }
+      };
+
+      const disconnectHandler = (): void => {
+        this.logger.debug("Shutdown complete: socket disconnected", { workspace: normalized });
+        cleanup();
+        resolve();
+      };
+
+      const timeoutId = setTimeout(() => {
+        this.logger.warn("Shutdown timeout: proceeding anyway", {
+          workspace: normalized,
+          timeoutMs,
+        });
+        cleanup();
+        resolve();
+      }, timeoutMs);
+
+      // Set up listener BEFORE emit to avoid race condition
+      socket.once("disconnect", disconnectHandler);
+
+      this.logger.debug("Sending shutdown", { workspace: normalized });
+      socket.emit("shutdown", (result) => {
+        // Ack received - extension is about to exit
+        // Don't resolve here - wait for actual disconnect
+        if (!result.success) {
+          this.logger.warn("Shutdown ack error", { workspace: normalized, error: result.error });
+        }
+      });
+    });
   }
 
   /**

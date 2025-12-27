@@ -118,6 +118,20 @@ export interface ServerToClientEvents {
    * @param ack - Acknowledgment callback to return the result
    */
   command: (request: CommandRequest, ack: (result: PluginResult<unknown>) => void) => void;
+
+  /**
+   * Shutdown the extension host process for workspace deletion.
+   *
+   * The extension should:
+   * 1. Remove all workspace folders (releases file watchers)
+   * 2. Send ack to confirm receipt
+   * 3. Call process.exit(0) to terminate the extension host
+   *
+   * CodeHydra waits for socket disconnect as confirmation.
+   *
+   * @param ack - Acknowledgment callback to confirm shutdown received
+   */
+  shutdown: (ack: (result: PluginResult<void>) => void) => void;
 }
 
 // ============================================================================
@@ -303,3 +317,10 @@ export interface SocketData {
  * If no ack is received within this time, the command is considered failed.
  */
 export const COMMAND_TIMEOUT_MS = 10_000;
+
+/**
+ * Timeout for shutdown disconnect confirmation (milliseconds).
+ * If socket doesn't disconnect within this time, proceed with deletion anyway.
+ * This is a best-effort timeout - extension host may be unresponsive.
+ */
+export const SHUTDOWN_DISCONNECT_TIMEOUT_MS = 5_000;

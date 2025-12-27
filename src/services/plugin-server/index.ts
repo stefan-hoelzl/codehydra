@@ -9,3 +9,4 @@ export {
   SHUTDOWN_COMMAND_TIMEOUT_MS,
   sendShutdownCommand,
 } from "./shutdown-commands";
+export { SHUTDOWN_DISCONNECT_TIMEOUT_MS } from "../../shared/plugin-protocol";

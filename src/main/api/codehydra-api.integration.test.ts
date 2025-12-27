@@ -520,6 +520,140 @@ describe("CodeHydraApiImpl Integration", () => {
       }
     });
 
+    it("workspace deletion calls shutdown callback during deletion", async () => {
+      // This test verifies that the killTerminalsCallback (which includes shutdown)
+      // is called during the workspace deletion flow
+      const workspaceObj: InternalWorkspace = {
+        name: "feature",
+        path: workspacePath,
+        branch: "feature",
+        metadata: { base: "main" },
+      };
+      const internalProject = createInternalProject(projectPath, [workspaceObj]);
+
+      // Track when the callback is called
+      let callbackCalledAt: number | null = null;
+      let callbackWorkspacePath: string | null = null;
+      const shutdownCallback = vi.fn(async (path: string) => {
+        callbackCalledAt = Date.now();
+        callbackWorkspacePath = path;
+      });
+
+      // Track progress events
+      const progressEvents: DeletionProgress[] = [];
+      const emitDeletionProgress = vi.fn((progress: DeletionProgress) => {
+        progressEvents.push(JSON.parse(JSON.stringify(progress)));
+      });
+
+      // Setup mocks
+      const localAppState = createMockAppState({
+        getProject: vi.fn().mockReturnValue(internalProject),
+        getAllProjects: vi.fn().mockResolvedValue([internalProject]),
+        getWorkspaceProvider: vi.fn().mockReturnValue({
+          removeWorkspace: vi.fn().mockResolvedValue({ workspaceRemoved: true }),
+        }),
+        removeWorkspace: vi.fn().mockResolvedValue(undefined),
+      });
+      const localViewManager = createMockViewManager();
+      vi.mocked(localViewManager.destroyWorkspaceView).mockResolvedValue(undefined);
+
+      const localApi = createApiWithCallbacks(
+        localAppState,
+        localViewManager,
+        emitDeletionProgress,
+        shutdownCallback
+      );
+
+      const projectId = generateProjectId(projectPath);
+
+      try {
+        // Start deletion
+        await localApi.workspaces.remove(projectId, "feature" as WorkspaceName);
+
+        // Wait for completion
+        await vi.waitFor(() => {
+          const lastProgress = progressEvents[progressEvents.length - 1];
+          expect(lastProgress?.completed).toBe(true);
+        });
+
+        // Verify callback was called with correct workspace path
+        expect(shutdownCallback).toHaveBeenCalledTimes(1);
+        expect(callbackWorkspacePath).toBe(workspacePath);
+        expect(callbackCalledAt).not.toBeNull();
+      } finally {
+        localApi.dispose();
+      }
+    });
+
+    it("workspace deletion flow ordering: kill-terminals before cleanup-vscode", async () => {
+      // This test verifies the ordering: kill-terminals → cleanup-vscode → cleanup-workspace
+      const workspaceObj: InternalWorkspace = {
+        name: "feature",
+        path: workspacePath,
+        branch: "feature",
+        metadata: { base: "main" },
+      };
+      const internalProject = createInternalProject(projectPath, [workspaceObj]);
+
+      // Track the order of operations
+      const operationOrder: string[] = [];
+
+      // Callback that records when it starts
+      const killTerminalsCallback = vi.fn(async () => {
+        operationOrder.push("kill-terminals");
+      });
+
+      // Mock ViewManager that records when destroyWorkspaceView is called
+      const localViewManager = createMockViewManager();
+      vi.mocked(localViewManager.destroyWorkspaceView).mockImplementation(async () => {
+        operationOrder.push("cleanup-vscode");
+      });
+
+      // Mock provider that records when removeWorkspace is called
+      const mockProvider = {
+        removeWorkspace: vi.fn().mockImplementation(async () => {
+          operationOrder.push("cleanup-workspace");
+          return { workspaceRemoved: true };
+        }),
+      };
+
+      const localAppState = createMockAppState({
+        getProject: vi.fn().mockReturnValue(internalProject),
+        getAllProjects: vi.fn().mockResolvedValue([internalProject]),
+        getWorkspaceProvider: vi.fn().mockReturnValue(mockProvider),
+        removeWorkspace: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const progressEvents: DeletionProgress[] = [];
+      const emitDeletionProgress = vi.fn((progress: DeletionProgress) => {
+        progressEvents.push(JSON.parse(JSON.stringify(progress)));
+      });
+
+      const localApi = createApiWithCallbacks(
+        localAppState,
+        localViewManager,
+        emitDeletionProgress,
+        killTerminalsCallback
+      );
+
+      const projectId = generateProjectId(projectPath);
+
+      try {
+        await localApi.workspaces.remove(projectId, "feature" as WorkspaceName);
+
+        // Wait for completion
+        await vi.waitFor(() => {
+          const lastProgress = progressEvents[progressEvents.length - 1];
+          expect(lastProgress?.completed).toBe(true);
+        });
+
+        // Verify the exact ordering of operations
+        expect(operationOrder).toEqual(["kill-terminals", "cleanup-vscode", "cleanup-workspace"]);
+      } finally {
+        localApi.dispose();
+      }
+    });
+
     it("deletion-concurrent-attempt: should return started:true without starting new deletion", async () => {
       // Setup workspace in project
       const workspaceObj: InternalWorkspace = {

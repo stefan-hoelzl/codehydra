@@ -338,10 +338,16 @@ async function startServices(): Promise<void> {
   const viewManagerForDeletion = viewManager;
 
   // Create killTerminalsCallback if PluginServer is available
+  // This callback:
+  // 1. Sends terminal.killAll command to kill workspace terminal processes
+  // 2. Sends shutdown event to terminate extension host (releases file handles)
   const pluginLogger = loggingService.createLogger("plugin");
   const killTerminalsCallback = pluginServer
     ? async (workspacePath: string) => {
+        // Step 1: Kill terminal processes
         await sendShutdownCommand(pluginServer!, workspacePath, pluginLogger);
+        // Step 2: Shutdown extension host (releases file watchers, terminates process)
+        await pluginServer!.sendExtensionHostShutdown(workspacePath);
       }
     : undefined;
 

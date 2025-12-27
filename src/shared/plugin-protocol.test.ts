@@ -8,6 +8,8 @@ import {
   normalizeWorkspacePath,
   isValidCommandRequest,
   COMMAND_TIMEOUT_MS,
+  SHUTDOWN_DISCONNECT_TIMEOUT_MS,
+  type ServerToClientEvents,
 } from "./plugin-protocol";
 
 describe("validateSetMetadataRequest", () => {
@@ -213,6 +215,40 @@ describe("isValidCommandRequest", () => {
 describe("COMMAND_TIMEOUT_MS constant", () => {
   it("exports default timeout of 10 seconds", () => {
     expect(COMMAND_TIMEOUT_MS).toBe(10_000);
+  });
+});
+
+describe("SHUTDOWN_DISCONNECT_TIMEOUT_MS constant", () => {
+  it("exports default timeout of 5 seconds", () => {
+    expect(SHUTDOWN_DISCONNECT_TIMEOUT_MS).toBe(5_000);
+  });
+});
+
+describe("shutdown event signature", () => {
+  it("accepts correct callback type", () => {
+    // Type-level test: verify the shutdown event signature compiles correctly
+    // This test validates that the ServerToClientEvents interface has the correct type
+    const mockHandler: ServerToClientEvents["shutdown"] = (ack) => {
+      // ack should accept PluginResult<void>
+      ack({ success: true, data: undefined });
+      ack({ success: false, error: "test error" });
+    };
+
+    // The test passes if TypeScript compiles without errors
+    expect(typeof mockHandler).toBe("function");
+  });
+
+  it("ack callback matches PluginResult<void> type", () => {
+    // Verify the ack callback type is compatible with PluginResult<void>
+    type ShutdownAck = Parameters<ServerToClientEvents["shutdown"]>[0];
+    type AckParam = Parameters<ShutdownAck>[0];
+
+    // These assignments should compile - they verify type compatibility
+    const successResult: AckParam = { success: true, data: undefined };
+    const errorResult: AckParam = { success: false, error: "error message" };
+
+    expect(successResult.success).toBe(true);
+    expect(errorResult.success).toBe(false);
   });
 });
 

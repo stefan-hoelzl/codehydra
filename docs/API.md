@@ -311,7 +311,7 @@ socket.on("connect_error", (error) => {
 });
 ```
 
-### Event Channels
+### Event Channels (Client → Server)
 
 All events use acknowledgment callbacks for request/response pattern.
 
@@ -322,6 +322,14 @@ All events use acknowledgment callbacks for request/response pattern.
 | `api:workspace:getMetadata`     | None                     | `PluginResult<Record<string, string>>`  |
 | `api:workspace:setMetadata`     | `SetMetadataRequest`     | `PluginResult<void>`                    |
 | `api:workspace:delete`          | `DeleteWorkspaceRequest` | `PluginResult<DeleteWorkspaceResponse>` |
+
+### Event Channels (Server → Client)
+
+| Event      | Request Payload  | Response                | Description                                     |
+| ---------- | ---------------- | ----------------------- | ----------------------------------------------- |
+| `config`   | `PluginConfig`   | (none)                  | Configuration sent after connection             |
+| `command`  | `CommandRequest` | `PluginResult<unknown>` | Execute VS Code command                         |
+| `shutdown` | None             | `PluginResult<void>`    | Terminate extension host for workspace deletion |
 
 ### Response Format
 

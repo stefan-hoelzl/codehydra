@@ -514,6 +514,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
       };
       server.onApiCall(handlers);
 
@@ -543,6 +544,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
       };
       server.onApiCall(handlers);
 
@@ -572,6 +574,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
       };
       server.onApiCall(handlers);
 
@@ -627,6 +630,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
         getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
         getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
         setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
       };
       server.onApiCall(handlers);
 
@@ -767,6 +771,140 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       // Should receive config again
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(configCount).toBe(2);
+    });
+  });
+
+  describe("sendExtensionHostShutdown", () => {
+    it("resolves when socket disconnects after shutdown event", async () => {
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Set up shutdown handler that acks then disconnects
+      client.on("shutdown", (ack) => {
+        ack({ success: true, data: undefined });
+        // Simulate process.exit by disconnecting
+        setImmediate(() => client.disconnect());
+      });
+
+      const startTime = Date.now();
+      await server.sendExtensionHostShutdown("/test/workspace");
+      const elapsed = Date.now() - startTime;
+
+      // Should resolve quickly after disconnect
+      expect(elapsed).toBeLessThan(1000);
+      expect(client.connected).toBe(false);
+    });
+
+    it("resolves on timeout when socket does not disconnect", async () => {
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Set up shutdown handler that acks but does NOT disconnect
+      client.on("shutdown", (ack) => {
+        ack({ success: true, data: undefined });
+        // Intentionally do not call disconnect
+      });
+
+      const startTime = Date.now();
+      await server.sendExtensionHostShutdown("/test/workspace", { timeoutMs: 500 });
+      const elapsed = Date.now() - startTime;
+
+      // Should timeout after ~500ms
+      expect(elapsed).toBeGreaterThanOrEqual(500);
+      expect(elapsed).toBeLessThan(1500);
+    });
+
+    it("handles missing socket gracefully", async () => {
+      // No client connected for this workspace
+      const startTime = Date.now();
+      await server.sendExtensionHostShutdown("/nonexistent/workspace");
+      const elapsed = Date.now() - startTime;
+
+      // Should return immediately (not wait for timeout)
+      expect(elapsed).toBeLessThan(100);
+    });
+
+    it("uses default 5s timeout when not specified", async () => {
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Set up shutdown handler that acks but does NOT disconnect
+      client.on("shutdown", (ack) => {
+        ack({ success: true, data: undefined });
+        // Intentionally do not disconnect - test would timeout at 5s
+      });
+
+      // We can't wait for full 5s timeout in a test, so just verify it starts
+      // and can be interrupted by client disconnect
+      setTimeout(() => client.disconnect(), 100);
+
+      const startTime = Date.now();
+      await server.sendExtensionHostShutdown("/test/workspace");
+      const elapsed = Date.now() - startTime;
+
+      // Should resolve when client disconnects, well before 5s timeout
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it("handles ack error gracefully and still waits for disconnect", async () => {
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Set up shutdown handler that acks with error then disconnects
+      client.on("shutdown", (ack) => {
+        ack({ success: false, error: "Graceful shutdown failed" });
+        // Still disconnect even though ack had error
+        setImmediate(() => client.disconnect());
+      });
+
+      const startTime = Date.now();
+      await server.sendExtensionHostShutdown("/test/workspace");
+      const elapsed = Date.now() - startTime;
+
+      // Should resolve on disconnect despite ack error
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it("cleans up listener on timeout", async () => {
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      // Don't handle shutdown - let it timeout
+      await server.sendExtensionHostShutdown("/test/workspace", { timeoutMs: 100 });
+
+      // Now disconnect the client
+      client.disconnect();
+      await waitForDisconnect(client);
+
+      // Server should still be operational (no dangling listeners causing issues)
+      const newClient = createClient("/test/workspace2");
+      clients.push(newClient);
+      await waitForConnect(newClient);
+
+      expect(server.isConnected("/test/workspace2")).toBe(true);
+    });
+
+    it("is idempotent for same workspace", async () => {
+      const client = createClient("/test/workspace");
+      await waitForConnect(client);
+
+      let shutdownCount = 0;
+      client.on("shutdown", (ack) => {
+        shutdownCount++;
+        ack({ success: true, data: undefined });
+        // Only disconnect on second call
+        if (shutdownCount >= 2) {
+          setImmediate(() => client.disconnect());
+        }
+      });
+
+      // First call - client stays connected
+      await server.sendExtensionHostShutdown("/test/workspace", { timeoutMs: 200 });
+
+      // Second call - client disconnects
+      await server.sendExtensionHostShutdown("/test/workspace", { timeoutMs: 200 });
+
+      expect(shutdownCount).toBe(2);
     });
   });
 

@@ -180,6 +180,13 @@ export function createMockCommandHandler(
 // ============================================================================
 
 /**
+ * Delete workspace response type.
+ */
+export interface DeleteWorkspaceResponse {
+  readonly started: boolean;
+}
+
+/**
  * Options for creating mock API handlers.
  */
 export interface MockApiHandlersOptions {
@@ -191,6 +198,8 @@ export interface MockApiHandlersOptions {
   readonly getMetadata?: Record<string, string> | PluginResult<Record<string, string>>;
   /** Result to return from setMetadata. Default: { success: true, data: undefined } */
   readonly setMetadata?: PluginResult<void>;
+  /** Result to return from delete. Default: { success: true, data: { started: true } } */
+  readonly delete?: PluginResult<DeleteWorkspaceResponse>;
 }
 
 /**
@@ -258,10 +267,16 @@ export function createMockApiHandlers(options?: MockApiHandlersOptions): ApiCall
     data: undefined,
   };
 
+  const deleteResult: PluginResult<DeleteWorkspaceResponse> = options?.delete ?? {
+    success: true,
+    data: { started: true },
+  };
+
   return {
     getStatus: vi.fn().mockResolvedValue(statusResult),
     getOpencodePort: vi.fn().mockResolvedValue(portResult),
     getMetadata: vi.fn().mockResolvedValue(metadataResult),
     setMetadata: vi.fn(() => Promise.resolve(setMetadataResult)),
+    delete: vi.fn().mockResolvedValue(deleteResult),
   };
 }

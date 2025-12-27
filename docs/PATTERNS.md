@@ -895,7 +895,15 @@ Set automatically by CodeServerManager when spawning code-server. If not set, ex
 
 ### Message Protocol
 
-**Command request (Server → Client):**
+**Server → Client Events:**
+
+| Event      | Payload             | Ack Type                | Description                                       |
+| ---------- | ------------------- | ----------------------- | ------------------------------------------------- |
+| `config`   | `{ isDevelopment }` | (none)                  | Configuration sent after connection               |
+| `command`  | `CommandRequest`    | `PluginResult<unknown>` | Execute VS Code command                           |
+| `shutdown` | (none)              | `PluginResult<void>`    | Terminate extension host (for workspace deletion) |
+
+**Command request structure:**
 
 ```typescript
 interface CommandRequest {
@@ -909,6 +917,19 @@ interface CommandRequest {
 ```typescript
 type PluginResult<T> = { success: true; data: T } | { success: false; error: string };
 ```
+
+### Extension Host Shutdown
+
+The `shutdown` event is sent during workspace deletion to terminate the extension host process and release file handles (critical on Windows where file locks prevent deletion).
+
+**Shutdown Flow:**
+
+1. CodeHydra emits `shutdown` event
+2. Extension removes workspace folders (releases file watchers)
+3. Extension sends ack
+4. Extension calls `process.exit(0)` via `setImmediate`
+5. CodeHydra waits for socket disconnect (not just ack) as confirmation
+6. If no disconnect within 5s, proceeds with deletion anyway (best-effort)
 
 ### Logging
 
