@@ -101,8 +101,12 @@ exit /b %ERRORLEVEL%
  * The script:
  * 1. Reads CODEHYDRA_OPENCODE_PORT environment variable
  * 2. Validates the port number
- * 3. Spawns opencode attach with the server URL
- * 4. Propagates the exit code
+ * 3. Fetches sessions from OpenCode server to restore state
+ * 4. Spawns opencode attach with session flag if available
+ * 5. Propagates the exit code
+ *
+ * Note: Agent restoration was removed because `opencode attach` doesn't support
+ * the `--agent` flag. Only session restoration is performed.
  *
  * Uses CommonJS (.cjs) for explicit format and compatibility.
  *
@@ -113,10 +117,14 @@ export function generateOpencodeNodeScript(opencodeVersion: string): string {
   // Note: We escape $ to prevent template literal interpolation in the generated script
   return `// opencode.cjs - Generated CommonJS script
 const { spawnSync } = require("child_process");
-const { join } = require("path");
+const { join, normalize } = require("path");
+const http = require("http");
 
 const OPENCODE_VERSION = "${opencodeVersion}";
 const isWindows = process.platform === "win32";
+
+// Timeout constants for HTTP requests
+const SESSION_LIST_TIMEOUT_MS = 3000;
 
 // Path to opencode binary relative to bin/ directory
 const OPENCODE_BIN = join(
@@ -127,31 +135,130 @@ const OPENCODE_BIN = join(
   isWindows ? "opencode.exe" : "opencode"
 );
 
-// 1. Read env var
-const portStr = process.env.CODEHYDRA_OPENCODE_PORT;
-if (!portStr) {
-  console.error("Error: CODEHYDRA_OPENCODE_PORT not set.");
-  console.error("Make sure you're in a CodeHydra workspace terminal.");
-  process.exit(1);
+/**
+ * Make an HTTP GET request and return parsed JSON or null on error.
+ * @param {string} url - The URL to fetch
+ * @param {number} timeout - Request timeout in milliseconds
+ * @returns {Promise<any>} Parsed JSON response or null on any error
+ */
+function httpGet(url, timeout) {
+  return new Promise((resolve) => {
+    const req = http.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        resolve(null);
+        return;
+      }
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    req.setTimeout(timeout, () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.on("error", () => resolve(null));
+  });
 }
 
-// 2. Validate port number
-const port = parseInt(portStr, 10);
-if (isNaN(port) || port <= 0 || port > 65535) {
-  console.error("Error: Invalid CODEHYDRA_OPENCODE_PORT: " + portStr);
-  process.exit(1);
+/**
+ * Normalize a path for comparison, handling platform differences.
+ * On Windows, paths are lowercased for case-insensitive comparison.
+ * @param {string} p - Path to normalize
+ * @returns {string} Normalized path
+ */
+function normalizePath(p) {
+  const normalized = normalize(p);
+  return isWindows ? normalized.toLowerCase() : normalized;
 }
 
-// 3. Spawn opencode attach
-const url = "http://127.0.0.1:" + port;
-const result = spawnSync(OPENCODE_BIN, ["attach", url], { stdio: "inherit" });
-
-// 4. Exit with child's exit code
-if (result.error) {
-  console.error("Error: Failed to start opencode: " + result.error.message);
-  process.exit(1);
+/**
+ * Find the most recent session matching the current directory.
+ * Excludes sub-agent sessions (those with parentID).
+ * @param {Array} sessions - Array of session objects
+ * @param {string} directory - Current working directory
+ * @returns {Object|null} Most recent matching session or null
+ */
+function findMatchingSession(sessions, directory) {
+  if (!Array.isArray(sessions)) return null;
+  
+  const normalizedDir = normalizePath(directory);
+  
+  const matching = sessions.filter((s) => {
+    // Exclude sub-agent sessions (have parentID)
+    if (s.parentID !== null && s.parentID !== undefined) return false;
+    // Match directory
+    if (!s.directory) return false;
+    return normalizePath(s.directory) === normalizedDir;
+  });
+  
+  if (matching.length === 0) return null;
+  
+  // Sort by time.updated descending (most recent first)
+  matching.sort((a, b) => {
+    const timeA = a.time?.updated ?? 0;
+    const timeB = b.time?.updated ?? 0;
+    return timeB - timeA;
+  });
+  
+  return matching[0];
 }
-process.exit(result.status ?? 1);
+
+(async () => {
+  try {
+    // 1. Read env var
+    const portStr = process.env.CODEHYDRA_OPENCODE_PORT;
+    if (!portStr) {
+      console.error("Error: CODEHYDRA_OPENCODE_PORT not set.");
+      console.error("Make sure you're in a CodeHydra workspace terminal.");
+      process.exit(1);
+    }
+
+    // 2. Validate port number
+    const port = parseInt(portStr, 10);
+    if (isNaN(port) || port <= 0 || port > 65535) {
+      console.error("Error: Invalid CODEHYDRA_OPENCODE_PORT: " + portStr);
+      process.exit(1);
+    }
+
+    const baseUrl = "http://127.0.0.1:" + port;
+    const cwd = process.cwd();
+    
+    // 3. Try to restore session
+    let sessionId = null;
+    
+    // Fetch sessions
+    const sessions = await httpGet(baseUrl + "/session", SESSION_LIST_TIMEOUT_MS);
+    if (sessions) {
+      const session = findMatchingSession(sessions, cwd);
+      if (session && session.id) {
+        sessionId = session.id;
+      }
+    }
+    
+    // 4. Build args
+    const args = ["attach", baseUrl];
+    if (sessionId) args.push("--session", sessionId);
+    
+    // 5. Spawn opencode
+    const result = spawnSync(OPENCODE_BIN, args, { stdio: "inherit" });
+
+    // 6. Exit with child's exit code
+    if (result.error) {
+      console.error("Error: Failed to start opencode: " + result.error.message);
+      process.exit(1);
+    }
+    process.exit(result.status ?? 1);
+  } catch (error) {
+    console.error("Error:", error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+})();
 `;
 }
 

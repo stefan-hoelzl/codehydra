@@ -136,6 +136,12 @@ describe("generateOpencodeNodeScript", () => {
     expect(content).toContain('require("path")');
   });
 
+  it("uses CommonJS require for http module", () => {
+    const content = generateOpencodeNodeScript(TEST_VERSION);
+
+    expect(content).toContain('require("http")');
+  });
+
   it("does not require fs module (no file I/O)", () => {
     const content = generateOpencodeNodeScript(TEST_VERSION);
 
@@ -146,7 +152,7 @@ describe("generateOpencodeNodeScript", () => {
     const content = generateOpencodeNodeScript(TEST_VERSION);
 
     // Should use join() for paths (from path module)
-    expect(content).toContain("const { join } = require");
+    expect(content).toContain("const { join, normalize } = require");
     // Should use join with __dirname as first argument
     expect(content).toMatch(/join\(\s*__dirname/);
     // Should NOT use string concatenation for paths
@@ -231,6 +237,117 @@ describe("generateOpencodeNodeScript", () => {
 
     expect(content).not.toContain("git rev-parse");
     expect(content).not.toContain("gitRoot");
+  });
+
+  describe("session restoration", () => {
+    it("includes httpGet function", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("function httpGet(url, timeout)");
+      expect(content).toContain("http.get(url,");
+      expect(content).toContain("resolve(null)");
+    });
+
+    it("includes timeout constant for session list", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("SESSION_LIST_TIMEOUT_MS = 3000");
+      // Note: MESSAGE_LIST_TIMEOUT_MS was removed since agent restoration is not supported
+      expect(content).not.toContain("MESSAGE_LIST_TIMEOUT_MS");
+    });
+
+    it("includes normalizePath function", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("function normalizePath(p)");
+      expect(content).toContain("normalize(p)");
+    });
+
+    it("handles Windows paths in normalizePath (case-insensitive)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      // Should lowercase on Windows for case-insensitive comparison
+      expect(content).toContain("isWindows ? normalized.toLowerCase()");
+    });
+
+    it("includes findMatchingSession function", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("function findMatchingSession(sessions, directory)");
+    });
+
+    it("excludes sessions with parentID (sub-agents)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("s.parentID !== null");
+      expect(content).toContain("s.parentID !== undefined");
+    });
+
+    it("sorts sessions by time.updated", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("a.time?.updated ?? 0");
+      expect(content).toContain("b.time?.updated ?? 0");
+      expect(content).toContain("timeB - timeA");
+    });
+
+    it("handles missing time.updated gracefully (treats as 0)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      // Uses ?? 0 to handle undefined/null
+      expect(content).toContain("a.time?.updated ?? 0");
+    });
+
+    it("does not include findAgentFromMessages function (agent restoration removed)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      // Agent restoration was removed because `opencode attach` doesn't support --agent flag
+      expect(content).not.toContain("function findAgentFromMessages");
+      expect(content).not.toContain("findAgentFromMessages(");
+    });
+
+    it("uses async IIFE pattern", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("(async () => {");
+      expect(content).toContain("})();");
+    });
+
+    it("includes try/catch error handling", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain("try {");
+      expect(content).toContain("} catch (error) {");
+      expect(content).toContain("error instanceof Error ? error.message : error");
+    });
+
+    it("includes --session flag logic", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      expect(content).toContain('args.push("--session", sessionId)');
+    });
+
+    it("does not include --agent flag logic (not supported by opencode attach)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      // Agent restoration was removed because `opencode attach` doesn't support --agent flag
+      expect(content).not.toContain('"--agent"');
+    });
+
+    it("includes session fetch fallback (null on error)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      // httpGet returns null on error, and code checks for truthy sessions
+      expect(content).toContain("if (sessions)");
+    });
+
+    it("only checks for session (no agent variable)", () => {
+      const content = generateOpencodeNodeScript(TEST_VERSION);
+
+      // Only checks for session, no separate agent check
+      expect(content).toContain("if (sessionId) args.push");
+      expect(content).not.toContain("if (agent)");
+    });
   });
 });
 

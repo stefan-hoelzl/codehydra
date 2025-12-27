@@ -228,9 +228,7 @@ opencode (shell) → opencode.cjs (Node.js) → opencode binary
 
 **Session Restoration**: The wrapper automatically queries the OpenCode server for existing
 sessions, filters by the current workspace directory, and restores the most recently updated
-session. If no session is found or the request fails, a new session is started.
-
-Debug mode: Set `OPENCODE_DEBUG=1` to see session resolution details.
+session. If no session is found or the request fails, a new session is started with the default agent.
 
 These scripts are available in the integrated terminal because:
 
