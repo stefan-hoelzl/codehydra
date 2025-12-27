@@ -43,15 +43,6 @@
   let isSubmitting = $state(false);
   let touched = $state(false);
   let createButtonRef: HTMLElement | undefined = $state();
-  let nameInputRef: HTMLElement | undefined = $state();
-
-  // Focus name input when dialog opens (with delay to ensure DOM is ready)
-  $effect(() => {
-    if (open && nameInputRef) {
-      // Use setTimeout to ensure focus happens after all initializations
-      setTimeout(() => nameInputRef?.focus(), 0);
-    }
-  });
 
   // Get existing workspace names for duplicate validation (uses selectedProjectId)
   const existingNames = $derived.by(() => {
@@ -171,7 +162,7 @@
     <div class="form-field">
       <label for="workspace-name">Name</label>
       <vscode-textfield
-        bind:this={nameInputRef}
+        data-autofocus
         id="workspace-name"
         role="textbox"
         tabindex="0"
