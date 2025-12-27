@@ -145,17 +145,17 @@ VS Code setup assets are stored as dedicated files instead of inline code.
 
 ### Asset Files
 
-| File                                                   | Purpose                                              |
-| ------------------------------------------------------ | ---------------------------------------------------- |
-| `src/services/vscode-setup/assets/extensions.json`     | Extension manifest (marketplace + bundled vsix)      |
-| `src/services/vscode-setup/assets/codehydra-sidekick/` | Custom extension source (packaged to .vsix at build) |
+| File                             | Purpose                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| `extensions/extensions.json`     | Extension manifest (marketplace + bundled vsix)      |
+| `extensions/codehydra-sidekick/` | Custom extension source (packaged to .vsix at build) |
 
 **Note:** There are no `settings.json` or `keybindings.json` asset files. VS Code settings with `window` or `resource` scope can be configured via the sidekick extension's `configurationDefaults` in `package.json`. Application-scope settings (like telemetry and workspace trust) cannot be set by extensions.
 
 ### Build Process
 
-1. **Extension packaging**: `npm run build:extension` uses `@vscode/vsce` to package `codehydra-sidekick/` into `sidekick-0.0.2.vsix`
-2. **Asset bundling**: `vite-plugin-static-copy` copies all assets to `out/main/assets/` during build
+1. **Extension packaging**: `npm run build:extensions` uses `@vscode/vsce` to package extensions to `dist/extensions/`
+2. **Asset bundling**: `vite-plugin-static-copy` copies `dist/extensions/*` to `out/main/assets/` during build
 3. **Full build**: `npm run build` runs both steps sequentially
 
 ### Runtime Flow
@@ -614,7 +614,7 @@ await api.workspace.setMetadata("my-key", "my-value");
 **Type Declarations:**
 
 For TypeScript support, copy the type declarations from:
-`src/services/vscode-setup/assets/codehydra-sidekick/api.d.ts`
+`extensions/codehydra-sidekick/api.d.ts`
 
 **Error Handling:**
 

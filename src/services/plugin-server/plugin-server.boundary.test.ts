@@ -772,7 +772,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
     // Note: The "config" event is emitted by the server to the client. Validation of
     // the config payload happens on the client side (in the codehydra-sidekick extension).
     // The server always emits a valid PluginConfig object with isDevelopment: boolean.
-    // See src/services/vscode-setup/assets/codehydra-sidekick/extension.js for client-side validation.
+    // See extensions/codehydra-sidekick/extension.js for client-side validation.
 
     it("sends config with isDevelopment: true when configured", async () => {
       // Close default server and create one with isDevelopment: true

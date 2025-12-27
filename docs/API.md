@@ -235,7 +235,7 @@ export async function activate(context: vscode.ExtensionContext) {
 ### Type Declarations
 
 For TypeScript support, copy the type declarations from:  
-`src/services/vscode-setup/assets/codehydra-extension/api.d.ts`
+`extensions/codehydra-sidekick/api.d.ts`
 
 Or use these inline definitions:
 
@@ -725,11 +725,11 @@ type SetupResult =
 
 ## Source Files
 
-| Purpose              | File                                                            |
-| -------------------- | --------------------------------------------------------------- |
-| Core Interface       | `src/shared/api/interfaces.ts`                                  |
-| Type Definitions     | `src/shared/api/types.ts`                                       |
-| IPC Channels         | `src/shared/ipc.ts`                                             |
-| Preload (window.api) | `src/preload/index.ts`                                          |
-| Plugin Protocol      | `src/shared/plugin-protocol.ts`                                 |
-| External API Types   | `src/services/vscode-setup/assets/codehydra-extension/api.d.ts` |
+| Purpose              | File                                     |
+| -------------------- | ---------------------------------------- |
+| Core Interface       | `src/shared/api/interfaces.ts`           |
+| Type Definitions     | `src/shared/api/types.ts`                |
+| IPC Channels         | `src/shared/ipc.ts`                      |
+| Preload (window.api) | `src/preload/index.ts`                   |
+| Plugin Protocol      | `src/shared/plugin-protocol.ts`          |
+| External API Types   | `extensions/codehydra-sidekick/api.d.ts` |

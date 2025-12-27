@@ -1326,7 +1326,7 @@ function wirePluginApi(pluginServer: PluginServer, api: ICodeHydraApi, appState:
 ### Type Declarations for Third-Party Extensions
 
 TypeScript declarations for the API are in:
-`src/services/vscode-setup/assets/codehydra-sidekick/api.d.ts`
+`extensions/codehydra-sidekick/api.d.ts`
 
 Third-party extension developers should copy this file into their project for type safety.
 
@@ -1452,22 +1452,22 @@ app.whenReady()
 
 ### Asset Files
 
-VS Code setup assets are stored as dedicated files (not inline code):
+VS Code extension sources are stored in the `extensions/` directory at the project root:
 
 ```
-src/services/vscode-setup/assets/
-├── settings.json              # VS Code settings (theme, telemetry, etc.)
-├── keybindings.json           # Custom keybindings (Alt+T for panel toggle)
+extensions/
 ├── extensions.json            # Extension manifest (marketplace + bundled)
+├── README.md                  # Documentation for adding extensions
 └── codehydra-sidekick/        # Custom extension source
     ├── package.json
-    └── extension.js
+    ├── extension.js
+    └── api.d.ts
 ```
 
 ### Build Process
 
-1. `npm run build:extension` - packages `codehydra-sidekick/` into `sidekick-0.0.2.vsix`
-2. `vite-plugin-static-copy` - copies all assets to `out/main/assets/` during build
+1. `npm run build:extensions` - packages extensions to `dist/extensions/`
+2. `vite-plugin-static-copy` - copies `dist/extensions/*` to `out/main/assets/` during build
 3. `npm run build` - runs both steps sequentially
 
 ### Runtime Asset Resolution
@@ -1475,8 +1475,6 @@ src/services/vscode-setup/assets/
 ```
 out/main/assets/ (ASAR in prod)
     │
-    ├─► settings.json ──► <app-data>/vscode/user-data/User/settings.json
-    ├─► keybindings.json ──► <app-data>/vscode/user-data/User/keybindings.json
     └─► *.vsix ──► <app-data>/vscode/ ──► code-server --install-extension
 ```
 
