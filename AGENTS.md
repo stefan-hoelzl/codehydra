@@ -141,20 +141,20 @@ All external system access MUST go through abstraction interfaces. Direct librar
 
 ## VS Code Assets
 
-VS Code setup assets (settings, keybindings, extensions) are stored as dedicated files instead of inline code.
+VS Code setup assets are stored as dedicated files instead of inline code.
 
 ### Asset Files
 
-| File                                                   | Purpose                                                    |
-| ------------------------------------------------------ | ---------------------------------------------------------- |
-| `src/services/vscode-setup/assets/settings.json`       | VS Code settings (theme, telemetry, workspace trust, etc.) |
-| `src/services/vscode-setup/assets/keybindings.json`    | Custom keybindings (Alt+T for panel toggle)                |
-| `src/services/vscode-setup/assets/extensions.json`     | Extension manifest (marketplace + bundled vsix)            |
-| `src/services/vscode-setup/assets/codehydra-sidekick/` | Custom extension source (packaged to .vsix at build)       |
+| File                                                   | Purpose                                              |
+| ------------------------------------------------------ | ---------------------------------------------------- |
+| `src/services/vscode-setup/assets/extensions.json`     | Extension manifest (marketplace + bundled vsix)      |
+| `src/services/vscode-setup/assets/codehydra-sidekick/` | Custom extension source (packaged to .vsix at build) |
+
+**Note:** There are no `settings.json` or `keybindings.json` asset files. VS Code settings with `window` or `resource` scope can be configured via the sidekick extension's `configurationDefaults` in `package.json`. Application-scope settings (like telemetry and workspace trust) cannot be set by extensions.
 
 ### Build Process
 
-1. **Extension packaging**: `npm run build:extension` uses `@vscode/vsce` to package `codehydra-sidekick/` into `sidekick-0.0.1.vsix`
+1. **Extension packaging**: `npm run build:extension` uses `@vscode/vsce` to package `codehydra-sidekick/` into `sidekick-0.0.2.vsix`
 2. **Asset bundling**: `vite-plugin-static-copy` copies all assets to `out/main/assets/` during build
 3. **Full build**: `npm run build` runs both steps sequentially
 
@@ -163,8 +163,6 @@ VS Code setup assets (settings, keybindings, extensions) are stored as dedicated
 ```
 out/main/assets/ (ASAR in prod)
     │
-    ├─► settings.json ──► <app-data>/vscode/user-data/User/settings.json
-    ├─► keybindings.json ──► <app-data>/vscode/user-data/User/keybindings.json
     └─► *.vsix ──► <app-data>/vscode/ ──► code-server --install-extension
 ```
 
