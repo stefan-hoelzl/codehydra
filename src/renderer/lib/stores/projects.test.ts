@@ -22,7 +22,6 @@ import {
   loadingState,
   loadingError,
   activeProject,
-  flatWorkspaceList,
   setProjects,
   addProject,
   removeProject,
@@ -165,40 +164,6 @@ describe("projects store", () => {
       setActiveWorkspace("/nonexistent/path");
 
       expect(activeProject.value).toBeUndefined();
-    });
-  });
-
-  describe("flatWorkspaceList derived", () => {
-    it("flattens all workspaces from all projects", () => {
-      const ws1: Workspace = createMockWorkspace({ path: "/test/project1/.worktrees/ws1" });
-      const ws2: Workspace = createMockWorkspace({ path: "/test/project1/.worktrees/ws2" });
-      const ws3: Workspace = createMockWorkspace({ path: "/test/project2/.worktrees/ws3" });
-
-      const project1 = createMockProject({
-        path: "/test/project1" as ProjectPath,
-        workspaces: [ws1, ws2],
-      });
-      const project2 = createMockProject({
-        path: "/test/project2" as ProjectPath,
-        workspaces: [ws3],
-      });
-
-      addProject(project1);
-      addProject(project2);
-
-      expect(flatWorkspaceList.value).toHaveLength(3);
-      expect(flatWorkspaceList.value[0]).toEqual({
-        projectPath: "/test/project1",
-        workspace: ws1,
-      });
-      expect(flatWorkspaceList.value[1]).toEqual({
-        projectPath: "/test/project1",
-        workspace: ws2,
-      });
-      expect(flatWorkspaceList.value[2]).toEqual({
-        projectPath: "/test/project2",
-        workspace: ws3,
-      });
     });
   });
 

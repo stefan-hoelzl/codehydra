@@ -51,7 +51,6 @@ export type {
   Workspace,
   WorkspaceRef,
   WorkspaceStatus,
-  WorkspaceRemovalResult,
   AgentStatus,
   AgentStatusCounts,
   BaseInfo,

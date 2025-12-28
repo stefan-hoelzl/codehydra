@@ -23,78 +23,8 @@ export type WorkspacePath = string & { readonly [WorkspacePathBrand]: true };
 
 // ============ Domain Types ============
 
-/**
- * NOTE: Domain types are intentionally redefined here instead of re-exported from services/.
- *
- * Reason: Browser compatibility. The shared/ directory is used by the renderer process,
- * which runs in a browser context and cannot import from services/ (Node.js code).
- * These types mirror the corresponding interfaces in services/git/types.ts.
- *
- * When updating these types, ensure the services/ types are updated as well.
- */
-
-/**
- * Workspace representation for the application.
- * Mirrors services/git/types.ts Workspace interface.
- */
-export interface Workspace {
-  /** Workspace name */
-  readonly name: string;
-  /** Absolute path to the workspace directory */
-  readonly path: string;
-  /** Branch checked out in workspace, null if detached HEAD */
-  readonly branch: string | null;
-  /**
-   * Metadata for the workspace stored in git config.
-   * Always contains `base` key (with fallback to branch ?? name if not explicitly set).
-   * Additional keys can be added for custom workspace metadata.
-   */
-  readonly metadata: Readonly<Record<string, string>>;
-}
-
-/**
- * Base (branch) information for workspace creation.
- * Mirrors services/git/types.ts BaseInfo interface.
- */
-export interface BaseInfo {
-  /** Branch name */
-  readonly name: string;
-  /** Whether this is a remote branch */
-  readonly isRemote: boolean;
-}
-
-/**
- * Result of workspace removal operation.
- * Mirrors services/git/types.ts RemovalResult interface.
- */
-export interface RemovalResult {
-  /** Whether the workspace was successfully removed */
-  readonly workspaceRemoved: boolean;
-  /** Whether the base branch was deleted (if requested) */
-  readonly baseDeleted: boolean;
-}
-
-/**
- * Result of updating bases (fetching from remotes).
- * Mirrors services/git/types.ts UpdateBasesResult interface.
- */
-export interface UpdateBasesResult {
-  /** Remotes that were successfully fetched */
-  readonly fetchedRemotes: readonly string[];
-  /** Remotes that failed to fetch with error messages */
-  readonly failedRemotes: readonly { remote: string; error: string }[];
-}
-
-/**
- * Project representation containing workspaces.
- */
-export interface Project {
-  readonly path: ProjectPath;
-  readonly name: string; // folder name
-  readonly workspaces: readonly Workspace[];
-  /** Default base branch for creating workspaces (last used or "main"/"master" fallback) */
-  readonly defaultBaseBranch?: string;
-}
+// NOTE: Most domain types have been moved to src/shared/api/types.ts
+// This file retains only types needed for IPC communication.
 
 // ============ Agent Status Types ============
 

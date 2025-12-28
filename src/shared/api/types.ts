@@ -188,14 +188,6 @@ export interface BaseInfo {
 }
 
 /**
- * Result of workspace removal operation.
- */
-export interface WorkspaceRemovalResult {
-  readonly branchDeleted: boolean;
-  readonly branchDeleteError?: string;
-}
-
-/**
  * Steps in the VS Code setup process.
  */
 export type SetupStep = "binary-download" | "extensions" | "settings";

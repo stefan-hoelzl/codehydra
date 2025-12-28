@@ -41,17 +41,6 @@ export function sanitizeWorkspaceName(name: string): string {
 }
 
 /**
- * Unsanitize a workspace name back to original form.
- * Replaces `%` with `/`.
- *
- * @param sanitized Sanitized name
- * @returns Original workspace or branch name
- */
-export function unsanitizeWorkspaceName(sanitized: string): string {
-  return sanitized.replace(/%/g, "/");
-}
-
-/**
  * Encode a file path for use in URLs.
  * Percent-encodes special characters while preserving path structure.
  *

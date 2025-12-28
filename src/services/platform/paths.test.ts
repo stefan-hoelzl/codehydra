@@ -12,12 +12,7 @@
 
 import { describe, it, expect } from "vitest";
 import { createHash } from "crypto";
-import {
-  projectDirName,
-  sanitizeWorkspaceName,
-  unsanitizeWorkspaceName,
-  encodePathForUrl,
-} from "./paths";
+import { projectDirName, sanitizeWorkspaceName, encodePathForUrl } from "./paths";
 
 describe("paths utility functions", () => {
   describe("projectDirName", () => {
@@ -80,29 +75,6 @@ describe("paths utility functions", () => {
       const result = sanitizeWorkspaceName("my-feature");
 
       expect(result).toBe("my-feature");
-    });
-  });
-
-  describe("unsanitizeWorkspaceName", () => {
-    it("replaces percent signs with forward slashes", () => {
-      const result = unsanitizeWorkspaceName("feature%my-feature");
-
-      expect(result).toBe("feature/my-feature");
-    });
-
-    it("handles multiple percent signs", () => {
-      const result = unsanitizeWorkspaceName("user%feature%sub-feature");
-
-      expect(result).toBe("user/feature/sub-feature");
-    });
-
-    it("roundtrips with sanitizeWorkspaceName", () => {
-      const original = "user/feature/my-feature";
-
-      const sanitized = sanitizeWorkspaceName(original);
-      const unsanitized = unsanitizeWorkspaceName(sanitized);
-
-      expect(unsanitized).toBe(original);
     });
   });
 

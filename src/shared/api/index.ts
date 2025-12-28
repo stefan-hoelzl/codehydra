@@ -45,7 +45,6 @@ export type {
   AgentStatus,
   AgentStatusCounts,
   BaseInfo,
-  WorkspaceRemovalResult,
   SetupStep,
   SetupProgress,
   SetupResult,

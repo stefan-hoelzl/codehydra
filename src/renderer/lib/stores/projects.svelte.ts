@@ -45,15 +45,6 @@ const _activeProject = $derived<ProjectWithId | undefined>(
   _projectsWithIds.find((p) => p.workspaces.some((w) => w.path === _activeWorkspacePath))
 );
 
-const _flatWorkspaceList = $derived(
-  _sortedProjects.flatMap((p) =>
-    p.workspaces.map((w) => ({
-      projectPath: p.path,
-      workspace: w,
-    }))
-  )
-);
-
 /**
  * Active workspace as WorkspaceRef (includes projectId).
  * Returns null if no active workspace.
@@ -104,12 +95,6 @@ export const loadingError = {
 export const activeProject = {
   get value() {
     return _activeProject;
-  },
-};
-
-export const flatWorkspaceList = {
-  get value() {
-    return _flatWorkspaceList;
   },
 };
 
@@ -217,26 +202,6 @@ export function getWorkspaceRefByIndex(index: number): WorkspaceRef | undefined 
         };
       }
       currentIndex++;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Find WorkspaceRef by workspace path.
- * @returns WorkspaceRef for the workspace, or undefined if not found.
- */
-export function findWorkspaceRefByPath(path: string | null): WorkspaceRef | undefined {
-  if (!path) return undefined;
-  for (const project of projects.value) {
-    for (const workspace of project.workspaces) {
-      if (workspace.path === path) {
-        return {
-          projectId: project.id,
-          workspaceName: workspace.name as WorkspaceName,
-          path: workspace.path,
-        };
-      }
     }
   }
   return undefined;
