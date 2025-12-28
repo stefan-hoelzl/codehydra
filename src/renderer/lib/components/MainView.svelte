@@ -342,10 +342,12 @@
     if (!activeDeletionState) return;
     logger.debug("Retrying deletion", { workspaceName: activeDeletionState.workspaceName });
     // Fire-and-forget - new progress events will update the state
+    // Pass skipSwitch: true to prevent switching away from this workspace on retry
     void api.workspaces.remove(
       activeDeletionState.projectId,
       activeDeletionState.workspaceName,
-      activeDeletionState.keepBranch
+      activeDeletionState.keepBranch,
+      true // skipSwitch - user explicitly selected this workspace to retry
     );
   }
 

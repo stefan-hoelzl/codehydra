@@ -43,11 +43,17 @@ export interface IWorkspaceApi {
    * Start workspace removal (fire-and-forget).
    * Progress is emitted via workspace:deletion-progress events.
    * Returns immediately with { started: true }.
+   *
+   * @param projectId Project containing the workspace
+   * @param workspaceName Name of the workspace to remove
+   * @param keepBranch If true, keep the git branch after removing worktree (default: true)
+   * @param skipSwitch If true, don't switch away from this workspace when active (for retry)
    */
   remove(
     projectId: ProjectId,
     workspaceName: WorkspaceName,
-    keepBranch?: boolean
+    keepBranch?: boolean,
+    skipSwitch?: boolean
   ): Promise<{ started: true }>;
   /**
    * Force remove a workspace (skip cleanup operations).

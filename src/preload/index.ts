@@ -44,12 +44,14 @@ contextBridge.exposeInMainWorld("api", {
     remove: (
       projectId: string,
       workspaceName: string,
-      keepBranch?: boolean
+      keepBranch?: boolean,
+      skipSwitch?: boolean
     ): Promise<{ started: true }> =>
       ipcRenderer.invoke(ApiIpcChannels.WORKSPACE_REMOVE, {
         projectId,
         workspaceName,
         keepBranch,
+        skipSwitch,
       }),
     forceRemove: (projectId: string, workspaceName: string): Promise<void> =>
       ipcRenderer.invoke(ApiIpcChannels.WORKSPACE_FORCE_REMOVE, {

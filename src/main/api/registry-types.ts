@@ -46,6 +46,8 @@ export interface WorkspaceRemovePayload {
   readonly projectId: ProjectId;
   readonly workspaceName: WorkspaceName;
   readonly keepBranch?: boolean;
+  /** If true, don't switch away from this workspace when it's active. Used for retry. */
+  readonly skipSwitch?: boolean;
 }
 
 /** workspaces.forceRemove, workspaces.get, workspaces.getStatus,

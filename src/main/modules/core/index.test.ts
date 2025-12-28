@@ -577,4 +577,129 @@ describe("core.workspaces.remove.last-workspace", () => {
     // viewManager.setActiveWorkspace should be called with the other workspace
     expect(viewManager.setActiveWorkspace).toHaveBeenCalledWith(workspacePath2, false);
   });
+
+  it("does not switch workspace when skipSwitch is true (retry scenario)", async () => {
+    const workspacePath1 = `${TEST_PROJECT_PATH}/workspaces/feature1`;
+    const workspacePath2 = `${TEST_PROJECT_PATH}/workspaces/feature2`;
+    const workspaceName = "feature1" as import("../../../shared/api/types").WorkspaceName;
+    const emitDeletionProgress = vi.fn();
+
+    const appState = createMockAppState({
+      // Two workspaces exist
+      getAllProjects: vi.fn().mockResolvedValue([
+        {
+          path: TEST_PROJECT_PATH,
+          name: "test-project",
+          workspaces: [
+            { path: workspacePath1, branch: "feature1", metadata: { base: "main" } },
+            { path: workspacePath2, branch: "feature2", metadata: { base: "main" } },
+          ],
+        },
+      ]),
+      getProject: vi.fn().mockReturnValue({
+        path: TEST_PROJECT_PATH,
+        name: "test-project",
+        workspaces: [
+          { path: workspacePath1, branch: "feature1", metadata: { base: "main" } },
+          { path: workspacePath2, branch: "feature2", metadata: { base: "main" } },
+        ],
+      }),
+      getServerManager: vi.fn().mockReturnValue({
+        stopServer: vi.fn().mockResolvedValue({ success: true }),
+        getPort: vi.fn().mockReturnValue(null),
+      }),
+      getWorkspaceProvider: vi.fn().mockReturnValue({
+        removeWorkspace: vi.fn().mockResolvedValue(undefined),
+      }),
+    });
+
+    const viewManager = {
+      ...createMockViewManager(),
+      // First workspace is active
+      getActiveWorkspacePath: vi.fn().mockReturnValue(workspacePath1),
+      setActiveWorkspace: vi.fn(),
+    } as unknown as IViewManager;
+
+    deps = createMockDeps({ appState, viewManager, emitDeletionProgress });
+    new CoreModule(registry, deps);
+
+    // Track workspace:switched events
+    const switchedEvents: unknown[] = [];
+    registry.on("workspace:switched", (event: unknown) => {
+      switchedEvents.push(event);
+    });
+
+    const handler = registry.getHandler("workspaces.remove");
+    await handler!({
+      projectId: TEST_PROJECT_ID,
+      workspaceName,
+      keepBranch: true,
+      skipSwitch: true, // This is the key difference - simulating a retry
+    });
+
+    // Should NOT emit any workspace:switched events
+    expect(switchedEvents).toHaveLength(0);
+
+    // viewManager.setActiveWorkspace should NOT have been called
+    expect(viewManager.setActiveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("does not switch when skipSwitch is true even for last workspace", async () => {
+    const workspacePath = `${TEST_PROJECT_PATH}/workspaces/feature`;
+    const workspaceName = "feature" as import("../../../shared/api/types").WorkspaceName;
+    const emitDeletionProgress = vi.fn();
+
+    const appState = createMockAppState({
+      // Only one workspace exists
+      getAllProjects: vi.fn().mockResolvedValue([
+        {
+          path: TEST_PROJECT_PATH,
+          name: "test-project",
+          workspaces: [{ path: workspacePath, branch: "feature", metadata: { base: "main" } }],
+        },
+      ]),
+      getProject: vi.fn().mockReturnValue({
+        path: TEST_PROJECT_PATH,
+        name: "test-project",
+        workspaces: [{ path: workspacePath, branch: "feature", metadata: { base: "main" } }],
+      }),
+      getServerManager: vi.fn().mockReturnValue({
+        stopServer: vi.fn().mockResolvedValue({ success: true }),
+        getPort: vi.fn().mockReturnValue(null),
+      }),
+      getWorkspaceProvider: vi.fn().mockReturnValue({
+        removeWorkspace: vi.fn().mockResolvedValue(undefined),
+      }),
+    });
+
+    const viewManager = {
+      ...createMockViewManager(),
+      // This workspace is the active one
+      getActiveWorkspacePath: vi.fn().mockReturnValue(workspacePath),
+      setActiveWorkspace: vi.fn(),
+    } as unknown as IViewManager;
+
+    deps = createMockDeps({ appState, viewManager, emitDeletionProgress });
+    new CoreModule(registry, deps);
+
+    // Track workspace:switched events
+    const switchedEvents: unknown[] = [];
+    registry.on("workspace:switched", (event: unknown) => {
+      switchedEvents.push(event);
+    });
+
+    const handler = registry.getHandler("workspaces.remove");
+    await handler!({
+      projectId: TEST_PROJECT_ID,
+      workspaceName,
+      keepBranch: true,
+      skipSwitch: true, // Skip switch even for last workspace
+    });
+
+    // Should NOT emit any workspace:switched events
+    expect(switchedEvents).toHaveLength(0);
+
+    // viewManager.setActiveWorkspace should NOT have been called
+    expect(viewManager.setActiveWorkspace).not.toHaveBeenCalled();
+  });
 });

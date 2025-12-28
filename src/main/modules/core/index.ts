@@ -289,9 +289,9 @@ export class CoreModule implements IApiModule {
     // Mark as in-progress
     this.inProgressDeletions.add(workspace.path);
 
-    // If this workspace is active, try to switch to next workspace immediately
+    // If this workspace is active and skipSwitch is not set, try to switch to next workspace
     const isActive = this.deps.viewManager.getActiveWorkspacePath() === workspace.path;
-    if (isActive) {
+    if (isActive && !payload.skipSwitch) {
       const switched = await this.switchToNextWorkspaceIfAvailable(projectPath, workspace.path);
       if (!switched) {
         this.deps.viewManager.setActiveWorkspace(null, false);
