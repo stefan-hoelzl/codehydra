@@ -5,21 +5,6 @@
 import type { ProjectId, WorkspaceName } from "../../shared/api/types";
 
 // =============================================================================
-// Branded Types
-// =============================================================================
-
-/**
- * Brand symbol for validated workspace paths.
- */
-declare const McpWorkspacePathBrand: unique symbol;
-
-/**
- * Validated workspace path from MCP header.
- * Must be an absolute path that corresponds to a registered workspace.
- */
-export type McpWorkspacePath = string & { readonly [McpWorkspacePathBrand]: true };
-
-// =============================================================================
 // Resolved Workspace
 // =============================================================================
 
@@ -56,6 +41,7 @@ export interface McpError {
 
 /**
  * Result type for MCP tool operations.
+ * @internal Used by test utilities only
  */
 export type McpToolResult<T> =
   | { readonly success: true; readonly data: T }
@@ -96,24 +82,9 @@ export interface IMcpServer extends IDisposable {
 /**
  * MCP context for tool handlers.
  * Contains workspace information from the X-Workspace-Path header.
+ * @internal Used by test utilities only
  */
 export interface McpContext {
   readonly workspacePath: string;
   readonly resolved: ResolvedWorkspace | null;
-}
-
-// =============================================================================
-// OpenCode Spawn Environment
-// =============================================================================
-
-/**
- * Environment variables passed to OpenCode when spawning.
- */
-export interface OpenCodeSpawnEnv {
-  /** File path to codehydra-mcp.json config file */
-  readonly OPENCODE_CONFIG: string;
-  /** Absolute workspace path */
-  readonly CODEHYDRA_WORKSPACE_PATH: string;
-  /** MCP server port as string */
-  readonly CODEHYDRA_MCP_PORT: string;
 }

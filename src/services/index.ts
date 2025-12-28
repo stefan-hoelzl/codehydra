@@ -15,16 +15,7 @@ export {
 export type { SerializedError } from "./errors";
 
 // Git types
-export type {
-  WorktreeInfo,
-  BranchInfo,
-  StatusResult,
-  Workspace,
-  BaseInfo,
-  RemovalResult,
-  UpdateBasesResult,
-  CleanupResult,
-} from "./git/types";
+export type { Workspace, BaseInfo } from "./git/types";
 
 // Git client
 export type { IGitClient } from "./git/git-client";
@@ -44,12 +35,7 @@ export { CURRENT_PROJECT_VERSION } from "./project/types";
 export { ProjectStore } from "./project/project-store";
 
 // Platform utilities (pure functions - no build-mode dependencies)
-export {
-  sanitizeWorkspaceName,
-  unsanitizeWorkspaceName,
-  encodePathForUrl,
-  projectDirName,
-} from "./platform/paths";
+export { sanitizeWorkspaceName, encodePathForUrl, projectDirName } from "./platform/paths";
 
 // Build info abstraction
 export type { BuildInfo } from "./platform/build-info";

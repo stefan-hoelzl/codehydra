@@ -95,6 +95,7 @@ export function getStatusByRef(ref: {
  * Set all statuses using composite keys.
  * Clears existing statuses before setting new ones.
  * @param statuses - Map of composite keys to statuses
+ * @internal Exported for testing only
  */
 export function setAllStatusesByRef(statuses: Map<string, AggregatedAgentStatus>): void {
   _statusesByRef.clear();

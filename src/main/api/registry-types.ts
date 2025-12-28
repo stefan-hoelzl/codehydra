@@ -142,14 +142,17 @@ export type MethodPath = keyof MethodRegistry;
 
 /**
  * Grouped method paths for better organization.
+ * @internal Exported for testing only - used for type-level verification
  */
 export type LifecyclePath = "lifecycle.getState" | "lifecycle.setup" | "lifecycle.quit";
+/** @internal Exported for testing only */
 export type ProjectPath =
   | "projects.open"
   | "projects.close"
   | "projects.list"
   | "projects.get"
   | "projects.fetchBases";
+/** @internal Exported for testing only */
 export type WorkspacePath =
   | "workspaces.create"
   | "workspaces.remove"
@@ -160,6 +163,7 @@ export type WorkspacePath =
   | "workspaces.setMetadata"
   | "workspaces.getMetadata"
   | "workspaces.executeCommand";
+/** @internal Exported for testing only */
 export type UiPath =
   | "ui.selectFolder"
   | "ui.getActiveWorkspace"

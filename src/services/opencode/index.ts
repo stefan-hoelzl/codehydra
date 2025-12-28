@@ -9,5 +9,3 @@ export { OpenCodeServerManager } from "./opencode-server-manager";
 
 // Re-export types
 export type { Result, SessionStatus, IDisposable, Unsubscribe } from "./types";
-
-export { ok, err } from "./types";

@@ -3,7 +3,6 @@
  */
 
 export type { Logger, LoggingService, LogContext, LoggerName, LogLevel } from "./types";
-export { LogLevel as LogLevelValues } from "./types";
 export { ElectronLogService } from "./electron-log-service";
 export {
   createMockLogger,

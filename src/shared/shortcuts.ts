@@ -25,10 +25,11 @@ export type DialogKey = (typeof DIALOG_KEYS)[number];
 export type ProjectKey = (typeof PROJECT_KEYS)[number];
 export type ActionKey = NavigationKey | JumpKey | DialogKey | ProjectKey;
 
-// ============ Type Guards ============
+// ============ Type Guards (internal, exported for testing only) ============
 
 /**
  * Type guard for navigation keys (ArrowUp, ArrowDown).
+ * @internal Exported for testing only
  */
 export function isNavigationKey(key: string): key is NavigationKey {
   return (NAVIGATION_KEYS as readonly string[]).includes(key);
@@ -36,6 +37,7 @@ export function isNavigationKey(key: string): key is NavigationKey {
 
 /**
  * Type guard for jump keys (0-9).
+ * @internal Exported for testing only
  */
 export function isJumpKey(key: string): key is JumpKey {
   return (JUMP_KEYS as readonly string[]).includes(key);
@@ -43,6 +45,7 @@ export function isJumpKey(key: string): key is JumpKey {
 
 /**
  * Type guard for dialog keys (Enter, Delete, Backspace).
+ * @internal Exported for testing only
  */
 export function isDialogKey(key: string): key is DialogKey {
   return (DIALOG_KEYS as readonly string[]).includes(key);
@@ -50,6 +53,7 @@ export function isDialogKey(key: string): key is DialogKey {
 
 /**
  * Type guard for project keys (o, O).
+ * @internal Exported for testing only
  */
 export function isProjectKey(key: string): key is ProjectKey {
   return (PROJECT_KEYS as readonly string[]).includes(key);
@@ -57,6 +61,7 @@ export function isProjectKey(key: string): key is ProjectKey {
 
 /**
  * Type guard for any action key.
+ * @internal Exported for testing only
  */
 export function isActionKey(key: string): key is ActionKey {
   return isNavigationKey(key) || isJumpKey(key) || isDialogKey(key) || isProjectKey(key);

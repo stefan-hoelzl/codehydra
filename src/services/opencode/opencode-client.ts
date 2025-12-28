@@ -92,6 +92,7 @@ export type PermissionEventCallback = (event: PermissionEvent) => void;
 /**
  * Type guard for SessionStatusValue.
  * Validates individual session status from the response.
+ * @internal Exported for testing only
  */
 export function isValidSessionStatus(value: unknown): value is SdkSessionStatus {
   if (typeof value !== "object" || value === null) return false;
@@ -102,6 +103,7 @@ export function isValidSessionStatus(value: unknown): value is SdkSessionStatus 
 
 /**
  * Type guard for SessionStatusResponse (SDK format: Record<string, SessionStatus>).
+ * @internal Exported for testing only
  */
 export function isSessionStatusResponse(value: unknown): value is Record<string, SdkSessionStatus> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;

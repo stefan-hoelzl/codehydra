@@ -53,6 +53,7 @@ export class AgentNotificationService {
 
   /**
    * Enable or disable chime notifications.
+   * @internal Reserved for future use, currently only used in tests
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -60,6 +61,7 @@ export class AgentNotificationService {
 
   /**
    * Check if notifications are enabled.
+   * @internal Reserved for future use, currently only used in tests
    */
   isEnabled(): boolean {
     return this.enabled;
