@@ -6,27 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
 import { delay } from "@services/test-utils";
-import type { ProjectPath } from "@shared/ipc";
-import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
-
-// Helper to create typed ProjectPath
-function asProjectPath(path: string): ProjectPath {
-  return path as ProjectPath;
-}
-
-// Helper to create typed ProjectId
-function asProjectId(id: string): ProjectId {
-  return id as ProjectId;
-}
-
-// Helper to create typed WorkspaceRef
-function asWorkspaceRef(projectId: string, workspaceName: string, path: string): WorkspaceRef {
-  return {
-    projectId: projectId as ProjectId,
-    workspaceName: workspaceName as WorkspaceName,
-    path,
-  };
-}
+import { asProjectId, asProjectPath, asWorkspaceRef } from "@shared/test-fixtures";
 
 // API event callbacks - must be hoisted with mockApi so it's available when mock runs
 type EventCallback = (...args: unknown[]) => void;

@@ -32,7 +32,7 @@ window.api = mockApi;
 
 // Import after mock setup
 import Sidebar from "./Sidebar.svelte";
-import { createMockProjectWithId, createMockWorkspace } from "$lib/test-fixtures";
+import { createMockProject, createMockWorkspace } from "$lib/test-fixtures";
 import type { ProjectPath, WorkspacePath } from "@shared/ipc";
 import * as agentStatusStore from "$lib/stores/agent-status.svelte.js";
 import * as deletionStore from "$lib/stores/deletion.svelte.js";
@@ -101,7 +101,7 @@ describe("Sidebar component", () => {
 
     it("active workspace has aria-current='true'", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -147,7 +147,7 @@ describe("Sidebar component", () => {
 
   describe("list structure", () => {
     it("renders project list with ul/li structure", () => {
-      const project = createMockProjectWithId();
+      const project = createMockProject();
       render(Sidebar, { props: { ...defaultProps, projects: [project] } });
 
       const lists = screen.getAllByRole("list");
@@ -166,7 +166,7 @@ describe("Sidebar component", () => {
         name: "workspace-2",
         path: "/test/.worktrees/workspace-2",
       });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         workspaces: [ws1, ws2],
       });
 
@@ -180,7 +180,7 @@ describe("Sidebar component", () => {
   describe("interactions", () => {
     it("[+] button opens create dialog with projectId", async () => {
       const onOpenCreateDialog = vi.fn();
-      const project = createMockProjectWithId({ path: "/test/project" as ProjectPath });
+      const project = createMockProject({ path: "/test/project" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onOpenCreateDialog },
@@ -195,7 +195,7 @@ describe("Sidebar component", () => {
 
     it("[x] on project calls closeProject", async () => {
       const onCloseProject = vi.fn();
-      const project = createMockProjectWithId({ path: "/test/project" as ProjectPath });
+      const project = createMockProject({ path: "/test/project" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onCloseProject },
@@ -211,7 +211,7 @@ describe("Sidebar component", () => {
     it("[x] on workspace opens remove dialog with WorkspaceRef", async () => {
       const onOpenRemoveDialog = vi.fn();
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({ workspaces: [ws] });
+      const project = createMockProject({ workspaces: [ws] });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onOpenRemoveDialog },
@@ -231,7 +231,7 @@ describe("Sidebar component", () => {
     it("clicking workspace calls switchWorkspace", async () => {
       const onSwitchWorkspace = vi.fn();
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({ workspaces: [ws] });
+      const project = createMockProject({ workspaces: [ws] });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], onSwitchWorkspace },
@@ -266,7 +266,7 @@ describe("Sidebar component", () => {
     it("should-show-index-numbers-when-shortcut-mode-active", () => {
       const ws1 = createMockWorkspace({ name: "ws1", path: "/p1/ws1" });
       const ws2 = createMockWorkspace({ name: "ws2", path: "/p1/ws2" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -281,7 +281,7 @@ describe("Sidebar component", () => {
 
     it("should-hide-index-numbers-when-shortcut-mode-inactive", () => {
       const ws1 = createMockWorkspace({ name: "ws1", path: "/p1/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces: [ws1],
       });
@@ -297,7 +297,7 @@ describe("Sidebar component", () => {
       const workspaces = Array.from({ length: 10 }, (_, i) =>
         createMockWorkspace({ name: `ws${i + 1}`, path: `/p1/ws${i + 1}` })
       );
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces,
       });
@@ -319,11 +319,11 @@ describe("Sidebar component", () => {
       const ws2 = createMockWorkspace({ name: "ws2", path: "/p1/ws2" });
       const ws3 = createMockWorkspace({ name: "ws3", path: "/p2/ws3" });
 
-      const project1 = createMockProjectWithId({
+      const project1 = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces: [ws1, ws2],
       });
-      const project2 = createMockProjectWithId({
+      const project2 = createMockProject({
         path: "/p2" as ProjectPath,
         workspaces: [ws3],
       });
@@ -346,7 +346,7 @@ describe("Sidebar component", () => {
       const workspaces = Array.from({ length: 11 }, (_, i) =>
         createMockWorkspace({ name: `ws${i + 1}`, path: `/p1/ws${i + 1}` })
       );
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces,
       });
@@ -364,7 +364,7 @@ describe("Sidebar component", () => {
 
     it("should-have-aria-hidden-on-index-spans", () => {
       const ws = createMockWorkspace({ name: "ws1", path: "/p1/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces: [ws],
       });
@@ -379,7 +379,7 @@ describe("Sidebar component", () => {
 
     it("should-include-shortcut-hint-in-workspace-button-aria-label", () => {
       const ws = createMockWorkspace({ name: "my-workspace", path: "/p1/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/p1" as ProjectPath,
         workspaces: [ws],
       });
@@ -397,7 +397,7 @@ describe("Sidebar component", () => {
 
   describe("shortcut mode Open Project hint", () => {
     it("should-show-O-on-open-project-button-when-shortcut-mode-active", () => {
-      const project = createMockProjectWithId({ path: "/p1" as ProjectPath });
+      const project = createMockProject({ path: "/p1" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], shortcutModeActive: true },
@@ -408,7 +408,7 @@ describe("Sidebar component", () => {
     });
 
     it("should-hide-O-on-open-project-button-when-shortcut-mode-inactive", () => {
-      const project = createMockProjectWithId({ path: "/p1" as ProjectPath });
+      const project = createMockProject({ path: "/p1" as ProjectPath });
 
       render(Sidebar, {
         props: { ...defaultProps, projects: [project], shortcutModeActive: false },
@@ -436,7 +436,7 @@ describe("Sidebar component", () => {
 
     it("renders agent status indicator for each workspace", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -452,7 +452,7 @@ describe("Sidebar component", () => {
 
     it("shows 'none' status when no agent status is set", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -468,7 +468,7 @@ describe("Sidebar component", () => {
 
     it("shows idle status when agent status store has idle agents", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -489,7 +489,7 @@ describe("Sidebar component", () => {
 
     it("shows busy status when agent status store has busy agents", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -510,7 +510,7 @@ describe("Sidebar component", () => {
 
     it("shows mixed status when agent status store has both idle and busy agents", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -532,7 +532,7 @@ describe("Sidebar component", () => {
     it("renders separate indicators for multiple workspaces", () => {
       const ws1 = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
       const ws2 = createMockWorkspace({ path: "/test/.worktrees/ws2", name: "ws2" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -568,7 +568,7 @@ describe("Sidebar component", () => {
     it("renders status indicator button for each workspace in minimized state", () => {
       const ws1 = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
       const ws2 = createMockWorkspace({ path: "/test/.worktrees/ws2", name: "ws2" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -586,7 +586,7 @@ describe("Sidebar component", () => {
     it("clicking status indicator button calls onSwitchWorkspace", async () => {
       const onSwitchWorkspace = vi.fn();
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -607,7 +607,7 @@ describe("Sidebar component", () => {
 
     it("status indicator button has descriptive aria-label with workspace, project, and status", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         name: "test",
         workspaces: [ws],
@@ -630,7 +630,7 @@ describe("Sidebar component", () => {
 
     it("active workspace status button has aria-current='true'", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -651,7 +651,7 @@ describe("Sidebar component", () => {
     it("inactive workspace status button does not have aria-current", () => {
       const ws1 = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
       const ws2 = createMockWorkspace({ path: "/test/.worktrees/ws2", name: "ws2" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -678,7 +678,7 @@ describe("Sidebar component", () => {
 
     it("renders expand hint chevron in header when minimized", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -700,7 +700,7 @@ describe("Sidebar component", () => {
 
     it("renders expand hint chevron in footer when minimized", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -737,22 +737,22 @@ describe("Sidebar component", () => {
 
     it("renders projects in the order provided", () => {
       // Projects are pre-sorted by the store - Sidebar renders them in that order
-      const projectAlphaUpper = createMockProjectWithId({
+      const projectAlphaUpper = createMockProject({
         path: "/Alpha" as ProjectPath,
         name: "Alpha",
         workspaces: [createMockWorkspace({ name: "ws", path: "/Alpha/ws" })],
       });
-      const projectAlphaLower = createMockProjectWithId({
+      const projectAlphaLower = createMockProject({
         path: "/alpha" as ProjectPath,
         name: "alpha",
         workspaces: [createMockWorkspace({ name: "ws", path: "/alpha/ws" })],
       });
-      const projectBeta = createMockProjectWithId({
+      const projectBeta = createMockProject({
         path: "/beta" as ProjectPath,
         name: "beta",
         workspaces: [createMockWorkspace({ name: "ws", path: "/beta/ws" })],
       });
-      const projectCharlie = createMockProjectWithId({
+      const projectCharlie = createMockProject({
         path: "/charlie" as ProjectPath,
         name: "charlie",
         workspaces: [createMockWorkspace({ name: "ws", path: "/charlie/ws" })],
@@ -775,7 +775,7 @@ describe("Sidebar component", () => {
 
     it("renders workspaces in the order provided", () => {
       // Workspaces are pre-sorted by the store - Sidebar renders them in that order
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [
           createMockWorkspace({ name: "Alpha", path: "/test/Alpha" }),
@@ -801,7 +801,7 @@ describe("Sidebar component", () => {
 
     it("shortcut indices match rendered order", () => {
       // Workspaces are pre-sorted by the store
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [
           createMockWorkspace({ name: "alpha", path: "/test/alpha" }),
@@ -831,7 +831,7 @@ describe("Sidebar component", () => {
   describe("expansion state", () => {
     const propsWithWorkspaces = () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1040,7 +1040,7 @@ describe("Sidebar component", () => {
   describe("expanded vs minimized layout", () => {
     const propsWithWorkspaces = () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1144,7 +1144,7 @@ describe("Sidebar component", () => {
 
     it("shows spinner when workspace is deleting (expanded layout)", async () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1167,7 +1167,7 @@ describe("Sidebar component", () => {
 
     it("shows spinner when workspace is deleting (minimized layout)", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1185,7 +1185,7 @@ describe("Sidebar component", () => {
 
     it("shows agent status indicator when not deleting", async () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1208,7 +1208,7 @@ describe("Sidebar component", () => {
 
     it("minimized layout aria-label shows Deleting when workspace is being deleted", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         name: "test",
         workspaces: [ws],
@@ -1229,7 +1229,7 @@ describe("Sidebar component", () => {
     it("shows spinner for deleting workspace and status for non-deleting", async () => {
       const ws1 = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
       const ws2 = createMockWorkspace({ path: "/test/.worktrees/ws2", name: "ws2" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws1, ws2],
       });
@@ -1251,7 +1251,7 @@ describe("Sidebar component", () => {
 
     it("hides X button when deletion status is in-progress (expanded layout)", async () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1272,7 +1272,7 @@ describe("Sidebar component", () => {
 
     it("hides X button when deletion status is error (expanded layout)", async () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1296,7 +1296,7 @@ describe("Sidebar component", () => {
 
     it("shows warning triangle when deletion status is error (expanded layout)", async () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1322,7 +1322,7 @@ describe("Sidebar component", () => {
 
     it("warning triangle has accessible attributes", async () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         workspaces: [ws],
       });
@@ -1348,7 +1348,7 @@ describe("Sidebar component", () => {
 
     it("minimized layout shows warning when deletion status is error", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         name: "test",
         workspaces: [ws],
@@ -1379,7 +1379,7 @@ describe("Sidebar component", () => {
 
     it("minimized layout aria-label shows Deletion failed when status is error", () => {
       const ws = createMockWorkspace({ path: "/test/.worktrees/ws1", name: "ws1" });
-      const project = createMockProjectWithId({
+      const project = createMockProject({
         path: "/test" as ProjectPath,
         name: "test",
         workspaces: [ws],

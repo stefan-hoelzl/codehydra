@@ -5,12 +5,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/svelte";
-import type { ProjectId, WorkspaceName } from "@shared/api/types";
-
-// Helper to create typed ProjectId
-function asProjectId(id: string): ProjectId {
-  return id as ProjectId;
-}
+import type { WorkspaceName } from "@shared/api/types";
+import { asProjectId } from "@shared/test-fixtures";
 
 // Create mock API functions with vi.hoisted for proper hoisting
 const mockApi = vi.hoisted(() => ({

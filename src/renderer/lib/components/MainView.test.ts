@@ -5,23 +5,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/svelte";
-import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
+import type { WorkspaceName } from "@shared/api/types";
 import type { WorkspacePath } from "@shared/ipc";
 import { createMockProject } from "$lib/test-fixtures";
-
-// Helper to create typed ProjectId
-function asProjectId(id: string): ProjectId {
-  return id as ProjectId;
-}
-
-// Helper to create typed WorkspaceRef
-function asWorkspaceRef(projectId: string, workspaceName: string, path: string): WorkspaceRef {
-  return {
-    projectId: projectId as ProjectId,
-    workspaceName: workspaceName as WorkspaceName,
-    path,
-  };
-}
+import { asProjectId, asWorkspaceRef } from "@shared/test-fixtures";
 
 // Storage for API event callbacks - allows tests to fire events
 type EventCallback = (...args: unknown[]) => void;

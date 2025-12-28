@@ -82,15 +82,6 @@ export function createMockProject(overrides: ProjectOverrides = {}): Project {
 }
 
 /**
- * Creates a mock ProjectWithId (alias for createMockProject).
- * @deprecated Use createMockProject instead - v2 Projects always have IDs.
- * @param overrides - Optional properties to override defaults
- */
-export function createMockProjectWithId(overrides: Partial<Project> = {}): Project {
-  return createMockProject(overrides);
-}
-
-/**
  * Creates a mock BaseInfo with sensible defaults.
  * @param overrides - Optional properties to override defaults
  */
