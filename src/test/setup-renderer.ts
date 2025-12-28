@@ -14,5 +14,13 @@ if (typeof HTMLElement.prototype.attachInternals === "undefined") {
   };
 }
 
+// Create codicon stylesheet link required by vscode-icon component
+// Must be created before vscode-elements are imported
+const link = document.createElement("link");
+link.rel = "stylesheet";
+link.id = "vscode-codicon-stylesheet";
+link.href = ""; // Empty href is fine for tests - we just need the element to exist
+document.head.appendChild(link);
+
 // Import vscode-elements so custom elements are registered
 import "@vscode-elements/elements/dist/bundled.js";
