@@ -140,7 +140,9 @@ describe("ExecaSpawnedProcess", () => {
       const result = await spawned.kill(100, 100);
 
       expect(result.success).toBe(true);
-      expect(result.reason).toBe("SIGTERM");
+      // Windows always uses forceful termination (taskkill /f), so reason is SIGKILL
+      // Unix uses graceful SIGTERM first
+      expect(result.reason).toBe(process.platform === "win32" ? "SIGKILL" : "SIGTERM");
     });
 
     it("kill() without timeouts sends signals immediately", async () => {

@@ -199,7 +199,9 @@ describe("ExecaSpawnedProcess", () => {
       const result = await proc.kill(1000, 1000);
 
       expect(result.success).toBe(true);
-      expect(result.reason).toBe("SIGTERM");
+      // Windows always uses forceful termination (taskkill /f), so reason is SIGKILL
+      // Unix uses graceful SIGTERM first
+      expect(result.reason).toBe(process.platform === "win32" ? "SIGKILL" : "SIGTERM");
     });
 
     it("returns success=true with reason=SIGKILL when escalation needed", async () => {

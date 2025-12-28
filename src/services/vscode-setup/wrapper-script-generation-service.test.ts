@@ -3,6 +3,7 @@
  * Unit tests for WrapperScriptGenerationService.
  */
 
+import { sep } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WrapperScriptGenerationService } from "./wrapper-script-generation-service";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
@@ -49,8 +50,9 @@ describe("WrapperScriptGenerationService", () => {
       await service.regenerate();
 
       // Should write code script
+      // Use path.sep to handle platform differences in test runner vs target platform
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining("/bin/code"),
+        expect.stringContaining(`${sep}bin${sep}code`),
         expect.stringContaining("#!/bin/sh")
       );
     });
@@ -66,8 +68,9 @@ describe("WrapperScriptGenerationService", () => {
       await service.regenerate();
 
       // Should write opencode script
+      // Use path.sep to handle platform differences in test runner vs target platform
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining("/bin/opencode"),
+        expect.stringContaining(`${sep}bin${sep}opencode`),
         expect.stringContaining("#!/bin/sh")
       );
     });
@@ -106,8 +109,13 @@ describe("WrapperScriptGenerationService", () => {
       await service.regenerate();
 
       // Should call makeExecutable for each script
-      expect(mockFs.makeExecutable).toHaveBeenCalledWith(expect.stringContaining("/bin/code"));
-      expect(mockFs.makeExecutable).toHaveBeenCalledWith(expect.stringContaining("/bin/opencode"));
+      // Use path.sep to handle platform differences in test runner vs target platform
+      expect(mockFs.makeExecutable).toHaveBeenCalledWith(
+        expect.stringContaining(`${sep}bin${sep}code`)
+      );
+      expect(mockFs.makeExecutable).toHaveBeenCalledWith(
+        expect.stringContaining(`${sep}bin${sep}opencode`)
+      );
     });
 
     it("does not call makeExecutable on Windows", async () => {
@@ -135,8 +143,9 @@ describe("WrapperScriptGenerationService", () => {
       await service.regenerate();
 
       // The code script should reference code-linux.sh
+      // Use path.sep to handle platform differences in test runner vs target platform
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining("/bin/code"),
+        expect.stringContaining(`${sep}bin${sep}code`),
         expect.stringContaining("code-linux.sh")
       );
     });
@@ -152,8 +161,9 @@ describe("WrapperScriptGenerationService", () => {
       await service.regenerate();
 
       // The code script should reference code-darwin.sh
+      // Use path.sep to handle platform differences in test runner vs target platform
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining("/bin/code"),
+        expect.stringContaining(`${sep}bin${sep}code`),
         expect.stringContaining("code-darwin.sh")
       );
     });
