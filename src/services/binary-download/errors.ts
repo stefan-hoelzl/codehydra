@@ -3,4 +3,4 @@
  */
 
 export type { BinaryDownloadErrorCode, ArchiveErrorCode } from "../errors.js";
-export { BinaryDownloadError, ArchiveError } from "../errors.js";
+export { BinaryDownloadError, ArchiveError, getErrorMessage } from "../errors.js";

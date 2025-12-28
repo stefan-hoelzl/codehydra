@@ -234,3 +234,17 @@ export class FileSystemError extends ServiceError {
 export function isServiceError(error: unknown): error is ServiceError {
   return error instanceof ServiceError;
 }
+
+/**
+ * Extract a message string from an unknown error.
+ * Handles Error instances, strings, and other types.
+ *
+ * @param error - The error to extract a message from
+ * @returns The error message as a string
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}

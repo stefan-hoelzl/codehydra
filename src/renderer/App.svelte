@@ -22,6 +22,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as api from "$lib/api";
+  import { getErrorMessage } from "$lib/utils/error-utils";
   import {
     handleModeChange,
     handleKeyDown,
@@ -117,7 +118,7 @@
       }
     } catch (error) {
       // If lifecycle.getState() fails, fall back to ready mode
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       logger.warn("UI error", { component: "App", error: message });
       console.error("Setup state check failed:", error);
       appMode = { type: "ready" };
@@ -137,7 +138,7 @@
         errorSetup(result.message);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       logger.warn("UI error", { component: "App", error: message });
       errorSetup(message);
     }

@@ -6,7 +6,7 @@ import path from "path";
 import type { IGitClient } from "./git-client";
 import type { IWorkspaceProvider } from "./workspace-provider";
 import type { BaseInfo, CleanupResult, RemovalResult, UpdateBasesResult, Workspace } from "./types";
-import { FileSystemError, WorkspaceError } from "../errors";
+import { FileSystemError, WorkspaceError, getErrorMessage } from "../errors";
 import { sanitizeWorkspaceName } from "../platform/paths";
 import { isValidMetadataKey } from "../../shared/api/types";
 import type { FileSystemLayer } from "../platform/filesystem";
@@ -494,8 +494,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       worktrees = await this.gitClient.listWorktrees(this.projectRoot);
     } catch (error) {
       // Cannot determine registered worktrees - abort cleanup silently
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn("Failed to list worktrees for cleanup", { error: message });
+      this.logger.warn("Failed to list worktrees for cleanup", { error: getErrorMessage(error) });
       return emptyResult;
     }
 
@@ -561,7 +560,7 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
         this.logger.info("Removed orphaned workspace", { path: fullPath });
         removedCount++;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = getErrorMessage(error);
         this.logger.warn("Failed to remove orphaned workspace", {
           path: fullPath,
           error: errorMessage,

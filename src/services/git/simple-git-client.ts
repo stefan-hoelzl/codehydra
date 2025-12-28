@@ -4,7 +4,7 @@
 
 import simpleGit, { type SimpleGit, type SimpleGitOptions } from "simple-git";
 import path from "path";
-import { GitError } from "../errors";
+import { GitError, getErrorMessage } from "../errors";
 import type { IGitClient } from "./git-client";
 import type { BranchInfo, StatusResult, WorktreeInfo } from "./types";
 import type { Logger } from "../logging";
@@ -42,10 +42,9 @@ export class SimpleGitClient implements IGitClient {
     try {
       return await operation();
     } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const errMsg = getErrorMessage(error);
       this.logger.warn("Git error", { op: opName, path: repoPath, error: errMsg });
-      const message = error instanceof Error ? `${errorMessage}: ${error.message}` : errorMessage;
-      throw new GitError(message);
+      throw new GitError(`${errorMessage}: ${errMsg}`);
     }
   }
 
@@ -92,13 +91,9 @@ export class SimpleGitClient implements IGitClient {
       return isRoot;
     } catch (error: unknown) {
       // If the path doesn't exist or is inaccessible, throw GitError
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const errMsg = getErrorMessage(error);
       this.logger.warn("Git error", { op: "isRepositoryRoot", path: repoPath, error: errMsg });
-      const message =
-        error instanceof Error
-          ? `Failed to check repository root: ${error.message}`
-          : "Failed to check repository root";
-      throw new GitError(message);
+      throw new GitError(`Failed to check repository root: ${errMsg}`);
     }
   }
 
@@ -364,13 +359,9 @@ export class SimpleGitClient implements IGitClient {
       if (error instanceof Error && error.message.includes("exit code 1")) {
         return null;
       }
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const errMsg = getErrorMessage(error);
       this.logger.warn("Git error", { op: "getBranchConfig", path: repoPath, error: errMsg });
-      const message =
-        error instanceof Error
-          ? `Failed to get branch config: ${error.message}`
-          : "Failed to get branch config";
-      throw new GitError(message);
+      throw new GitError(`Failed to get branch config: ${errMsg}`);
     }
   }
 
@@ -437,17 +428,13 @@ export class SimpleGitClient implements IGitClient {
       if (error instanceof Error && error.message.includes("exit code 1")) {
         return {};
       }
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const errMsg = getErrorMessage(error);
       this.logger.warn("Git error", {
         op: "getBranchConfigsByPrefix",
         path: repoPath,
         error: errMsg,
       });
-      const message =
-        error instanceof Error
-          ? `Failed to get branch configs: ${error.message}`
-          : "Failed to get branch configs";
-      throw new GitError(message);
+      throw new GitError(`Failed to get branch configs: ${errMsg}`);
     }
   }
 
@@ -467,13 +454,9 @@ export class SimpleGitClient implements IGitClient {
       if (error instanceof Error && error.message.includes("exit code 5")) {
         return;
       }
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const errMsg = getErrorMessage(error);
       this.logger.warn("Git error", { op: "unsetBranchConfig", path: repoPath, error: errMsg });
-      const message =
-        error instanceof Error
-          ? `Failed to unset branch config: ${error.message}`
-          : "Failed to unset branch config";
-      throw new GitError(message);
+      throw new GitError(`Failed to unset branch config: ${errMsg}`);
     }
   }
 }

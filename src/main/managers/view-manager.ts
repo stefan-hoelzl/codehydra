@@ -14,6 +14,7 @@ import { ShortcutController } from "../shortcut-controller";
 import { projectDirName } from "../../services/platform/paths";
 import type { WorkspaceName } from "../../shared/api/types";
 import type { Logger } from "../../services/logging";
+import { getErrorMessage } from "../../services/errors";
 
 /**
  * Sidebar minimized width in pixels.
@@ -245,7 +246,7 @@ export class ViewManager implements IViewManager {
       openExternal(targetUrl).catch((error: unknown) => {
         this.logger.warn("Failed to open external URL", {
           url: targetUrl,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
       });
       return { action: "deny" };
@@ -259,7 +260,7 @@ export class ViewManager implements IViewManager {
         openExternal(navigationUrl).catch((error: unknown) => {
           this.logger.warn("Failed to open external URL", {
             url: navigationUrl,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           });
         });
       }

@@ -8,7 +8,7 @@ import type { PathProvider } from "../platform/path-provider";
 import type { FileSystemLayer } from "../platform/filesystem";
 import type { PlatformInfo } from "../platform/platform-info";
 import type { Logger } from "../logging/index";
-import { VscodeSetupError } from "../errors";
+import { VscodeSetupError, getErrorMessage } from "../errors";
 import {
   type IVscodeSetup,
   type SetupResult,
@@ -167,7 +167,7 @@ export class VscodeSetupService implements IVscodeSetup {
         outdatedExtensions,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       this.logger?.warn("Preflight failed", { error: message });
       return {
         success: false,
@@ -293,12 +293,11 @@ export class VscodeSetupService implements IVscodeSetup {
         await this.binaryDownloadService.download("code-server");
         this.logger?.info("Binary download complete", { binary: "code-server" });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
           error: {
             type: "network",
-            message: `Failed to download code-server: ${message}`,
+            message: `Failed to download code-server: ${getErrorMessage(error)}`,
             code: "BINARY_DOWNLOAD_FAILED",
           },
         };
@@ -313,12 +312,11 @@ export class VscodeSetupService implements IVscodeSetup {
         await this.binaryDownloadService.download("opencode");
         this.logger?.info("Binary download complete", { binary: "opencode" });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
           error: {
             type: "network",
-            message: `Failed to download opencode: ${message}`,
+            message: `Failed to download opencode: ${getErrorMessage(error)}`,
             code: "BINARY_DOWNLOAD_FAILED",
           },
         };

@@ -10,6 +10,7 @@
  */
 
 import type { Logger } from "../logging";
+import { getErrorMessage } from "../errors";
 
 // ============================================================================
 // HTTP Client Interface
@@ -139,8 +140,7 @@ export class DefaultNetworkLayer implements HttpClient, PortManager {
       this.logger.debug("Fetch complete", { url, status: response.status });
       return response;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.warn("Fetch failed", { url, error: errorMessage });
+      this.logger.warn("Fetch failed", { url, error: getErrorMessage(error) });
       throw error;
     } finally {
       clearTimeout(timeoutId);

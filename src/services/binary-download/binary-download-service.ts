@@ -4,7 +4,7 @@
 
 import * as os from "node:os";
 import * as path from "node:path";
-import { BinaryDownloadError } from "./errors.js";
+import { BinaryDownloadError, getErrorMessage } from "./errors.js";
 import { BINARY_CONFIGS, CODE_SERVER_VERSION, OPENCODE_VERSION } from "./versions.js";
 import type { BinaryType, DownloadProgressCallback, SupportedPlatform } from "./types.js";
 import type { ArchiveExtractor } from "./archive-extractor.js";
@@ -99,8 +99,7 @@ export class DefaultBinaryDownloadService implements BinaryDownloadService {
     try {
       url = config.getUrl(platform, arch);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new BinaryDownloadError(message, "UNSUPPORTED_PLATFORM");
+      throw new BinaryDownloadError(getErrorMessage(error), "UNSUPPORTED_PLATFORM");
     }
 
     this.logger?.info("Downloading", { binary, url, platform, arch });
@@ -139,8 +138,7 @@ export class DefaultBinaryDownloadService implements BinaryDownloadService {
 
       this.logger?.info("Download complete", { binary });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger?.warn("Download failed", { binary, error: errorMessage });
+      this.logger?.warn("Download failed", { binary, error: getErrorMessage(error) });
       throw error;
     } finally {
       // Clean up temp file
@@ -207,9 +205,8 @@ export class DefaultBinaryDownloadService implements BinaryDownloadService {
       // Use longer timeout for large binary downloads
       response = await this.httpClient.fetch(url, { timeout: 300000 });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       throw new BinaryDownloadError(
-        `Network error downloading from ${url}: ${message}`,
+        `Network error downloading from ${url}: ${getErrorMessage(error)}`,
         "NETWORK_ERROR"
       );
     }
@@ -246,9 +243,8 @@ export class DefaultBinaryDownloadService implements BinaryDownloadService {
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       throw new BinaryDownloadError(
-        `Failed to read download from ${url}: ${message}`,
+        `Failed to read download from ${url}: ${getErrorMessage(error)}`,
         "NETWORK_ERROR"
       );
     }
@@ -260,9 +256,8 @@ export class DefaultBinaryDownloadService implements BinaryDownloadService {
     try {
       await this.fileSystemLayer.writeFileBuffer(destPath, buffer);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       throw new BinaryDownloadError(
-        `Failed to write download to ${destPath}: ${message}`,
+        `Failed to write download to ${destPath}: ${getErrorMessage(error)}`,
         "EXTRACTION_FAILED"
       );
     }

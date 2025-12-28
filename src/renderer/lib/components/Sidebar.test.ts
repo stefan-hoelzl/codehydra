@@ -7,11 +7,8 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
 import type { Api } from "@shared/electron-api";
 import { createMockApi } from "../test-utils";
 import type { UIMode } from "@shared/ipc";
-// Import module-level exports from Svelte component (TS declarations don't include these)
-import * as SidebarModule from "./Sidebar.svelte";
-const getStatusText = (
-  SidebarModule as unknown as { getStatusText: (idle: number, busy: number) => string }
-).getStatusText;
+// Import utility functions directly from the utility module
+import { getStatusText } from "$lib/utils/sidebar-utils";
 
 // Create mock for uiMode store
 const mockUiModeStore = vi.hoisted(() => ({

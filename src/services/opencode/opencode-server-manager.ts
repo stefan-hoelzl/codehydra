@@ -26,12 +26,11 @@ export type ServerStoppedCallback = (workspacePath: string) => void;
 
 /**
  * Server entry in the manager's internal map.
+ * Uses a discriminated union to properly model starting vs running states.
  */
-interface ServerEntry {
-  port: number;
-  process: SpawnedProcess;
-  startPromise: Promise<number> | null;
-}
+type ServerEntry =
+  | { readonly state: "starting"; readonly startPromise: Promise<number> }
+  | { readonly state: "running"; readonly port: number; readonly process: SpawnedProcess };
 
 /**
  * Configuration options for OpenCodeServerManager.
@@ -110,7 +109,7 @@ export class OpenCodeServerManager implements IDisposable {
     // Check if already running/starting
     const existing = this.servers.get(workspacePath);
     if (existing) {
-      if (existing.startPromise) {
+      if (existing.state === "starting") {
         return existing.startPromise;
       }
       return existing.port;
@@ -119,13 +118,8 @@ export class OpenCodeServerManager implements IDisposable {
     // Create the start promise
     const startPromise = this.doStartServer(workspacePath);
 
-    // Store a placeholder entry while starting
-    const placeholderEntry: ServerEntry = {
-      port: 0,
-      process: null as unknown as SpawnedProcess,
-      startPromise,
-    };
-    this.servers.set(workspacePath, placeholderEntry);
+    // Store entry while starting
+    this.servers.set(workspacePath, { state: "starting", startPromise });
 
     try {
       const port = await startPromise;
@@ -181,13 +175,8 @@ export class OpenCodeServerManager implements IDisposable {
       throw error;
     }
 
-    // Update the server entry
-    const entry: ServerEntry = {
-      port,
-      process: proc,
-      startPromise: null,
-    };
-    this.servers.set(workspacePath, entry);
+    // Update the server entry to running state
+    this.servers.set(workspacePath, { state: "running", port, process: proc });
 
     // Fire callback
     for (const callback of this.startedCallbacks) {
@@ -229,7 +218,7 @@ export class OpenCodeServerManager implements IDisposable {
     }
 
     // Wait for pending start
-    if (entry.startPromise) {
+    if (entry.state === "starting") {
       try {
         await entry.startPromise;
       } catch {
@@ -241,7 +230,7 @@ export class OpenCodeServerManager implements IDisposable {
     const currentEntry = this.servers.get(workspacePath);
     let stopResult: StopServerResult = { success: true };
 
-    if (currentEntry && currentEntry.process) {
+    if (currentEntry && currentEntry.state === "running") {
       // Kill the process with 1s timeouts
       const killResult = await currentEntry.process.kill(
         PROCESS_KILL_GRACEFUL_TIMEOUT_MS,
@@ -290,7 +279,10 @@ export class OpenCodeServerManager implements IDisposable {
    */
   getPort(workspacePath: string): number | undefined {
     const entry = this.servers.get(workspacePath);
-    return entry?.port || undefined;
+    if (entry?.state === "running") {
+      return entry.port;
+    }
+    return undefined;
   }
 
   /**

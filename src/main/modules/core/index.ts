@@ -41,6 +41,23 @@ import type { Logger } from "../../../services/logging/index";
 import { ApiIpcChannels } from "../../../shared/ipc";
 import { createSilentLogger } from "../../../services/logging";
 import { generateProjectId } from "../../api/id-utils";
+import type {
+  Project as InternalProject,
+  Workspace as InternalWorkspace,
+} from "../../../shared/ipc";
+
+// =============================================================================
+// Internal Types for Workspace Resolution
+// =============================================================================
+
+/**
+ * Resolved workspace information for internal use.
+ */
+interface ResolvedWorkspace {
+  readonly projectPath: string;
+  readonly project: InternalProject;
+  readonly workspace: InternalWorkspace;
+}
 
 // =============================================================================
 // Types
@@ -264,22 +281,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async workspaceRemove(payload: WorkspaceRemovePayload): Promise<{ started: true }> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { projectPath, workspace } = await this.resolveWorkspace(payload);
 
     // Check if deletion already in progress - return early (idempotent)
     if (this.inProgressDeletions.has(workspace.path)) {
@@ -313,22 +315,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async workspaceForceRemove(payload: WorkspaceRefPayload): Promise<void> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { projectPath, workspace } = await this.resolveWorkspace(payload);
 
     const wasActive = this.deps.viewManager.getActiveWorkspacePath() === workspace.path;
 
@@ -351,37 +338,14 @@ export class CoreModule implements IApiModule {
   }
 
   private async workspaceGet(payload: WorkspaceRefPayload): Promise<Workspace | undefined> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) return undefined;
+    const resolved = await this.tryResolveWorkspace(payload);
+    if (!resolved) return undefined;
 
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) return undefined;
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) return undefined;
-
-    return this.toApiWorkspace(payload.projectId, workspace);
+    return this.toApiWorkspace(payload.projectId, resolved.workspace);
   }
 
   private async workspaceGetStatus(payload: WorkspaceRefPayload): Promise<WorkspaceStatus> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { projectPath, workspace } = await this.resolveWorkspace(payload);
 
     const provider = this.deps.appState.getWorkspaceProvider(projectPath);
     const isDirty = provider ? await provider.isDirty(workspace.path) : false;
@@ -410,22 +374,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async workspaceGetOpencodePort(payload: WorkspaceRefPayload): Promise<number | null> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { workspace } = await this.resolveWorkspace(payload);
 
     const serverManager = this.deps.appState.getServerManager();
     const port = serverManager?.getPort(workspace.path);
@@ -433,22 +382,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async workspaceSetMetadata(payload: WorkspaceSetMetadataPayload): Promise<void> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { projectPath, workspace } = await this.resolveWorkspace(payload);
 
     const provider = this.deps.appState.getWorkspaceProvider(projectPath);
     if (!provider) {
@@ -468,22 +402,7 @@ export class CoreModule implements IApiModule {
   private async workspaceGetMetadata(
     payload: WorkspaceRefPayload
   ): Promise<Readonly<Record<string, string>>> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { projectPath, workspace } = await this.resolveWorkspace(payload);
 
     const provider = this.deps.appState.getWorkspaceProvider(projectPath);
     if (!provider) {
@@ -494,22 +413,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async workspaceExecuteCommand(payload: WorkspaceExecuteCommandPayload): Promise<unknown> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
-    if (!projectPath) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const internalProject = this.deps.appState.getProject(projectPath);
-    if (!internalProject) {
-      throw new Error(`Project not found: ${payload.projectId}`);
-    }
-
-    const workspace = internalProject.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
-    );
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${payload.workspaceName}`);
-    }
+    const { workspace } = await this.resolveWorkspace(payload);
 
     if (!this.deps.pluginServer) {
       throw new Error("Plugin server not available");
@@ -584,6 +488,52 @@ export class CoreModule implements IApiModule {
 
   private extractWorkspaceName(workspacePath: string): string {
     return path.basename(workspacePath);
+  }
+
+  /**
+   * Resolve a workspace from payload, throwing on not found.
+   * Used by methods that require the workspace to exist.
+   */
+  private async resolveWorkspace(payload: WorkspaceRefPayload): Promise<ResolvedWorkspace> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const project = this.deps.appState.getProject(projectPath);
+    if (!project) {
+      throw new Error(`Project not found: ${payload.projectId}`);
+    }
+
+    const workspace = project.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${payload.workspaceName}`);
+    }
+
+    return { projectPath, project, workspace };
+  }
+
+  /**
+   * Try to resolve a workspace from payload, returning undefined on not found.
+   * Used by methods that return undefined for not found instead of throwing.
+   */
+  private async tryResolveWorkspace(
+    payload: WorkspaceRefPayload
+  ): Promise<ResolvedWorkspace | undefined> {
+    const projectPath = await this.resolveProjectPath(payload.projectId);
+    if (!projectPath) return undefined;
+
+    const project = this.deps.appState.getProject(projectPath);
+    if (!project) return undefined;
+
+    const workspace = project.workspaces.find(
+      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+    );
+    if (!workspace) return undefined;
+
+    return { projectPath, project, workspace };
   }
 
   private async switchToNextWorkspaceIfAvailable(

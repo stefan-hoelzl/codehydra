@@ -6,6 +6,7 @@
 import { BaseWindow, nativeImage, type NativeImage } from "electron";
 import type { Logger } from "../../services/logging";
 import type { PlatformInfo } from "../../services/platform/platform-info";
+import { getErrorMessage } from "../../services/errors";
 
 /**
  * Function to unsubscribe from an event.
@@ -185,7 +186,7 @@ export class WindowManager {
       // Log but don't throw - overlay icon is non-critical
       this.logger.warn("Failed to set overlay icon", {
         description,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }

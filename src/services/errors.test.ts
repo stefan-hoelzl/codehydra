@@ -10,6 +10,7 @@ import {
   VscodeSetupError,
   FileSystemError,
   isServiceError,
+  getErrorMessage,
   type SerializedError,
 } from "./errors";
 
@@ -452,5 +453,37 @@ describe("isServiceError", () => {
     expect(isServiceError("test")).toBe(false);
     expect(isServiceError(null)).toBe(false);
     expect(isServiceError(undefined)).toBe(false);
+  });
+});
+
+describe("getErrorMessage", () => {
+  it("extracts message from Error instance", () => {
+    const error = new Error("Something went wrong");
+    expect(getErrorMessage(error)).toBe("Something went wrong");
+  });
+
+  it("extracts message from ServiceError subclass", () => {
+    const error = new GitError("Repository not found");
+    expect(getErrorMessage(error)).toBe("Repository not found");
+  });
+
+  it("converts string to string", () => {
+    expect(getErrorMessage("plain string error")).toBe("plain string error");
+  });
+
+  it("converts number to string", () => {
+    expect(getErrorMessage(404)).toBe("404");
+  });
+
+  it("converts null to string", () => {
+    expect(getErrorMessage(null)).toBe("null");
+  });
+
+  it("converts undefined to string", () => {
+    expect(getErrorMessage(undefined)).toBe("undefined");
+  });
+
+  it("converts object to string", () => {
+    expect(getErrorMessage({ code: "ERR" })).toBe("[object Object]");
   });
 });

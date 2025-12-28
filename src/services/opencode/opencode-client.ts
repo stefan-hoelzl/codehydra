@@ -10,7 +10,7 @@ import {
   type Event as SdkEvent,
   type SessionStatus as SdkSessionStatus,
 } from "@opencode-ai/sdk";
-import { OpenCodeError } from "../errors";
+import { OpenCodeError, getErrorMessage } from "../errors";
 import type { Logger } from "../logging";
 import {
   ok,
@@ -269,9 +269,10 @@ export class OpenCodeClient implements IDisposable {
       // Process events in background with error handling
       this.processEvents(events.stream).catch((processError) => {
         if (!this.disposed) {
-          const errMsg =
-            processError instanceof Error ? processError.message : String(processError);
-          this.logger.warn("Connection error", { port: this.port, error: errMsg });
+          this.logger.warn("Connection error", {
+            port: this.port,
+            error: getErrorMessage(processError),
+          });
         }
       });
 
@@ -282,12 +283,16 @@ export class OpenCodeClient implements IDisposable {
           this.updateCurrentStatus(result.value);
         }
       } catch (statusError) {
-        const errMsg = statusError instanceof Error ? statusError.message : String(statusError);
-        this.logger.warn("Connection error", { port: this.port, error: errMsg });
+        this.logger.warn("Connection error", {
+          port: this.port,
+          error: getErrorMessage(statusError),
+        });
       }
     } catch (connectError) {
-      const errMsg = connectError instanceof Error ? connectError.message : String(connectError);
-      this.logger.warn("Connection error", { port: this.port, error: errMsg });
+      this.logger.warn("Connection error", {
+        port: this.port,
+        error: getErrorMessage(connectError),
+      });
       throw connectError;
     }
   }
@@ -322,8 +327,7 @@ export class OpenCodeClient implements IDisposable {
       }
     } catch (error) {
       if (this.disposed) return; // Expected during shutdown
-      const errMsg = error instanceof Error ? error.message : String(error);
-      this.logger.warn("Connection error", { port: this.port, error: errMsg });
+      this.logger.warn("Connection error", { port: this.port, error: getErrorMessage(error) });
       throw error; // Re-throw for .catch() handler
     }
   }

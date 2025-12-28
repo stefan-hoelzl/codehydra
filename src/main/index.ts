@@ -45,6 +45,7 @@ import type { WorkspaceName, WorkspaceStatus } from "../shared/api/types";
 import { ApiIpcChannels } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
+import { getErrorMessage } from "../services/errors";
 
 /**
  * Parses Electron command-line flags from a string.
@@ -533,8 +534,7 @@ async function bootstrap(): Promise<void> {
     await wrapperScriptService.regenerate();
   } catch (error) {
     // Log but don't fail bootstrap - scripts can be regenerated during setup
-    const message = error instanceof Error ? error.message : String(error);
-    appLogger.warn("Failed to regenerate wrapper scripts", { error: message });
+    appLogger.warn("Failed to regenerate wrapper scripts", { error: getErrorMessage(error) });
   }
 
   // 4. Run preflight to determine if setup is needed
@@ -757,8 +757,11 @@ app
   .then(bootstrap)
   .catch((error: unknown) => {
     const appLogger = loggingService.createLogger("app");
-    const message = error instanceof Error ? error.message : String(error);
-    appLogger.error("Fatal error", { error: message }, error instanceof Error ? error : undefined);
+    appLogger.error(
+      "Fatal error",
+      { error: getErrorMessage(error) },
+      error instanceof Error ? error : undefined
+    );
   });
 
 app.on("window-all-closed", () => {
@@ -771,10 +774,9 @@ app.on("activate", () => {
   if (windowManager === null) {
     void bootstrap().catch((error: unknown) => {
       const appLogger = loggingService.createLogger("app");
-      const message = error instanceof Error ? error.message : String(error);
       appLogger.error(
         "Bootstrap failed on activate",
-        { error: message },
+        { error: getErrorMessage(error) },
         error instanceof Error ? error : undefined
       );
     });

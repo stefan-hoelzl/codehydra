@@ -22,6 +22,7 @@ import type { ICoreApi } from "../../shared/api/interfaces";
 import type { Logger, LogContext } from "../logging";
 import type { LogLevel } from "../logging/types";
 import { resolveWorkspace, type WorkspaceLookup } from "./workspace-resolver";
+import { getErrorMessage } from "../errors";
 
 /**
  * X-Workspace-Path header name.
@@ -570,7 +571,7 @@ export class McpServer implements IMcpServer {
     content: Array<{ type: "text"; text: string }>;
     isError: true;
   } {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     this.logger.error("Tool error", { error: message });
     return this.errorResult("internal-error", message);
   }

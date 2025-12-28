@@ -11,6 +11,7 @@ import ignore, { type Ignore } from "ignore";
 import type { FileSystemLayer } from "../platform/filesystem";
 import type { IKeepFilesService, CopyResult, CopyError } from "./types";
 import type { Logger } from "../logging";
+import { getErrorMessage } from "../errors";
 
 /**
  * Configuration file name for keep files patterns.
@@ -160,8 +161,7 @@ export class KeepFilesService implements IKeepFilesService {
       try {
         entries = await this.fileSystem.readdir(absolutePath);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push({ path: relativePath || ".", message });
+        errors.push({ path: relativePath || ".", message: getErrorMessage(error) });
         continue;
       }
 
@@ -240,8 +240,7 @@ export class KeepFilesService implements IKeepFilesService {
       await this.fileSystem.copyTree(src, dest);
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { success: false, error: message };
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 }

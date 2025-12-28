@@ -20,6 +20,7 @@ import type {
 import type { Logger } from "../../../services/logging/index";
 import { ApiIpcChannels } from "../../../shared/ipc";
 import { createSilentLogger } from "../../../services/logging";
+import { getErrorMessage } from "../../../services/errors";
 
 // =============================================================================
 // Types
@@ -161,7 +162,7 @@ export class LifecycleModule implements IApiModule {
       } catch (error) {
         return {
           success: false,
-          message: error instanceof Error ? error.message : String(error),
+          message: getErrorMessage(error),
           code: "SERVICE_START_ERROR",
         };
       }
@@ -194,7 +195,7 @@ export class LifecycleModule implements IApiModule {
         } catch (error) {
           return {
             success: false,
-            message: error instanceof Error ? error.message : String(error),
+            message: getErrorMessage(error),
             code: "SERVICE_START_ERROR",
           };
         }
@@ -223,7 +224,7 @@ export class LifecycleModule implements IApiModule {
         try {
           await this.deps.onSetupComplete();
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = getErrorMessage(error);
           this.logger.warn("Service start failed", { error: errorMessage });
           return {
             success: false,
@@ -241,7 +242,7 @@ export class LifecycleModule implements IApiModule {
         };
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       this.logger.warn("Setup failed", { error: errorMessage });
       return {
         success: false,

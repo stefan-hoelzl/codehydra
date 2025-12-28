@@ -7,7 +7,7 @@ import yauzl from "yauzl";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { ArchiveError } from "./errors.js";
+import { ArchiveError, getErrorMessage } from "./errors.js";
 
 /**
  * Interface for extracting archives.
@@ -35,7 +35,7 @@ export class TarExtractor implements ArchiveExtractor {
         cwd: destDir,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       if (message.includes("EACCES") || message.includes("EPERM")) {
         throw new ArchiveError(
           `Permission denied extracting to ${destDir}: ${message}`,
@@ -69,7 +69,7 @@ export class ZipExtractor implements ArchiveExtractor {
       if (error instanceof ArchiveError) {
         throw error;
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       if (message.includes("EACCES") || message.includes("EPERM")) {
         throw new ArchiveError(
           `Permission denied extracting to ${destDir}: ${message}`,

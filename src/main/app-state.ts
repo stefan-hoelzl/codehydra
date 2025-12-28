@@ -20,6 +20,7 @@ import type { IViewManager } from "./managers/view-manager.interface";
 import type { Project, ProjectPath, WorkspacePath } from "../shared/ipc";
 import type { AgentStatusManager } from "../services/opencode/agent-status-manager";
 import type { OpenCodeServerManager } from "../services/opencode/opencode-server-manager";
+import { getErrorMessage } from "../services/errors";
 
 /**
  * Runtime state for an open project.
@@ -142,7 +143,7 @@ export class AppState {
     } catch (error: unknown) {
       this.logger.warn("Failed to get default base branch", {
         projectPath,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
       return undefined;
     }

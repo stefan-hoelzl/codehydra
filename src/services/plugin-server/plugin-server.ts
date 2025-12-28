@@ -37,6 +37,7 @@ import {
 } from "../../shared/plugin-protocol";
 import { LogLevel } from "../logging/types";
 import type { WorkspaceStatus } from "../../shared/api/types";
+import { getErrorMessage } from "../errors";
 
 // ============================================================================
 // Types
@@ -536,10 +537,9 @@ export class PluginServer {
           callback(workspacePath);
         } catch (error) {
           // Log error but don't crash server or prevent other callbacks
-          const message = error instanceof Error ? error.message : String(error);
           this.logger.error("Connect callback error", {
             workspace: workspacePath,
-            error: message,
+            error: getErrorMessage(error),
           });
         }
       }
@@ -570,249 +570,74 @@ export class PluginServer {
    * @param workspacePath - Normalized workspace path for this connection
    */
   private setupApiHandlers(socket: TypedSocket, workspacePath: string): void {
-    // Handle api:workspace:getStatus
-    socket.on("api:workspace:getStatus", (ack) => {
-      if (!this.apiHandlers) {
-        this.logger.warn("API call without handlers registered", {
-          event: "api:workspace:getStatus",
-          workspace: workspacePath,
-        });
-        ack({ success: false, error: "API handlers not registered" });
-        return;
-      }
+    // No-arg handlers (getStatus, getOpencodePort, getMetadata)
+    socket.on(
+      "api:workspace:getStatus",
+      this.createNoArgHandler("api:workspace:getStatus", workspacePath, (h) => h.getStatus)
+    );
 
-      this.logger.debug("API call", { event: "api:workspace:getStatus", workspace: workspacePath });
+    socket.on(
+      "api:workspace:getOpencodePort",
+      this.createNoArgHandler(
+        "api:workspace:getOpencodePort",
+        workspacePath,
+        (h) => h.getOpencodePort
+      )
+    );
 
-      this.apiHandlers
-        .getStatus(workspacePath)
-        .then((result) => {
-          ack(result);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error("API handler error", {
-            event: "api:workspace:getStatus",
-            workspace: workspacePath,
-            error: message,
-          });
-          ack({ success: false, error: message });
-        });
-    });
+    socket.on(
+      "api:workspace:getMetadata",
+      this.createNoArgHandler("api:workspace:getMetadata", workspacePath, (h) => h.getMetadata)
+    );
 
-    // Handle api:workspace:getOpencodePort
-    socket.on("api:workspace:getOpencodePort", (ack) => {
-      if (!this.apiHandlers) {
-        this.logger.warn("API call without handlers registered", {
-          event: "api:workspace:getOpencodePort",
-          workspace: workspacePath,
-        });
-        ack({ success: false, error: "API handlers not registered" });
-        return;
-      }
+    // Validated handlers (setMetadata, delete, executeCommand)
+    socket.on(
+      "api:workspace:setMetadata",
+      this.createValidatedHandler<SetMetadataRequest, SetMetadataRequest, void>(
+        "api:workspace:setMetadata",
+        workspacePath,
+        validateSetMetadataRequest,
+        (h, req) => h.setMetadata(workspacePath, req),
+        (req) => ({ key: req.key })
+      )
+    );
 
-      this.logger.debug("API call", {
-        event: "api:workspace:getOpencodePort",
-        workspace: workspacePath,
-      });
+    socket.on(
+      "api:workspace:delete",
+      this.createValidatedHandler<
+        DeleteWorkspaceRequest | undefined,
+        DeleteWorkspaceRequest,
+        DeleteWorkspaceResponse
+      >(
+        "api:workspace:delete",
+        workspacePath,
+        validateDeleteWorkspaceRequest,
+        (h, req) => h.delete(workspacePath, req),
+        (req) => ({ keepBranch: !!req?.keepBranch })
+      )
+    );
 
-      this.apiHandlers
-        .getOpencodePort(workspacePath)
-        .then((result) => {
-          ack(result);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error("API handler error", {
-            event: "api:workspace:getOpencodePort",
-            workspace: workspacePath,
-            error: message,
-          });
-          ack({ success: false, error: message });
-        });
-    });
+    socket.on(
+      "api:workspace:executeCommand",
+      this.createValidatedHandler<ExecuteCommandRequest, ExecuteCommandRequest, unknown>(
+        "api:workspace:executeCommand",
+        workspacePath,
+        validateExecuteCommandRequest,
+        (h, req) => h.executeCommand(workspacePath, req),
+        (req) => ({ command: req.command })
+      )
+    );
 
-    // Handle api:workspace:getMetadata
-    socket.on("api:workspace:getMetadata", (ack) => {
-      if (!this.apiHandlers) {
-        this.logger.warn("API call without handlers registered", {
-          event: "api:workspace:getMetadata",
-          workspace: workspacePath,
-        });
-        ack({ success: false, error: "API handlers not registered" });
-        return;
-      }
-
-      this.logger.debug("API call", {
-        event: "api:workspace:getMetadata",
-        workspace: workspacePath,
-      });
-
-      this.apiHandlers
-        .getMetadata(workspacePath)
-        .then((result) => {
-          ack(result);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error("API handler error", {
-            event: "api:workspace:getMetadata",
-            workspace: workspacePath,
-            error: message,
-          });
-          ack({ success: false, error: message });
-        });
-    });
-
-    // Handle api:workspace:setMetadata
-    socket.on("api:workspace:setMetadata", (request, ack) => {
-      if (!this.apiHandlers) {
-        this.logger.warn("API call without handlers registered", {
-          event: "api:workspace:setMetadata",
-          workspace: workspacePath,
-        });
-        ack({ success: false, error: "API handlers not registered" });
-        return;
-      }
-
-      // Validate request before invoking handler
-      const validation = validateSetMetadataRequest(request);
-      if (!validation.valid) {
-        this.logger.warn("API call validation failed", {
-          event: "api:workspace:setMetadata",
-          workspace: workspacePath,
-          error: validation.error,
-        });
-        ack({ success: false, error: validation.error });
-        return;
-      }
-
-      this.logger.debug("API call", {
-        event: "api:workspace:setMetadata",
-        workspace: workspacePath,
-        key: request.key,
-      });
-
-      this.apiHandlers
-        .setMetadata(workspacePath, request)
-        .then((result) => {
-          ack(result);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error("API handler error", {
-            event: "api:workspace:setMetadata",
-            workspace: workspacePath,
-            error: message,
-          });
-          ack({ success: false, error: message });
-        });
-    });
-
-    // Handle api:workspace:delete
-    socket.on("api:workspace:delete", (request, ack) => {
-      if (!this.apiHandlers) {
-        this.logger.warn("API call without handlers registered", {
-          event: "api:workspace:delete",
-          workspace: workspacePath,
-        });
-        ack({ success: false, error: "API handlers not registered" });
-        return;
-      }
-
-      // Validate request before invoking handler
-      const validation = validateDeleteWorkspaceRequest(request);
-      if (!validation.valid) {
-        this.logger.warn("API call validation failed", {
-          event: "api:workspace:delete",
-          workspace: workspacePath,
-          error: validation.error,
-        });
-        ack({ success: false, error: validation.error });
-        return;
-      }
-
-      this.logger.debug("API call", {
-        event: "api:workspace:delete",
-        workspace: workspacePath,
-        keepBranch: !!validation.request.keepBranch,
-      });
-
-      this.apiHandlers
-        .delete(workspacePath, validation.request)
-        .then((result) => {
-          ack(result);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error("API handler error", {
-            event: "api:workspace:delete",
-            workspace: workspacePath,
-            error: message,
-          });
-          ack({ success: false, error: message });
-        });
-    });
-
-    // Handle api:workspace:executeCommand
-    socket.on("api:workspace:executeCommand", (request, ack) => {
-      if (!this.apiHandlers) {
-        this.logger.warn("API call without handlers registered", {
-          event: "api:workspace:executeCommand",
-          workspace: workspacePath,
-        });
-        ack({ success: false, error: "API handlers not registered" });
-        return;
-      }
-
-      // Validate request before invoking handler
-      const validation = validateExecuteCommandRequest(request);
-      if (!validation.valid) {
-        this.logger.warn("API call validation failed", {
-          event: "api:workspace:executeCommand",
-          workspace: workspacePath,
-          error: validation.error,
-        });
-        ack({ success: false, error: validation.error });
-        return;
-      }
-
-      this.logger.debug("API call", {
-        event: "api:workspace:executeCommand",
-        workspace: workspacePath,
-        command: request.command,
-      });
-
-      this.apiHandlers
-        .executeCommand(workspacePath, request)
-        .then((result) => {
-          ack(result);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.error("API handler error", {
-            event: "api:workspace:executeCommand",
-            workspace: workspacePath,
-            error: message,
-          });
-          ack({ success: false, error: message });
-        });
-    });
-
-    // Handle api:log (fire-and-forget)
+    // Handle api:log (fire-and-forget - special case)
     socket.on("api:log", (request) => {
-      // Validate request - silently ignore invalid requests
       const validation = validateLogRequest(request);
-      if (!validation.valid) {
-        return;
-      }
+      if (!validation.valid) return;
 
-      // Auto-append workspace context for traceability
       const context: LogContext = {
         ...(request.context ?? {}),
         workspace: workspacePath,
       };
 
-      // Call appropriate logger method based on level
       const level = request.level as LogLevel;
       switch (level) {
         case "silly":
@@ -832,6 +657,94 @@ export class PluginServer {
           break;
       }
     });
+  }
+
+  /**
+   * Create a handler for no-argument API calls.
+   */
+  private createNoArgHandler<R>(
+    eventName: string,
+    workspacePath: string,
+    getHandler: (handlers: ApiCallHandlers) => (workspacePath: string) => Promise<PluginResult<R>>
+  ): (ack: (result: PluginResult<R>) => void) => void {
+    return (ack) => {
+      if (!this.apiHandlers) {
+        this.logger.warn("API call without handlers registered", {
+          event: eventName,
+          workspace: workspacePath,
+        });
+        ack({ success: false, error: "API handlers not registered" });
+        return;
+      }
+
+      this.logger.debug("API call", { event: eventName, workspace: workspacePath });
+
+      getHandler(this.apiHandlers)(workspacePath)
+        .then((result) => ack(result))
+        .catch((error) => {
+          const message = getErrorMessage(error);
+          this.logger.error("API handler error", {
+            event: eventName,
+            workspace: workspacePath,
+            error: message,
+          });
+          ack({ success: false, error: message });
+        });
+    };
+  }
+
+  /**
+   * Create a handler for validated API calls with request payload.
+   */
+  private createValidatedHandler<TReq, TValidated, R>(
+    eventName: string,
+    workspacePath: string,
+    validator: (
+      payload: unknown
+    ) => { valid: true; request?: TValidated } | { valid: false; error: string },
+    invokeHandler: (handlers: ApiCallHandlers, request: TValidated) => Promise<PluginResult<R>>,
+    logContext?: (request: TReq) => Record<string, unknown>
+  ): (request: TReq, ack: (result: PluginResult<R>) => void) => void {
+    return (request, ack) => {
+      if (!this.apiHandlers) {
+        this.logger.warn("API call without handlers registered", {
+          event: eventName,
+          workspace: workspacePath,
+        });
+        ack({ success: false, error: "API handlers not registered" });
+        return;
+      }
+
+      const validation = validator(request);
+      if (!validation.valid) {
+        this.logger.warn("API call validation failed", {
+          event: eventName,
+          workspace: workspacePath,
+          error: validation.error,
+        });
+        ack({ success: false, error: validation.error });
+        return;
+      }
+
+      const validatedRequest = validation.request ?? (request as unknown as TValidated);
+      this.logger.debug("API call", {
+        event: eventName,
+        workspace: workspacePath,
+        ...logContext?.(request),
+      });
+
+      invokeHandler(this.apiHandlers, validatedRequest)
+        .then((result) => ack(result))
+        .catch((error) => {
+          const message = getErrorMessage(error);
+          this.logger.error("API handler error", {
+            event: eventName,
+            workspace: workspacePath,
+            error: message,
+          });
+          ack({ success: false, error: message });
+        });
+    };
   }
 
   /**

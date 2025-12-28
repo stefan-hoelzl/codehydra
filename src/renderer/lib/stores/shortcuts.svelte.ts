@@ -9,6 +9,7 @@
 
 import * as api from "$lib/api";
 import { createLogger } from "$lib/logging";
+import { getErrorMessage } from "$lib/utils/error-utils";
 import type { UIModeChangedEvent } from "@shared/ipc";
 import { openCreateDialog, openRemoveDialog } from "./dialogs.svelte";
 import { getDeletionStatus } from "./deletion.svelte";
@@ -90,7 +91,7 @@ export function exitShortcutMode(): void {
  */
 function logWorkspaceSwitchError(action: string, error: unknown): void {
   logger.error(`Failed to ${action}`, {
-    error: error instanceof Error ? error.message : String(error),
+    error: getErrorMessage(error),
   });
 }
 

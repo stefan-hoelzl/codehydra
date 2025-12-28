@@ -18,6 +18,7 @@ import type {
 import type { ICodeHydraApi } from "../../shared/api/interfaces";
 import type { ProjectId, WorkspaceName } from "../../shared/api/types";
 import type { Logger } from "../../services/logging";
+import { getErrorMessage } from "../../services/errors";
 
 /**
  * Interface for resolving workspace paths to project information.
@@ -86,7 +87,7 @@ export function wirePluginApi(
         });
         return { success: true, data: status };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logger.error("getStatus error", { workspace: workspacePath, error: message });
         return { success: false, error: message };
       }
@@ -110,7 +111,7 @@ export function wirePluginApi(
         });
         return { success: true, data: port };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logger.error("getOpencodePort error", { workspace: workspacePath, error: message });
         return { success: false, error: message };
       }
@@ -134,7 +135,7 @@ export function wirePluginApi(
         });
         return { success: true, data: metadata as Record<string, string> };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logger.error("getMetadata error", { workspace: workspacePath, error: message });
         return { success: false, error: message };
       }
@@ -155,7 +156,7 @@ export function wirePluginApi(
         logger.debug("setMetadata success", { workspace: workspacePath, key: request.key });
         return { success: true, data: undefined };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logger.error("setMetadata error", {
           workspace: workspacePath,
           key: request.key,
@@ -183,7 +184,7 @@ export function wirePluginApi(
         });
         return { success: true, data: result };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logger.error("delete error", { workspace: workspacePath, error: message });
         return { success: false, error: message };
       }
@@ -212,7 +213,7 @@ export function wirePluginApi(
         });
         return { success: true, data: result };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logger.error("executeCommand error", {
           workspace: workspacePath,
           command: request.command,

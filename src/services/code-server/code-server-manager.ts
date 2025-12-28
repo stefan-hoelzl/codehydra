@@ -12,7 +12,7 @@ import {
 } from "../platform/process";
 import type { HttpClient, PortManager } from "../platform/network";
 import { encodePathForUrl } from "../platform/paths";
-import { CodeServerError } from "../errors";
+import { CodeServerError, getErrorMessage } from "../errors";
 import type { Logger } from "../logging";
 import { waitForHealthy } from "../platform/health-check";
 
@@ -273,8 +273,7 @@ export class CodeServerManager {
       this.logger.debug("Health check", { status: healthy ? "ok" : "failed" });
       return healthy;
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      this.logger.warn("Health check failed", { error: errMsg });
+      this.logger.warn("Health check failed", { error: getErrorMessage(error) });
       return false;
     }
   }
