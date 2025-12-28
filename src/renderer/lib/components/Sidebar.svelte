@@ -60,6 +60,7 @@
   import type { ProjectId, WorkspaceRef, WorkspaceName } from "$lib/api";
   import EmptyState from "./EmptyState.svelte";
   import AgentStatusIndicator from "./AgentStatusIndicator.svelte";
+  import Icon from "./Icon.svelte";
   import { getStatus } from "$lib/stores/agent-status.svelte.js";
   import { getDeletionStatus } from "$lib/stores/deletion.svelte.js";
   import { uiMode, setSidebarExpanded } from "$lib/stores/ui-mode.svelte.js";
@@ -170,7 +171,7 @@
   <header class="sidebar-header">
     {#if !isExpanded}
       <span class="expand-hint" aria-hidden="true">
-        <span class="chevron">&#9656;</span>
+        <Icon name="chevron-right" size={12} />
       </span>
     {/if}
     <h2>PROJECTS</h2>
@@ -205,7 +206,7 @@
                   aria-label="Add workspace"
                   onclick={() => handleAddWorkspace(project.id)}
                 >
-                  +
+                  <Icon name="add" size={14} />
                 </button>
                 <button
                   type="button"
@@ -214,7 +215,7 @@
                   aria-label="Close project"
                   onclick={() => onCloseProject(project.id)}
                 >
-                  &times;
+                  <Icon name="close" size={14} />
                 </button>
               </div>
             </div>
@@ -271,13 +272,15 @@
                         aria-label="Remove workspace"
                         onclick={() => handleRemoveWorkspace(workspaceRef)}
                       >
-                        &times;
+                        <Icon name="close" size={14} />
                       </button>
                     {/if}
                     {#if deletionStatus === "in-progress"}
                       <vscode-progress-ring class="deletion-spinner"></vscode-progress-ring>
                     {:else if deletionStatus === "error"}
-                      <span class="deletion-error" role="img" aria-label="Deletion failed">⚠</span>
+                      <span class="deletion-error" role="img" aria-label="Deletion failed">
+                        <Icon name="warning" size={14} />
+                      </span>
                     {:else}
                       <AgentStatusIndicator
                         idleCount={agentStatus.counts.idle}
@@ -303,8 +306,9 @@
                       {#if deletionStatus === "in-progress"}
                         <vscode-progress-ring class="deletion-spinner"></vscode-progress-ring>
                       {:else if deletionStatus === "error"}
-                        <span class="deletion-error" role="img" aria-label="Deletion failed">⚠</span
-                        >
+                        <span class="deletion-error" role="img" aria-label="Deletion failed">
+                          <Icon name="warning" size={14} />
+                        </span>
                       {:else}
                         <AgentStatusIndicator
                           idleCount={agentStatus.counts.idle}
@@ -326,7 +330,7 @@
   <div class="sidebar-footer">
     {#if !isExpanded}
       <span class="expand-hint" aria-hidden="true">
-        <span class="chevron">&#9656;</span>
+        <Icon name="chevron-right" size={12} />
       </span>
     {/if}
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -405,11 +409,6 @@
     opacity: 1;
   }
 
-  .chevron {
-    font-size: 12px; /* Minimum 12px for accessibility */
-    line-height: 1;
-  }
-
   .sidebar-header h2 {
     font-size: 11px;
     font-weight: 600;
@@ -479,12 +478,14 @@
   }
 
   .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
     color: var(--ch-foreground);
     cursor: pointer;
     padding: 2px 6px;
-    font-size: 14px;
     opacity: 0.7;
     border-radius: 2px;
   }

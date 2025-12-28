@@ -1,5 +1,6 @@
 <script lang="ts">
   import Dialog from "./Dialog.svelte";
+  import Icon from "./Icon.svelte";
   import { projects as projectsApi, workspaces } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { projects } from "$lib/stores/projects.svelte.js";
@@ -68,7 +69,7 @@
 
         if (failures.length > 0) {
           const failureList = failures.map((f) => `• ${f.name}: ${f.error}`).join("\n");
-          submitError = `⚠ Removed ${successCount} of ${results.length} workspaces. Failed:\n${failureList}`;
+          submitError = `Removed ${successCount} of ${results.length} workspaces. Failed:\n${failureList}`;
         }
       }
 
@@ -127,7 +128,10 @@
 
     {#if submitError}
       <div class="submit-error" role="alert">
-        {submitError}
+        <span class="error-icon" aria-hidden="true">
+          <Icon name="warning" />
+        </span>
+        <span class="error-text">{submitError}</span>
       </div>
     {/if}
   {/snippet}
@@ -163,12 +167,22 @@
   }
 
   .submit-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     margin-bottom: 16px;
     padding: 8px;
     background: var(--ch-error-bg);
     color: var(--ch-error-fg);
     border-radius: 2px;
     font-size: 13px;
+  }
+
+  .error-icon {
+    flex-shrink: 0;
+  }
+
+  .error-text {
     white-space: pre-line;
   }
 </style>

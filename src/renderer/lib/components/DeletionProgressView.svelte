@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import Logo from "./Logo.svelte";
+  import Icon from "./Icon.svelte";
   import type { DeletionProgress, DeletionOperationStatus } from "@shared/api/types";
 
   interface Props {
@@ -19,17 +20,17 @@
   // Find the first error message from operations
   const firstError = $derived(progress.operations.find((op) => op.error)?.error ?? null);
 
-  // Get status icon/element for an operation
-  function getStatusIcon(status: DeletionOperationStatus): string {
+  // Get status icon name for an operation
+  function getStatusIconName(status: DeletionOperationStatus): string | null {
     switch (status) {
       case "done":
-        return "\u2713"; // ✓ checkmark
+        return "check";
       case "error":
-        return "\u2717"; // ✗ X mark
+        return "close";
       case "pending":
-        return "\u25CB"; // ○ empty circle
+        return "circle-large";
       default:
-        return "";
+        return null;
     }
   }
 
@@ -64,7 +65,10 @@
             {#if operation.status === "in-progress"}
               <vscode-progress-ring class="spinner"></vscode-progress-ring>
             {:else}
-              {getStatusIcon(operation.status)}
+              {@const iconName = getStatusIconName(operation.status)}
+              {#if iconName}
+                <Icon name={iconName} />
+              {/if}
             {/if}
           </span>
           <span class="operation-label">{operation.label}</span>
@@ -75,7 +79,9 @@
 
     {#if firstError}
       <div class="error-box" role="alert">
-        <span class="error-icon" aria-hidden="true">&#9888;</span>
+        <span class="error-icon" aria-hidden="true">
+          <Icon name="warning" />
+        </span>
         <span class="error-text">Error: {firstError}</span>
       </div>
     {/if}

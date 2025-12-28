@@ -1,5 +1,6 @@
 <script lang="ts">
   import Dialog from "./Dialog.svelte";
+  import Icon from "./Icon.svelte";
   import { workspaces, type WorkspaceRef } from "$lib/api";
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { createLogger } from "$lib/logging";
@@ -89,7 +90,9 @@
       <div class="status-message" role="status">Checking for uncommitted changes...</div>
     {:else if isDirty}
       <div class="warning-box" role="alert">
-        <span class="warning-icon">⚠</span>
+        <span class="warning-icon">
+          <Icon name="warning" />
+        </span>
         This workspace has uncommitted changes that will be lost.
       </div>
     {/if}

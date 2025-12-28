@@ -528,6 +528,54 @@ All UI components MUST use `@vscode-elements/elements` where equivalents exist:
 
 **Full details**: See [VSCode Elements Patterns](docs/PATTERNS.md#vscode-elements-patterns) for component mapping and event handling.
 
+## Icon Usage
+
+Use the `Icon` component for all icons. Never use Unicode characters or HTML entities.
+
+### Icon Component API
+
+| Prop     | Type    | Default    | Description                               |
+| -------- | ------- | ---------- | ----------------------------------------- |
+| `name`   | string  | (required) | Codicon name                              |
+| `size`   | number  | 16         | Size in pixels                            |
+| `label`  | string  | undefined  | Screen reader label (makes icon semantic) |
+| `action` | boolean | false      | Button-like behavior with hover/focus     |
+| `spin`   | boolean | false      | Rotation animation                        |
+| `class`  | string  | ""         | Additional CSS classes                    |
+
+### Usage Patterns
+
+```svelte
+<!-- Decorative icon (hidden from screen readers) -->
+<Icon name="check" />
+
+<!-- Action icon (button-like, announced by screen readers) -->
+<Icon name="close" action label="Close dialog" />
+
+<!-- Icon inside native button (for complex click handling) -->
+<button onclick={handleClick} aria-label="Add item">
+  <Icon name="add" />
+</button>
+
+<!-- Colored icon (inherits currentColor) -->
+<span class="success-text">
+  <Icon name="check" /> Done
+</span>
+```
+
+### Common Icons
+
+| Icon | Name            | Usage                   |
+| ---- | --------------- | ----------------------- |
+| ✓    | `check`         | Success, done, complete |
+| ✗    | `close`         | Error, remove, dismiss  |
+| ⚠    | `warning`       | Warnings, alerts        |
+| +    | `add`           | Add new item            |
+| ›    | `chevron-right` | Expand indicator        |
+| ○    | `circle-large`  | Pending, empty state    |
+
+Full list: https://microsoft.github.io/vscode-codicons/dist/codicon.html
+
 ## UI Patterns
 
 Custom UI components follow these patterns:

@@ -106,7 +106,7 @@ describe("DeletionProgressView", () => {
   });
 
   describe("done operations", () => {
-    it("should show checkmark with screen reader text", () => {
+    it("should show checkmark icon with screen reader text", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
@@ -116,7 +116,7 @@ describe("DeletionProgressView", () => {
         ],
       };
 
-      render(DeletionProgressView, {
+      const { container } = render(DeletionProgressView, {
         props: {
           progress,
           onRetry,
@@ -124,9 +124,9 @@ describe("DeletionProgressView", () => {
         },
       });
 
-      // Check for checkmark characters (two done operations)
-      const checkmarks = screen.getAllByText("\u2713");
-      expect(checkmarks.length).toBe(2);
+      // Check for vscode-icon (two done operations) - Icon component renders vscode-icon
+      const doneIndicators = container.querySelectorAll(".status-done vscode-icon");
+      expect(doneIndicators.length).toBe(2);
       // Screen reader text
       const completeTexts = screen.getAllByText("Complete");
       expect(completeTexts.length).toBe(2);
@@ -134,7 +134,7 @@ describe("DeletionProgressView", () => {
   });
 
   describe("error operation", () => {
-    it("should show red X with screen reader text", () => {
+    it("should show error icon with screen reader text", () => {
       const progress: DeletionProgress = {
         ...defaultProgress,
         operations: [
@@ -151,7 +151,7 @@ describe("DeletionProgressView", () => {
         hasErrors: true,
       };
 
-      render(DeletionProgressView, {
+      const { container } = render(DeletionProgressView, {
         props: {
           progress,
           onRetry,
@@ -159,8 +159,8 @@ describe("DeletionProgressView", () => {
         },
       });
 
-      // Check for X character
-      expect(screen.getByText("\u2717")).toBeInTheDocument();
+      // Check for vscode-icon (error indicator) - Icon component renders vscode-icon
+      expect(container.querySelector(".status-error vscode-icon")).toBeInTheDocument();
       // Screen reader text
       expect(screen.getByText("Error")).toBeInTheDocument();
     });

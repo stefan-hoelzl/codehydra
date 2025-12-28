@@ -697,7 +697,8 @@ describe("Sidebar component", () => {
       const headerChevron = header!.querySelector(".expand-hint");
       expect(headerChevron).toBeInTheDocument();
       expect(headerChevron).toHaveAttribute("aria-hidden", "true");
-      expect(headerChevron!.querySelector(".chevron")).toBeInTheDocument();
+      // Icon component renders vscode-icon for chevron
+      expect(headerChevron!.querySelector("vscode-icon")).toBeInTheDocument();
     });
 
     it("renders expand hint chevron in footer when minimized", () => {
@@ -718,7 +719,8 @@ describe("Sidebar component", () => {
       const footerChevron = footer!.querySelector(".expand-hint");
       expect(footerChevron).toBeInTheDocument();
       expect(footerChevron).toHaveAttribute("aria-hidden", "true");
-      expect(footerChevron!.querySelector(".chevron")).toBeInTheDocument();
+      // Icon component renders vscode-icon for chevron
+      expect(footerChevron!.querySelector("vscode-icon")).toBeInTheDocument();
     });
 
     it("does not render expand hints when expanded", () => {
@@ -1315,10 +1317,10 @@ describe("Sidebar component", () => {
       const sidebar = container.querySelector(".sidebar");
       await fireEvent.mouseEnter(sidebar!);
 
-      // Warning triangle should be visible
+      // Warning triangle should be visible - Icon component renders vscode-icon
       const warning = container.querySelector(".deletion-error");
       expect(warning).toBeInTheDocument();
-      expect(warning).toHaveTextContent("⚠");
+      expect(warning!.querySelector("vscode-icon")).toBeInTheDocument();
     });
 
     it("warning triangle has accessible attributes", async () => {
@@ -1365,10 +1367,10 @@ describe("Sidebar component", () => {
         props: { ...defaultProps, projects: [project], totalWorkspaces: 1 },
       });
 
-      // In minimized state, should show warning
+      // In minimized state, should show warning - Icon component renders vscode-icon
       const warning = container.querySelector(".deletion-error");
       expect(warning).toBeInTheDocument();
-      expect(warning).toHaveTextContent("⚠");
+      expect(warning!.querySelector("vscode-icon")).toBeInTheDocument();
       expect(warning).toHaveAttribute("role", "img");
       expect(warning).toHaveAttribute("aria-label", "Deletion failed");
 

@@ -174,6 +174,28 @@ All UI components MUST use `@vscode-elements/elements` instead of native HTML wh
 | CSS border separator      | `<vscode-divider>`       | When semantic divider not appropriate                   |
 | Button groups             | `<vscode-toolbar>`       | Non-linear layouts or hover-reveal conflicts            |
 | Indicator/label           | `<vscode-badge>`         | Complex styled indicators                               |
+| Custom icon spans         | `<Icon name="..."/>`     | Never - always use Icon component                       |
+
+**Icon Component:**
+
+The `Icon` component wraps `<vscode-icon>` and provides consistent icon rendering across the application. Never use Unicode characters (✓, ×, ⚠) or HTML entities (`&times;`, `&#10003;`) for icons.
+
+```svelte
+<script>
+  import Icon from "./Icon.svelte";
+</script>
+
+<!-- Decorative icon -->
+<Icon name="check" />
+
+<!-- Action icon (button-like) -->
+<Icon name="close" action label="Close" />
+
+<!-- Custom size -->
+<Icon name="warning" size={24} />
+```
+
+See [AGENTS.md Icon Usage](../AGENTS.md#icon-usage) for full documentation.
 
 ### Event Handling in Svelte
 

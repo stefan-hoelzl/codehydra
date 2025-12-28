@@ -88,6 +88,12 @@
   /* Logo backdrop opacity */
   --ch-logo-backdrop-opacity: 0.15;
 
+  /* Icon sizes */
+  --ch-icon-size-small: 12px;
+  --ch-icon-size-default: 16px;
+  --ch-icon-size-medium: 14px;
+  --ch-icon-size-large: 48px;
+
   /* Layout variables (theme-independent) */
   --ch-sidebar-width: 250px;
   --ch-sidebar-minimized-width: 20px;
