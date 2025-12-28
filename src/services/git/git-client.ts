@@ -12,12 +12,14 @@ import type { BranchInfo, StatusResult, WorktreeInfo } from "./types";
  */
 export interface IGitClient {
   /**
-   * Check if path is a git repository.
+   * Check if path is the root of a git repository.
+   * Returns true only if the path is exactly the repository root,
+   * not a subdirectory within a repository.
    * @param path Absolute path to check
-   * @returns Promise resolving to true if path is a git repository
+   * @returns Promise resolving to true if path is a git repository root
    * @throws GitError if path doesn't exist or is inaccessible
    */
-  isGitRepository(path: string): Promise<boolean>;
+  isRepositoryRoot(path: string): Promise<boolean>;
 
   /**
    * List all worktrees in repository.

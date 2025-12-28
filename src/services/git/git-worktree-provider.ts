@@ -166,11 +166,14 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       throw new WorkspaceError(`workspacesDir must be absolute: ${workspacesDir}`);
     }
 
-    // Validate it's a git repository
+    // Validate it's a git repository root (not a subdirectory)
     try {
-      const isRepo = await gitClient.isGitRepository(projectRoot);
-      if (!isRepo) {
-        throw new WorkspaceError(`Path is not a git repository: ${projectRoot}`);
+      const isRoot = await gitClient.isRepositoryRoot(projectRoot);
+      if (!isRoot) {
+        throw new WorkspaceError(
+          `Path is not a git repository root: ${projectRoot}. ` +
+            `Please select the root directory of your git repository.`
+        );
       }
     } catch (error: unknown) {
       if (error instanceof WorkspaceError) {

@@ -6,17 +6,17 @@
 
 The UI uses `@vscode-elements/elements` for consistent VS Code styling:
 
-| Component              | vscode-element Used      | Location                                                 |
-| ---------------------- | ------------------------ | -------------------------------------------------------- |
-| Dialog buttons         | `<vscode-button>`        | CreateWorkspaceDialog, RemoveWorkspaceDialog, SetupError |
-| Text input             | `<vscode-textfield>`     | CreateWorkspaceDialog (Name field)                       |
-| Checkbox               | `<vscode-checkbox>`      | RemoveWorkspaceDialog (Delete branch)                    |
-| Progress bar           | `<vscode-progress-bar>`  | SetupScreen                                              |
-| Loading spinner        | `<vscode-progress-ring>` | Sidebar (while loading)                                  |
-| Shortcut badges        | `<vscode-badge>`         | Sidebar, ShortcutOverlay                                 |
-| Project dividers       | `<vscode-divider>`       | Sidebar (between projects)                               |
-| Form validation helper | `<vscode-form-helper>`   | CreateWorkspaceDialog                                    |
-| Open Project button    | `<vscode-button>`        | Sidebar                                                  |
+| Component              | vscode-element Used      | Location                                                                         |
+| ---------------------- | ------------------------ | -------------------------------------------------------------------------------- |
+| Dialog buttons         | `<vscode-button>`        | CreateWorkspaceDialog, RemoveWorkspaceDialog, OpenProjectErrorDialog, SetupError |
+| Text input             | `<vscode-textfield>`     | CreateWorkspaceDialog (Name field)                                               |
+| Checkbox               | `<vscode-checkbox>`      | RemoveWorkspaceDialog (Delete branch)                                            |
+| Progress bar           | `<vscode-progress-bar>`  | SetupScreen                                                                      |
+| Loading spinner        | `<vscode-progress-ring>` | Sidebar (while loading)                                                          |
+| Shortcut badges        | `<vscode-badge>`         | Sidebar, ShortcutOverlay                                                         |
+| Project dividers       | `<vscode-divider>`       | Sidebar (between projects)                                                       |
+| Form validation helper | `<vscode-form-helper>`   | CreateWorkspaceDialog                                                            |
+| Open Project button    | `<vscode-button>`        | Sidebar                                                                          |
 
 **Exception**: BranchDropdown uses a custom implementation with native `<input>` for filtering and grouped options (Local/Remote branches), as `<vscode-single-select>` doesn't support these features.
 
@@ -237,16 +237,48 @@ They can click "Open Project" to try again.
 
 **Flow:**
 
-1. Click "Open Project" button
+1. Click "Open Project" button (or press Alt+O in shortcut mode)
 2. System folder picker opens
 3. Select folder
-4. **If not a git repository**: Show error "Selected folder is not a git repository", return to step 2
+4. **If not a git repository**: Error dialog shown (see below), user can retry or cancel
 5. Project added to sidebar (main git directory = project)
 6. Worktree discovery runs (finds worktrees, NOT main directory)
 7. **If 0 worktrees found**: Create workspace dialog auto-opens
 8. **If 1+ worktrees found**: First workspace activated
 
 **Note**: The main git directory is the PROJECT, not a workspace. Only worktrees are workspaces.
+
+**Error dialog (shown when folder is not a valid git repository):**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  Could Not Open Project                                    │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Path is not a git repository root:                   │  │
+│  │ /path/to/folder. Please select the                   │  │
+│  │ root directory of your git repository.               │  │
+│  └──────────────────────────────────────────────────────┘  │
+│   (role="alert" for screen reader announcements)           │
+│                                                            │
+├────────────────────────────────────────────────────────────┤
+│                  [Cancel]  [Select Different Folder]       │
+│                     ↑              ↑                       │
+│                  secondary      primary (default focus)    │
+│                  (Esc key)      (Enter key)                │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Error dialog behavior:**
+
+| Action                          | Result                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| Click "Select Different Folder" | Opens folder picker; on success closes dialog; on cancel keeps dialog open |
+| Click "Cancel"                  | Closes dialog, returns to normal state                                     |
+| Press Escape                    | Same as Cancel                                                             |
+| Press Enter                     | Same as "Select Different Folder" (default focus)                          |
+| Click outside dialog            | Same as Cancel                                                             |
 
 **Empty project (no worktrees, auto-opens create dialog):**
 

@@ -188,7 +188,7 @@ describe("Services Integration", () => {
     it("IWorkspaceProvider works with mocked IGitClient", async () => {
       // This test verifies the abstraction by using a mocked git client
       const mockGitClient = {
-        isGitRepository: async () => true,
+        isRepositoryRoot: async () => true,
         listWorktrees: async () => [
           { name: "main", path: "/mock/repo", branch: "main", isMain: true },
           {

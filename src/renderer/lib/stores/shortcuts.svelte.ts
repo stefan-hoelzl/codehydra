@@ -236,12 +236,11 @@ function handleDialog(key: DialogKey): void {
 
 /**
  * Handle O key to open project folder picker.
+ * Dispatches event for MainView to handle (enables error dialog display).
  */
 function handleProjectOpen(): void {
   exitShortcutMode();
-  void api.ui.selectFolder().then((path: string | null) => {
-    if (path) void api.projects.open(path);
-  });
+  window.dispatchEvent(new CustomEvent("codehydra:open-project"));
 }
 
 /**

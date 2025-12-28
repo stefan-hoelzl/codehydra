@@ -47,6 +47,7 @@
   import CreateWorkspaceDialog from "./CreateWorkspaceDialog.svelte";
   import RemoveWorkspaceDialog from "./RemoveWorkspaceDialog.svelte";
   import CloseProjectDialog from "./CloseProjectDialog.svelte";
+  import OpenProjectErrorDialog from "./OpenProjectErrorDialog.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
   import DeletionProgressView from "./DeletionProgressView.svelte";
   import Logo from "./Logo.svelte";
@@ -64,6 +65,9 @@
 
   // Container ref for focus management
   let containerRef: HTMLElement;
+
+  // Error state for open project dialog
+  let openProjectError = $state<string | null>(null);
 
   /**
    * Convert v2 AgentStatus to old AggregatedAgentStatus format.
@@ -248,19 +252,55 @@
       }
     );
 
+    // Listen for open project events from shortcut mode
+    const handleOpenProjectEvent = (): void => {
+      void handleOpenProject();
+    };
+    window.addEventListener("codehydra:open-project", handleOpenProjectEvent);
+
     // Cleanup subscriptions on unmount
     return () => {
       cleanup();
       unsubscribeDeletionProgress();
+      window.removeEventListener("codehydra:open-project", handleOpenProjectEvent);
     };
   });
 
   // Handle opening a project
   async function handleOpenProject(): Promise<void> {
     const path = await api.ui.selectFolder();
-    if (path) {
+    if (!path) return;
+
+    try {
       await api.projects.open(path);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to open project";
+      logger.warn("Failed to open project", { path, error: message });
+      openProjectError = message;
     }
+  }
+
+  // Handle retry from open project error dialog
+  async function handleOpenProjectRetry(): Promise<void> {
+    const path = await api.ui.selectFolder();
+    if (!path) {
+      // User cancelled folder picker - keep dialog open with original error
+      return;
+    }
+    // Clear error and try opening the new path
+    openProjectError = null;
+    try {
+      await api.projects.open(path);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to open project";
+      logger.warn("Failed to open project", { path, error: message });
+      openProjectError = message;
+    }
+  }
+
+  // Handle close from open project error dialog
+  function handleOpenProjectErrorClose(): void {
+    openProjectError = null;
   }
 
   // Handle closing a project
@@ -348,6 +388,13 @@
   {:else if dialogState.value.type === "close-project"}
     <CloseProjectDialog open={true} projectId={dialogState.value.projectId} />
   {/if}
+
+  <OpenProjectErrorDialog
+    open={openProjectError !== null}
+    errorMessage={openProjectError ?? ""}
+    onRetry={handleOpenProjectRetry}
+    onClose={handleOpenProjectErrorClose}
+  />
 
   <ShortcutOverlay
     active={shortcutModeActive.value}

@@ -49,20 +49,55 @@ export class SimpleGitClient implements IGitClient {
     }
   }
 
-  async isGitRepository(repoPath: string): Promise<boolean> {
+  /**
+   * Check if path is inside a git repository.
+   * Used internally for pre-validation in config operations.
+   */
+  private async isInsideRepository(repoPath: string): Promise<boolean> {
     try {
       const git = this.getGit(repoPath);
       const result = await git.checkIsRepo();
-      this.logger.debug("IsGitRepository", { path: repoPath, result });
       return result;
+    } catch {
+      return false;
+    }
+  }
+
+  async isRepositoryRoot(repoPath: string): Promise<boolean> {
+    try {
+      const git = this.getGit(repoPath);
+
+      // First check if we're inside a git repo at all
+      const isRepo = await git.checkIsRepo();
+      if (!isRepo) {
+        this.logger.debug("IsRepositoryRoot", {
+          path: repoPath,
+          result: false,
+          reason: "not a repo",
+        });
+        return false;
+      }
+
+      // Get the actual repository root
+      const root = await git.revparse(["--show-toplevel"]);
+      const normalizedRoot = path.normalize(root.trim());
+      const normalizedPath = path.normalize(repoPath);
+
+      const isRoot = normalizedRoot === normalizedPath;
+      this.logger.debug("IsRepositoryRoot", {
+        path: repoPath,
+        root: normalizedRoot,
+        result: isRoot,
+      });
+      return isRoot;
     } catch (error: unknown) {
       // If the path doesn't exist or is inaccessible, throw GitError
       const errMsg = error instanceof Error ? error.message : String(error);
-      this.logger.warn("Git error", { op: "isGitRepository", path: repoPath, error: errMsg });
+      this.logger.warn("Git error", { op: "isRepositoryRoot", path: repoPath, error: errMsg });
       const message =
         error instanceof Error
-          ? `Failed to check repository: ${error.message}`
-          : "Failed to check repository";
+          ? `Failed to check repository root: ${error.message}`
+          : "Failed to check repository root";
       throw new GitError(message);
     }
   }
@@ -313,7 +348,7 @@ export class SimpleGitClient implements IGitClient {
 
   async getBranchConfig(repoPath: string, branch: string, key: string): Promise<string | null> {
     // First, verify it's a git repository
-    const isRepo = await this.isGitRepository(repoPath);
+    const isRepo = await this.isInsideRepository(repoPath);
     if (!isRepo) {
       throw new GitError(`Not a git repository: ${repoPath}`);
     }
@@ -363,7 +398,7 @@ export class SimpleGitClient implements IGitClient {
     prefix: string
   ): Promise<Readonly<Record<string, string>>> {
     // First, verify it's a git repository
-    const isRepo = await this.isGitRepository(repoPath);
+    const isRepo = await this.isInsideRepository(repoPath);
     if (!isRepo) {
       throw new GitError(`Not a git repository: ${repoPath}`);
     }
@@ -418,7 +453,7 @@ export class SimpleGitClient implements IGitClient {
 
   async unsetBranchConfig(repoPath: string, branch: string, key: string): Promise<void> {
     // First, verify it's a git repository
-    const isRepo = await this.isGitRepository(repoPath);
+    const isRepo = await this.isInsideRepository(repoPath);
     if (!isRepo) {
       throw new GitError(`Not a git repository: ${repoPath}`);
     }

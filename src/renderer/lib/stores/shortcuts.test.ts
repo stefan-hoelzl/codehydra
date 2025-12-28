@@ -730,16 +730,22 @@ describe("shortcuts store", () => {
     describe("project actions", () => {
       // NOTE: These tests use handleShortcutKey (event from main process) not handleKeyDown.
       // handleKeyDown only handles Escape; other keys come via main process events.
-      it("should-trigger-folder-picker-on-o-key", async () => {
+      // The "o" key now dispatches an event for MainView to handle (enables error dialog display).
+      it("should-dispatch-open-project-event-on-o-key", () => {
+        const eventHandler = vi.fn();
+        window.addEventListener("codehydra:open-project", eventHandler);
+
         enableShortcutMode();
         handleShortcutKey("o");
 
-        await vi.waitFor(() => {
-          expect(mockApi.ui.selectFolder).toHaveBeenCalled();
-        });
+        expect(eventHandler).toHaveBeenCalled();
+        // API should not be called directly (handled by MainView via event)
+        expect(mockApi.ui.selectFolder).not.toHaveBeenCalled();
+
+        window.removeEventListener("codehydra:open-project", eventHandler);
       });
 
-      it("should-deactivate-shortcut-mode-before-opening-folder-picker", async () => {
+      it("should-deactivate-shortcut-mode-before-dispatching-event", () => {
         enableShortcutMode();
         expect(shortcutModeActive.value).toBe(true);
 
@@ -747,30 +753,6 @@ describe("shortcuts store", () => {
 
         // Mode should be deactivated immediately
         expect(shortcutModeActive.value).toBe(false);
-      });
-
-      it("should-open-project-when-folder-selected", async () => {
-        mockApi.ui.selectFolder.mockResolvedValue("/selected/path");
-
-        enableShortcutMode();
-        handleShortcutKey("o");
-
-        await vi.waitFor(() => {
-          expect(mockApi.projects.open).toHaveBeenCalledWith("/selected/path");
-        });
-      });
-
-      it("should-not-open-project-when-folder-selection-cancelled", async () => {
-        mockApi.ui.selectFolder.mockResolvedValue(null);
-
-        enableShortcutMode();
-        handleShortcutKey("o");
-
-        await vi.waitFor(() => {
-          expect(mockApi.ui.selectFolder).toHaveBeenCalled();
-        });
-
-        expect(mockApi.projects.open).not.toHaveBeenCalled();
       });
     });
 

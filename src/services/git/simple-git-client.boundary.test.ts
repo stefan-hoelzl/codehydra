@@ -34,17 +34,27 @@ describe("SimpleGitClient", () => {
     await cleanup();
   });
 
-  describe("isGitRepository", () => {
-    it("returns true for a git repository", async () => {
-      const result = await client.isGitRepository(repoPath);
+  describe("isRepositoryRoot", () => {
+    it("returns true for a git repository root", async () => {
+      const result = await client.isRepositoryRoot(repoPath);
 
       expect(result).toBe(true);
+    });
+
+    it("returns false for a subdirectory within a git repository", async () => {
+      // Create a subdirectory
+      const subDir = path.join(repoPath, "subdir");
+      await fs.mkdir(subDir);
+
+      const result = await client.isRepositoryRoot(subDir);
+
+      expect(result).toBe(false);
     });
 
     it("returns false for a non-git directory", async () => {
       const tempDir = await createTempDir();
       try {
-        const result = await client.isGitRepository(tempDir.path);
+        const result = await client.isRepositoryRoot(tempDir.path);
         expect(result).toBe(false);
       } finally {
         await tempDir.cleanup();
@@ -54,7 +64,7 @@ describe("SimpleGitClient", () => {
     it("throws GitError for non-existent path", async () => {
       const nonExistentPath = path.join(repoPath, "non-existent");
 
-      await expect(client.isGitRepository(nonExistentPath)).rejects.toThrow(GitError);
+      await expect(client.isRepositoryRoot(nonExistentPath)).rejects.toThrow(GitError);
     });
   });
 

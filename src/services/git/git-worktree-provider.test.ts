@@ -18,7 +18,7 @@ import { createMockLogger } from "../logging/logging.test-utils";
  */
 function createMockGitClient(overrides: Partial<IGitClient> = {}): IGitClient {
   return {
-    isGitRepository: vi.fn().mockResolvedValue(true),
+    isRepositoryRoot: vi.fn().mockResolvedValue(true),
     listWorktrees: vi.fn().mockResolvedValue([]),
     addWorktree: vi.fn().mockResolvedValue(undefined),
     removeWorktree: vi.fn().mockResolvedValue(undefined),
@@ -87,9 +87,9 @@ describe("GitWorktreeProvider", () => {
       ).rejects.toThrow(WorkspaceError);
     });
 
-    it("throws WorkspaceError when path is not a git repository", async () => {
+    it("throws WorkspaceError when path is not a git repository root", async () => {
       const mockClient = createMockGitClient({
-        isGitRepository: vi.fn().mockResolvedValue(false),
+        isRepositoryRoot: vi.fn().mockResolvedValue(false),
       });
 
       await expect(
@@ -99,7 +99,7 @@ describe("GitWorktreeProvider", () => {
 
     it("throws WorkspaceError when git client throws", async () => {
       const mockClient = createMockGitClient({
-        isGitRepository: vi.fn().mockRejectedValue(new Error("Path does not exist")),
+        isRepositoryRoot: vi.fn().mockRejectedValue(new Error("Path does not exist")),
       });
 
       await expect(
