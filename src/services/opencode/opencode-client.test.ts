@@ -21,7 +21,7 @@ import {
   type SdkClientFactory,
 } from "./sdk-test-utils";
 import type { OpencodeClient, SessionStatus as SdkSessionStatus, Session } from "@opencode-ai/sdk";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 
 describe("OpenCodeClient", () => {
   let client: OpenCodeClient;
@@ -47,7 +47,7 @@ describe("OpenCodeClient", () => {
    * Helper to create a client with mock SDK.
    */
   function createClient(port = 8080, customFactory?: SdkClientFactory): OpenCodeClient {
-    return new OpenCodeClient(port, createSilentLogger(), customFactory ?? mockFactory);
+    return new OpenCodeClient(port, SILENT_LOGGER, customFactory ?? mockFactory);
   }
 
   /**
@@ -1553,7 +1553,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1584,7 +1584,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1604,7 +1604,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1619,7 +1619,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1635,7 +1635,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1663,7 +1663,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1681,7 +1681,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 
@@ -1697,7 +1697,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       const unsubscribe = client.onPermissionEvent(listener);
 
@@ -1718,7 +1718,7 @@ describe("Permission Event Emission", () => {
       mockFactory = createMockSdkFactory(mockSdk);
 
       const listener = vi.fn();
-      client = new OpenCodeClient(8080, createSilentLogger(), mockFactory);
+      client = new OpenCodeClient(8080, SILENT_LOGGER, mockFactory);
       await client.fetchRootSessions();
       client.onPermissionEvent(listener);
 

@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { VscodeSetupService } from "./vscode-setup-service";
 import { DefaultFileSystemLayer } from "../platform/filesystem";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
 import {
   type SetupMarker,
@@ -123,7 +123,7 @@ describe("VscodeSetupService Integration", () => {
 
   beforeEach(async () => {
     tempDir = await createTestDir();
-    fsLayer = new DefaultFileSystemLayer(createSilentLogger());
+    fsLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
 
     // Set up mock paths pointing to our temp directory
     mockPaths = {
@@ -430,8 +430,7 @@ describe("VscodeSetupService Integration", () => {
   describe.skip("Network-dependent tests (manual only)", () => {
     it("extension install with real code-server", async () => {
       const { ExecaProcessRunner } = await import("../platform/process");
-      const testLogger = createSilentLogger();
-      const realProcessRunner = new ExecaProcessRunner(testLogger);
+      const realProcessRunner = new ExecaProcessRunner(SILENT_LOGGER);
 
       const service = new VscodeSetupService(realProcessRunner, testPathProvider, fsLayer);
       const preflight = createFullSetupPreflightResult();

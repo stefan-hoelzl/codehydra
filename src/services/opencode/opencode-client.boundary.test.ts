@@ -16,7 +16,7 @@ import { createMockLlmServer, type MockLlmServer } from "../../test/fixtures/moc
 import { startOpencode, type OpencodeProcess } from "./boundary-test-utils";
 import { waitForPort, CI_TIMEOUT_MS } from "../platform/network.test-utils";
 import { createTestGitRepo, delay } from "../test-utils";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import { DefaultPathProvider } from "../platform/path-provider";
 import { NodePlatformInfo } from "../../main/platform-info";
 import { createMockBuildInfo } from "../platform/build-info.test-utils";
@@ -67,8 +67,8 @@ describe("OpenCodeClient boundary tests", () => {
 
     // Find a free port for opencode (use a high port range to avoid conflicts)
     const { DefaultNetworkLayer } = await import("../platform/network");
-    const { createSilentLogger } = await import("../logging");
-    const networkLayer = new DefaultNetworkLayer(createSilentLogger());
+    const { SILENT_LOGGER: silentLogger } = await import("../logging");
+    const networkLayer = new DefaultNetworkLayer(silentLogger);
     opencodePort = await networkLayer.findFreePort();
 
     // Start opencode with mock LLM config
@@ -195,7 +195,7 @@ describe("OpenCodeClient boundary tests", () => {
 
   describe("Phase 2: HTTP API Tests", () => {
     it("fetchRootSessions returns sessions from real server", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Create a session first via SDK
       await sdk!.session.create({ body: {} });
@@ -212,7 +212,7 @@ describe("OpenCodeClient boundary tests", () => {
     });
 
     it("getStatus returns idle when no active sessions", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       const result = await client.getStatus();
 
@@ -226,7 +226,7 @@ describe("OpenCodeClient boundary tests", () => {
       // Set to slow-stream mode for extended busy state
       mockLlm.setMode("slow-stream");
 
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Create session and start prompt
       const session = await sdk!.session.create({ body: {} });
@@ -255,7 +255,7 @@ describe("OpenCodeClient boundary tests", () => {
     });
 
     it("handles empty session list", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Make sure no sessions exist (cleanup should have handled this)
       const result = await client.fetchRootSessions();
@@ -270,7 +270,7 @@ describe("OpenCodeClient boundary tests", () => {
 
   describe("Phase 3: SSE Connection Tests", () => {
     it("connect establishes SSE connection", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Should not throw
       await expect(client.connect()).resolves.toBeUndefined();
@@ -284,7 +284,7 @@ describe("OpenCodeClient boundary tests", () => {
     });
 
     it("disconnect cleanly terminates connection", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
       await client.connect();
 
       // Should not throw
@@ -296,7 +296,7 @@ describe("OpenCodeClient boundary tests", () => {
 
     it("connect times out when server is unresponsive", async () => {
       // Create client pointing to non-existent port
-      const badClient = new OpenCodeClient(59998, createSilentLogger());
+      const badClient = new OpenCodeClient(59998, SILENT_LOGGER);
 
       // The SDK may either:
       // 1. Throw immediately if the connection fails fast
@@ -318,7 +318,7 @@ describe("OpenCodeClient boundary tests", () => {
     it("receives status events during prompt processing", async () => {
       mockLlm.setMode("instant");
 
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Fetch root sessions first to track them
       await client.fetchRootSessions();
@@ -355,7 +355,7 @@ describe("OpenCodeClient boundary tests", () => {
       async () => {
         mockLlm.setMode("rate-limit");
 
-        client = new OpenCodeClient(opencodePort, createSilentLogger());
+        client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
         await client.fetchRootSessions();
         await client.connect();
 
@@ -393,7 +393,7 @@ describe("OpenCodeClient boundary tests", () => {
 
   describe("Phase 5: Root vs Child Session Filtering", () => {
     it("root sessions are tracked correctly", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Create a root session
       const session = await sdk!.session.create({ body: {} });
@@ -409,7 +409,7 @@ describe("OpenCodeClient boundary tests", () => {
     });
 
     it("non-existent sessions return false for isRootSession", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Fetch sessions first to initialize
       await client.fetchRootSessions();
@@ -423,7 +423,7 @@ describe("OpenCodeClient boundary tests", () => {
       // filtered from the root session set. We create a child session directly via SDK
       // since the task tool mechanism varies by OpenCode version.
 
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Track status changes - should only reflect root session
       const statuses: ClientStatus[] = [];
@@ -476,7 +476,7 @@ describe("OpenCodeClient boundary tests", () => {
     });
 
     it("session.created event for root session triggers tracking", async () => {
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Connect first to receive SSE events
       await client.connect();
@@ -511,7 +511,7 @@ describe("OpenCodeClient boundary tests", () => {
       // SSE event does not add it to the root session set. We create a child session
       // directly via SDK since the task tool mechanism varies by OpenCode version.
 
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       await client.fetchRootSessions();
       await client.connect();
@@ -577,7 +577,7 @@ describe("OpenCodeClient boundary tests", () => {
     it("detects tool calls complete without permission with bash=allow", async () => {
       mockLlm.setMode("tool-call");
 
-      client = new OpenCodeClient(opencodePort, createSilentLogger());
+      client = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Track status changes
       const statuses: ClientStatus[] = [];
@@ -662,8 +662,8 @@ describe("OpenCodeClient permission flow boundary tests", () => {
 
     // Find a free port for opencode
     const { DefaultNetworkLayer } = await import("../platform/network");
-    const { createSilentLogger } = await import("../logging");
-    const networkLayer = new DefaultNetworkLayer(createSilentLogger());
+    const { SILENT_LOGGER: silentLogger } = await import("../logging");
+    const networkLayer = new DefaultNetworkLayer(silentLogger);
     opencodePort = await networkLayer.findFreePort();
 
     // Start opencode with bash="ask" config for permission tests
@@ -766,7 +766,7 @@ describe("OpenCodeClient permission flow boundary tests", () => {
     it("permission approval allows tool execution", async () => {
       mockLlm.setMode("tool-call");
 
-      permissionClient = new OpenCodeClient(opencodePort, createSilentLogger());
+      permissionClient = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Track permission events
       type PermissionEvent =
@@ -869,7 +869,7 @@ describe("OpenCodeClient permission flow boundary tests", () => {
     it("permission rejection prevents tool execution", async () => {
       mockLlm.setMode("tool-call");
 
-      permissionClient = new OpenCodeClient(opencodePort, createSilentLogger());
+      permissionClient = new OpenCodeClient(opencodePort, SILENT_LOGGER);
 
       // Track permission events
       type PermissionEvent =

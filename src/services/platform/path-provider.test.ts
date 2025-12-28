@@ -25,9 +25,6 @@ describe("createMockPathProvider", () => {
       /[/\\]test[/\\]app-data[/\\]vscode[/\\]user-data$/
     );
     expect(pathProvider.setupMarkerPath).toMatch(/[/\\]test[/\\]app-data[/\\]\.setup-completed$/);
-    expect(pathProvider.legacySetupMarkerPath).toMatch(
-      /[/\\]test[/\\]app-data[/\\]vscode[/\\]\.setup-completed$/
-    );
     expect(pathProvider.electronDataDir).toMatch(/[/\\]test[/\\]app-data[/\\]electron$/);
     expect(pathProvider.vscodeAssetsDir).toMatch(/[/\\]mock[/\\]assets$/);
     expect(pathProvider.appIconPath).toMatch(/[/\\]test[/\\]resources[/\\]icon\.png$/);
@@ -75,7 +72,6 @@ describe("createMockPathProvider", () => {
       vscodeExtensionsDir: "/d",
       vscodeUserDataDir: "/e",
       setupMarkerPath: "/f",
-      legacySetupMarkerPath: "/f-legacy",
       electronDataDir: "/g",
       vscodeAssetsDir: "/h",
       appIconPath: "/h/icon.png",
@@ -93,7 +89,6 @@ describe("createMockPathProvider", () => {
     expect(pathProvider.vscodeExtensionsDir).toBe("/d");
     expect(pathProvider.vscodeUserDataDir).toBe("/e");
     expect(pathProvider.setupMarkerPath).toBe("/f");
-    expect(pathProvider.legacySetupMarkerPath).toBe("/f-legacy");
     expect(pathProvider.electronDataDir).toBe("/g");
     expect(pathProvider.vscodeAssetsDir).toBe("/h");
     expect(pathProvider.appIconPath).toBe("/h/icon.png");
@@ -136,7 +131,6 @@ describe("createMockPathProvider", () => {
     expect(typeof pathProvider.vscodeExtensionsDir).toBe("string");
     expect(typeof pathProvider.vscodeUserDataDir).toBe("string");
     expect(typeof pathProvider.setupMarkerPath).toBe("string");
-    expect(typeof pathProvider.legacySetupMarkerPath).toBe("string");
     expect(typeof pathProvider.electronDataDir).toBe("string");
     expect(typeof pathProvider.vscodeAssetsDir).toBe("string");
     expect(typeof pathProvider.appIconPath).toBe("string");
@@ -165,9 +159,6 @@ describe("DefaultPathProvider", () => {
       expect(pathProvider.vscodeExtensionsDir).toMatch(/app-data[/\\]vscode[/\\]extensions$/);
       expect(pathProvider.vscodeUserDataDir).toMatch(/app-data[/\\]vscode[/\\]user-data$/);
       expect(pathProvider.setupMarkerPath).toMatch(/app-data[/\\]\.setup-completed$/);
-      expect(pathProvider.legacySetupMarkerPath).toMatch(
-        /app-data[/\\]vscode[/\\]\.setup-completed$/
-      );
       expect(pathProvider.electronDataDir).toMatch(/app-data[/\\]electron$/);
       expect(pathProvider.appIconPath).toMatch(/resources[/\\]icon\.png$/);
       expect(pathProvider.binDir).toMatch(/app-data[/\\]bin$/);
@@ -258,7 +249,6 @@ describe("DefaultPathProvider", () => {
       expect(pathProvider.vscodeExtensionsDir).toBe(join(dataRoot, "vscode", "extensions"));
       expect(pathProvider.vscodeUserDataDir).toBe(join(dataRoot, "vscode", "user-data"));
       expect(pathProvider.setupMarkerPath).toBe(join(dataRoot, ".setup-completed"));
-      expect(pathProvider.legacySetupMarkerPath).toBe(join(dataRoot, "vscode", ".setup-completed"));
       expect(pathProvider.electronDataDir).toBe(join(dataRoot, "electron"));
       expect(pathProvider.vscodeAssetsDir).toBe(
         join("/opt/codehydra/resources/app.asar", "out", "main", "assets")
@@ -356,7 +346,6 @@ describe("DefaultPathProvider", () => {
       expect(pathProvider.vscodeExtensionsDir).toBe(join(dataRoot, "vscode", "extensions"));
       expect(pathProvider.vscodeUserDataDir).toBe(join(dataRoot, "vscode", "user-data"));
       expect(pathProvider.setupMarkerPath).toBe(join(dataRoot, ".setup-completed"));
-      expect(pathProvider.legacySetupMarkerPath).toBe(join(dataRoot, "vscode", ".setup-completed"));
       expect(pathProvider.electronDataDir).toBe(join(dataRoot, "electron"));
     });
 

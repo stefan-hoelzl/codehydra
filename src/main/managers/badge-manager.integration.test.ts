@@ -25,7 +25,7 @@ vi.mock("electron", () => ({
 
 import { BadgeManager } from "./badge-manager";
 import { createMockPlatformInfo } from "../../services/platform/platform-info.test-utils";
-import { createSilentLogger } from "../../services/logging";
+import { SILENT_LOGGER } from "../../services/logging";
 import {
   createMockElectronAppApi,
   createMockWindowManagerForBadge as createMockWindowManager,
@@ -81,7 +81,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up all idle workspaces
@@ -108,7 +108,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up all busy workspaces
@@ -135,7 +135,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up mixed workspaces
@@ -162,7 +162,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up: one idle workspace, one with mixed status
@@ -189,7 +189,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up: only "none" status workspaces
@@ -218,7 +218,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Connect to status manager
@@ -246,7 +246,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Start with all busy
@@ -283,7 +283,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Start with mixed
@@ -322,7 +322,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Start with busy workspaces
@@ -356,7 +356,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up mixed workspaces
@@ -384,7 +384,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set up all busy workspaces
@@ -414,7 +414,7 @@ describe("BadgeManager Integration", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Start with busy workspaces

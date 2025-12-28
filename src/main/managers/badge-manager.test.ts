@@ -26,7 +26,7 @@ vi.mock("electron", () => ({
 
 import { BadgeManager } from "./badge-manager";
 import { createMockPlatformInfo } from "../../services/platform/platform-info.test-utils";
-import { createSilentLogger } from "../../services/logging";
+import { SILENT_LOGGER } from "../../services/logging";
 import {
   createMockElectronAppApi,
   createMockWindowManagerForBadge as createMockWindowManager,
@@ -48,7 +48,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -65,7 +65,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("mixed");
@@ -82,7 +82,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("none");
@@ -101,7 +101,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -121,7 +121,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("mixed");
@@ -141,7 +141,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("none");
@@ -163,7 +163,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -180,7 +180,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("mixed");
@@ -197,7 +197,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("none");
@@ -216,7 +216,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -235,7 +235,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -255,7 +255,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -276,7 +276,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Update with same state multiple times
@@ -303,7 +303,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");
@@ -324,7 +324,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("mixed");
@@ -352,7 +352,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("mixed");
@@ -387,7 +387,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("mixed");
@@ -424,7 +424,7 @@ describe("BadgeManager", () => {
         platformInfo,
         appApi,
         windowManager as unknown as WindowManager,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBadge("all-working");

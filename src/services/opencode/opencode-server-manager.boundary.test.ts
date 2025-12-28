@@ -13,7 +13,7 @@ import { DefaultNetworkLayer } from "../platform/network";
 import { DefaultPathProvider } from "../platform/path-provider";
 import { NodePlatformInfo } from "../../main/platform-info";
 import { createMockBuildInfo } from "../platform/build-info.test-utils";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -44,7 +44,6 @@ describe("OpenCodeServerManager Boundary Tests", () => {
     vscodeExtensionsDir: string;
     vscodeUserDataDir: string;
     setupMarkerPath: string;
-    legacySetupMarkerPath: string;
     electronDataDir: string;
     vscodeAssetsDir: string;
     appIconPath: string;
@@ -86,7 +85,6 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       vscodeExtensionsDir: realPathProvider.vscodeExtensionsDir,
       vscodeUserDataDir: realPathProvider.vscodeUserDataDir,
       setupMarkerPath: realPathProvider.setupMarkerPath,
-      legacySetupMarkerPath: realPathProvider.legacySetupMarkerPath,
       electronDataDir: realPathProvider.electronDataDir,
       vscodeAssetsDir: realPathProvider.vscodeAssetsDir,
       appIconPath: realPathProvider.appIconPath,
@@ -101,8 +99,8 @@ describe("OpenCodeServerManager Boundary Tests", () => {
     };
 
     // Create dependencies using silent loggers (no Electron dependency)
-    networkLayer = new DefaultNetworkLayer(createSilentLogger());
-    processRunner = new ExecaProcessRunner(createSilentLogger());
+    networkLayer = new DefaultNetworkLayer(SILENT_LOGGER);
+    processRunner = new ExecaProcessRunner(SILENT_LOGGER);
 
     // Check if opencode is available
     skipTests = !isOpencodeAvailable(realPathProvider);
@@ -136,7 +134,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       networkLayer,
       networkLayer,
       pathProvider,
-      createSilentLogger(),
+      SILENT_LOGGER,
       { healthCheckTimeoutMs: CI_TIMEOUT_MS }
     );
 
@@ -155,7 +153,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       networkLayer,
       networkLayer,
       pathProvider,
-      createSilentLogger(),
+      SILENT_LOGGER,
       { healthCheckTimeoutMs: CI_TIMEOUT_MS }
     );
 
@@ -173,7 +171,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       networkLayer,
       networkLayer,
       pathProvider,
-      createSilentLogger(),
+      SILENT_LOGGER,
       { healthCheckTimeoutMs: CI_TIMEOUT_MS }
     );
 
@@ -208,7 +206,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       networkLayer,
       networkLayer,
       pathProvider,
-      createSilentLogger(),
+      SILENT_LOGGER,
       { healthCheckTimeoutMs: CI_TIMEOUT_MS }
     );
 
@@ -231,7 +229,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
       networkLayer,
       networkLayer,
       pathProvider,
-      createSilentLogger(),
+      SILENT_LOGGER,
       { healthCheckTimeoutMs: CI_TIMEOUT_MS }
     );
 

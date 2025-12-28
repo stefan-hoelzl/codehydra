@@ -38,8 +38,8 @@ import type { AppState } from "../../app-state";
 import type { IViewManager } from "../../managers/view-manager.interface";
 import type { Logger } from "../../../services/logging/index";
 import { ApiIpcChannels } from "../../../shared/ipc";
-import { createSilentLogger } from "../../../services/logging";
-import { getErrorMessage } from "../../../services/errors";
+import { SILENT_LOGGER } from "../../../services/logging";
+import { getErrorMessage } from "../../../shared/error-utils";
 import {
   generateProjectId,
   extractWorkspaceName,
@@ -127,7 +127,7 @@ export class CoreModule implements IApiModule {
     private readonly api: IApiRegistry,
     private readonly deps: CoreModuleDeps
   ) {
-    this.logger = deps.logger ?? createSilentLogger();
+    this.logger = deps.logger ?? SILENT_LOGGER;
     this.registerMethods();
   }
 

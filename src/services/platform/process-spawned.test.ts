@@ -13,7 +13,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import { ExecaSpawnedProcess } from "./process";
-import { createSilentLogger, type Logger } from "../logging";
+import { SILENT_LOGGER, type Logger } from "../logging";
 
 /** Create a long-running Node.js process (cross-platform alternative to `sleep`) */
 const longRunningScript = "setTimeout(() => {}, 10000)";
@@ -63,7 +63,7 @@ describe("ExecaSpawnedProcess", () => {
 
   // Initialize shared dependencies before each test
   beforeEach(() => {
-    logger = createSilentLogger();
+    logger = SILENT_LOGGER;
   });
 
   afterEach(async () => {

@@ -14,7 +14,7 @@ import {
   SHUTDOWN_DISCONNECT_TIMEOUT_MS,
 } from "../../shared/plugin-protocol";
 import { createMockPortManager } from "../platform/network.test-utils";
-import { createSilentLogger } from "../logging/logging.test-utils";
+import { SILENT_LOGGER } from "../logging/logging.test-utils";
 
 describe("PluginServer", () => {
   describe("COMMAND_TIMEOUT_MS constant", () => {
@@ -61,7 +61,7 @@ describe("PluginServer", () => {
 
     beforeEach(() => {
       mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
-      server = new PluginServer(mockPortManager, createSilentLogger());
+      server = new PluginServer(mockPortManager, SILENT_LOGGER);
     });
 
     afterEach(async () => {
@@ -115,7 +115,7 @@ describe("PluginServer", () => {
   describe("isDevelopment option", () => {
     it("accepts isDevelopment: true option", () => {
       const mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
-      const server = new PluginServer(mockPortManager, createSilentLogger(), {
+      const server = new PluginServer(mockPortManager, SILENT_LOGGER, {
         isDevelopment: true,
       });
 
@@ -125,7 +125,7 @@ describe("PluginServer", () => {
 
     it("accepts isDevelopment: false option", () => {
       const mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
-      const server = new PluginServer(mockPortManager, createSilentLogger(), {
+      const server = new PluginServer(mockPortManager, SILENT_LOGGER, {
         isDevelopment: false,
       });
 
@@ -136,7 +136,7 @@ describe("PluginServer", () => {
     it("defaults to isDevelopment: false when not specified", () => {
       const mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
       // No isDevelopment option provided
-      const server = new PluginServer(mockPortManager, createSilentLogger());
+      const server = new PluginServer(mockPortManager, SILENT_LOGGER);
 
       // Should not throw - defaults to false internally
       expect(server).toBeDefined();
@@ -155,7 +155,7 @@ describe("PluginServer", () => {
 
     beforeEach(() => {
       mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
-      server = new PluginServer(mockPortManager, createSilentLogger());
+      server = new PluginServer(mockPortManager, SILENT_LOGGER);
     });
 
     afterEach(async () => {
@@ -230,7 +230,7 @@ describe("PluginServer", () => {
 
     beforeEach(() => {
       mockPortManager = createMockPortManager({ findFreePort: { port: 3000 } });
-      server = new PluginServer(mockPortManager, createSilentLogger());
+      server = new PluginServer(mockPortManager, SILENT_LOGGER);
     });
 
     afterEach(async () => {

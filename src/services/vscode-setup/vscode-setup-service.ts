@@ -131,24 +131,15 @@ export class VscodeSetupService implements IVscodeSetup {
         }
       }
 
-      // Check marker file (check new location, then legacy location)
+      // Check marker file
       const marker = await this.readMarker();
-      const legacyMarker = await this.readLegacyMarker();
-
-      // If no valid marker exists, or marker has old format, setup is needed
-      // The new format uses 'schemaVersion' instead of 'version'
-      const hasValidMarker =
-        marker !== null && "schemaVersion" in marker && marker.schemaVersion === 1;
-
-      // Legacy marker (old 'version' field or old location) triggers re-setup
-      const hasLegacyMarker = legacyMarker !== null || (marker !== null && !hasValidMarker);
+      const hasValidMarker = marker !== null && marker.schemaVersion === 1;
 
       const needsSetup =
         missingBinaries.length > 0 ||
         missingExtensions.length > 0 ||
         outdatedExtensions.length > 0 ||
-        !hasValidMarker ||
-        hasLegacyMarker;
+        !hasValidMarker;
 
       this.logger?.debug("Preflight completed", {
         needsSetup,
@@ -156,7 +147,6 @@ export class VscodeSetupService implements IVscodeSetup {
         missingExtensions: missingExtensions.join(",") || "none",
         outdatedExtensions: outdatedExtensions.join(",") || "none",
         hasValidMarker,
-        hasLegacyMarker,
       });
 
       return {
@@ -659,31 +649,6 @@ export class VscodeSetupService implements IVscodeSetup {
       // Check for old format (version) - return it with version as schemaVersion for compatibility
       if (typeof obj.version === "number" && typeof obj.completedAt === "string") {
         return { schemaVersion: 0, completedAt: obj.completedAt }; // schemaVersion 0 indicates legacy
-      }
-      return null;
-    } catch {
-      // File doesn't exist or is invalid
-      return null;
-    }
-  }
-
-  /**
-   * Read and parse the setup marker file from the legacy location.
-   * @returns Parsed marker or null if missing/invalid
-   */
-  private async readLegacyMarker(): Promise<SetupMarker | null> {
-    try {
-      const content = await this.fs.readFile(this.pathProvider.legacySetupMarkerPath);
-      const marker = JSON.parse(content) as unknown;
-      if (typeof marker !== "object" || marker === null) {
-        return null;
-      }
-      const obj = marker as Record<string, unknown>;
-      if (typeof obj.version === "number" && typeof obj.completedAt === "string") {
-        return { schemaVersion: 0, completedAt: obj.completedAt }; // Legacy format
-      }
-      if (typeof obj.schemaVersion === "number" && typeof obj.completedAt === "string") {
-        return { schemaVersion: obj.schemaVersion, completedAt: obj.completedAt };
       }
       return null;
     } catch {

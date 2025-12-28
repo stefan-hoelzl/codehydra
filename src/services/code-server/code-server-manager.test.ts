@@ -10,9 +10,9 @@ import { CodeServerManager, urlForFolder } from "./code-server-manager";
 import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
 import { createMockHttpClient, createMockPortManager } from "../platform/network.test-utils";
 import type { HttpClient, PortManager, HttpRequestOptions } from "../platform/network";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 
-const testLogger = createSilentLogger();
+const testLogger = SILENT_LOGGER;
 
 describe("urlForFolder", () => {
   it("generates correct URL with folder path", () => {

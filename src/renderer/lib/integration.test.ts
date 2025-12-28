@@ -150,6 +150,7 @@ import App from "../App.svelte";
 import * as projectsStore from "$lib/stores/projects.svelte.js";
 import * as dialogsStore from "$lib/stores/dialogs.svelte.js";
 import * as shortcutsStore from "$lib/stores/shortcuts.svelte.js";
+import * as uiModeStore from "$lib/stores/ui-mode.svelte.js";
 import * as agentStatusStore from "$lib/stores/agent-status.svelte.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
@@ -845,7 +846,7 @@ describe("Integration tests", () => {
 
       // Step 3: Verify store state changed
       // Note: shortcutsStore re-exports from ui-mode store, so this tests the mock's getter
-      expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+      expect(uiModeStore.shortcutModeActive.value).toBe(true);
 
       // Step 4: Main process sends mode-changed when Alt is released
       mockUiModeStore.setModeFromMain.mockClear();
@@ -855,7 +856,7 @@ describe("Integration tests", () => {
       expect(mockUiModeStore.setModeFromMain).toHaveBeenCalledWith("workspace");
 
       // Step 6: Verify store state changed back
-      expect(shortcutsStore.shortcutModeActive.value).toBe(false);
+      expect(uiModeStore.shortcutModeActive.value).toBe(false);
     });
   });
 
@@ -893,7 +894,7 @@ describe("Integration tests", () => {
       // Step 1: Activate shortcut mode
       fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+        expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Step 2: Fire shortcut key event (keys now come from main process via onShortcut)
@@ -909,7 +910,7 @@ describe("Integration tests", () => {
       });
 
       // Step 4: Verify overlay is still active
-      expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+      expect(uiModeStore.shortcutModeActive.value).toBe(true);
 
       // Step 5: Main process sends mode-changed when Alt is released
       // (Alt release handling moved from renderer to main process in Stage 2)
@@ -917,7 +918,7 @@ describe("Integration tests", () => {
 
       // Step 6: Verify overlay hides
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(false);
+        expect(uiModeStore.shortcutModeActive.value).toBe(false);
       });
     });
 
@@ -941,7 +942,7 @@ describe("Integration tests", () => {
       // Activate shortcut mode
       fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+        expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Fire shortcut key events (keys now come from main process via onShortcut)
@@ -967,7 +968,7 @@ describe("Integration tests", () => {
       });
 
       // Verify overlay is still visible
-      expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+      expect(uiModeStore.shortcutModeActive.value).toBe(true);
     });
 
     it("should-open-dialog-and-hide-overlay: Alt+X → Enter → dialog opens, overlay hides", async () => {
@@ -998,7 +999,7 @@ describe("Integration tests", () => {
       // Activate shortcut mode
       fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+        expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Fire Enter shortcut key to open create dialog
@@ -1011,7 +1012,7 @@ describe("Integration tests", () => {
       });
 
       // Verify shortcut mode deactivated
-      expect(shortcutsStore.shortcutModeActive.value).toBe(false);
+      expect(uiModeStore.shortcutModeActive.value).toBe(false);
     });
 
     it("should-wrap-navigation-at-boundaries: Alt+X → at last workspace → ↓ → wraps to first", async () => {
@@ -1064,14 +1065,14 @@ describe("Integration tests", () => {
       // Activate shortcut mode
       fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+        expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Fire O shortcut key
       fireV2Event("shortcut:key", "o");
 
       // Verify shortcut mode deactivated
-      expect(shortcutsStore.shortcutModeActive.value).toBe(false);
+      expect(uiModeStore.shortcutModeActive.value).toBe(false);
 
       // Verify folder picker called
       await waitFor(() => {
@@ -1091,7 +1092,7 @@ describe("Integration tests", () => {
       // Activate shortcut mode
       fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+        expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Verify navigate and jump hints are hidden
@@ -1129,7 +1130,7 @@ describe("Integration tests", () => {
       // Activate shortcut mode
       fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
-        expect(shortcutsStore.shortcutModeActive.value).toBe(true);
+        expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Navigate hints should be hidden (single workspace)

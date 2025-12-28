@@ -6,7 +6,7 @@
 import { BaseWindow, nativeImage, type NativeImage } from "electron";
 import type { Logger } from "../../services/logging";
 import type { PlatformInfo } from "../../services/platform/platform-info";
-import { getErrorMessage } from "../../services/errors";
+import { getErrorMessage } from "../../shared/error-utils";
 
 /**
  * Function to unsubscribe from an event.

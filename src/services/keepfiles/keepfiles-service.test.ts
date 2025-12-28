@@ -10,7 +10,7 @@ import { KeepFilesService } from "./keepfiles-service";
 import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
 import { FileSystemError } from "../errors";
 import type { FileSystemLayer } from "../platform/filesystem";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 
 /** Normalize path separators for cross-platform mock comparisons */
 const normalizePath = (p: string) => p.replace(/\\/g, "/");
@@ -24,7 +24,7 @@ describe("KeepFilesService", () => {
             error: new FileSystemError("ENOENT", "/project/.keepfiles", "Not found"),
           },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -41,7 +41,7 @@ describe("KeepFilesService", () => {
           readFile: { content: "" },
           readdir: { entries: [] },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -58,7 +58,7 @@ describe("KeepFilesService", () => {
           readFile: { content: "# This is a comment\n\n# Another comment\n" },
           readdir: { entries: [] },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -71,7 +71,7 @@ describe("KeepFilesService", () => {
           readFile: { content: "  \n\t\n   \t   \n" },
           readdir: { entries: [] },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -89,7 +89,7 @@ describe("KeepFilesService", () => {
           },
           copyTree: { result: { copiedCount: 1, skippedSymlinks: [] } },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -135,7 +135,7 @@ describe("KeepFilesService", () => {
           rm: vi.fn(),
           makeExecutable: vi.fn(),
         };
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace(projectRoot, "/workspace");
 
@@ -158,7 +158,7 @@ describe("KeepFilesService", () => {
           },
           copyTree: { result: { copiedCount: 1, skippedSymlinks: [] } },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -199,7 +199,7 @@ describe("KeepFilesService", () => {
           rm: vi.fn(),
           makeExecutable: vi.fn(),
         };
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace(projectRoot, "/workspace");
 
@@ -235,7 +235,7 @@ describe("KeepFilesService", () => {
           rm: vi.fn(),
           makeExecutable: vi.fn(),
         };
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -266,7 +266,7 @@ describe("KeepFilesService", () => {
           rm: vi.fn(),
           makeExecutable: vi.fn(),
         };
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -289,7 +289,7 @@ describe("KeepFilesService", () => {
           },
           copyTree: { result: { copiedCount: 1, skippedSymlinks: [] } },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
@@ -311,7 +311,7 @@ describe("KeepFilesService", () => {
           },
           copyTree: { result: { copiedCount: 1, skippedSymlinks: [] } },
         });
-        const service = new KeepFilesService(mockFs, createSilentLogger());
+        const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 

@@ -37,8 +37,12 @@
     openRemoveDialog,
     openCloseProjectDialog,
   } from "$lib/stores/dialogs.svelte.js";
-  import { shortcutModeActive } from "$lib/stores/shortcuts.svelte.js";
-  import { setDialogOpen, syncMode, desiredMode } from "$lib/stores/ui-mode.svelte.js";
+  import {
+    shortcutModeActive,
+    setDialogOpen,
+    syncMode,
+    desiredMode,
+  } from "$lib/stores/ui-mode.svelte.js";
   import { updateStatus, setAllStatuses } from "$lib/stores/agent-status.svelte.js";
   import { setupDomainEvents } from "$lib/utils/domain-events";
   import { AgentNotificationService } from "$lib/services/agent-notifications";
@@ -60,7 +64,7 @@
   import type { ProjectId, WorkspaceRef } from "$lib/api";
   import type { AggregatedAgentStatus } from "@shared/ipc";
   import type { Project, WorkspaceStatus, AgentStatus, DeletionProgress } from "@shared/api/types";
-  import { getErrorMessage } from "$lib/utils/error-utils";
+  import { getErrorMessage } from "@shared/error-utils";
 
   const logger = createLogger("ui");
 

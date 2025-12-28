@@ -9,9 +9,9 @@ import { join, delimiter } from "node:path";
 import { CodeServerManager } from "./code-server-manager";
 import { createMockSpawnedProcess } from "../platform/process.test-utils";
 import { createMockHttpClient, createMockPortManager } from "../platform/network.test-utils";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 
-const testLogger = createSilentLogger();
+const testLogger = SILENT_LOGGER;
 
 describe("CodeServerManager Integration", () => {
   let originalEnv: NodeJS.ProcessEnv;

@@ -82,14 +82,13 @@ vi.mock("./deletion.svelte", () => mockDeletionStore);
 
 // Import after mock setup
 import {
-  shortcutModeActive,
-  uiMode,
   handleModeChange,
   handleKeyDown,
   handleWindowBlur,
   handleShortcutKey,
   reset,
 } from "./shortcuts.svelte";
+import { shortcutModeActive, uiMode } from "./ui-mode.svelte";
 
 // Helper to enable shortcut mode via ui:mode-changed event
 function enableShortcutMode(): void {

@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { ExecaSpawnedProcess } from "./process";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import type { Logger } from "../logging";
 import { delay } from "../test-utils";
 
@@ -41,7 +41,7 @@ describe("ExecaSpawnedProcess", () => {
   let execaMock: Mock;
 
   beforeEach(async () => {
-    logger = createSilentLogger();
+    logger = SILENT_LOGGER;
     vi.clearAllMocks();
     // Get the mocked execa function
     const execaModule = await import("execa");

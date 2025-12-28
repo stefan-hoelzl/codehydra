@@ -20,7 +20,7 @@ import type { IViewManager } from "./managers/view-manager.interface";
 import type { Project, ProjectPath, WorkspacePath } from "../shared/ipc";
 import type { AgentStatusManager } from "../services/opencode/agent-status-manager";
 import type { OpenCodeServerManager } from "../services/opencode/opencode-server-manager";
-import { getErrorMessage } from "../services/errors";
+import { getErrorMessage } from "../shared/error-utils";
 
 /**
  * Runtime state for an open project.

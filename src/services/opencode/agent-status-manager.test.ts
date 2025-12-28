@@ -13,7 +13,7 @@ import type { WorkspacePath } from "../../shared/ipc";
 import { createMockSdkClient, createMockSdkFactory, createTestSession } from "./sdk-test-utils";
 import type { SdkClientFactory } from "./opencode-client";
 import type { SessionStatus as SdkSessionStatus } from "@opencode-ai/sdk";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 
 describe("AgentStatusManager", () => {
   let manager: AgentStatusManager;
@@ -26,7 +26,7 @@ describe("AgentStatusManager", () => {
     const mockSdk = createMockSdkClient();
     mockSdkFactory = createMockSdkFactory(mockSdk);
 
-    manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+    manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
   });
 
   afterEach(() => {
@@ -70,7 +70,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: {},
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       const listener = vi.fn();
       manager.onStatusChanged(listener);
@@ -100,7 +100,7 @@ describe("AgentStatusManager", () => {
       // Simulate connection failure by making event.subscribe throw
       mockSdk.event.subscribe = vi.fn().mockRejectedValue(new Error("Connection refused"));
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       // Should not throw, but should handle gracefully
       await expect(
@@ -187,7 +187,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "idle" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
 
@@ -203,7 +203,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "busy" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
 
@@ -225,7 +225,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": retryStatus },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
 
@@ -242,7 +242,7 @@ describe("AgentStatusManager", () => {
         sessionStatuses: { "ses-1": { type: "idle" as const } },
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
-      manager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       // Initialize workspace (triggers first status fetch)
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);

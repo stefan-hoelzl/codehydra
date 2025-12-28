@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ProjectStore } from "./project-store";
 import { DefaultFileSystemLayer } from "../platform/filesystem";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import { createTempDir } from "../test-utils";
 import path from "path";
 
@@ -19,7 +19,7 @@ describe("ProjectStore integration", () => {
   beforeEach(async () => {
     tempDir = await createTempDir();
     projectsDir = path.join(tempDir.path, "projects");
-    const fs = new DefaultFileSystemLayer(createSilentLogger());
+    const fs = new DefaultFileSystemLayer(SILENT_LOGGER);
     store = new ProjectStore(projectsDir, fs);
   });
 

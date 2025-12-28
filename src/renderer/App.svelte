@@ -22,7 +22,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as api from "$lib/api";
-  import { getErrorMessage } from "$lib/utils/error-utils";
+  import { getErrorMessage } from "@shared/error-utils";
   import {
     handleModeChange,
     handleKeyDown,

@@ -160,23 +160,6 @@ export function createToolCallCompletion(
 }
 
 /**
- * Creates sub-agent trigger response (legacy method).
- *
- * NOTE: Sub-agents are actually triggered via the `task` tool call, not `@mentions`.
- * Use `createToolCallCompletion("task", { description, prompt })` instead.
- *
- * This function is kept for backward compatibility but produces incorrect output.
- *
- * @param agentName - Name of the agent (unused - task tool doesn't use agent names)
- * @param prompt - Prompt text (included in response text, but won't trigger sub-agent)
- * @returns ChatCompletion with text content (won't create child session)
- * @deprecated Use createToolCallCompletion("task", {...}) instead
- */
-export function createSubAgentCompletion(agentName: string, prompt: string): ChatCompletion {
-  return createInstantCompletion(`@${agentName} ${prompt}`);
-}
-
-/**
  * Creates rate limit error response.
  *
  * @returns Rate limit response object with status, headers, and body

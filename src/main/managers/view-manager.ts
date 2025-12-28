@@ -14,7 +14,7 @@ import { ShortcutController } from "../shortcut-controller";
 import { projectDirName } from "../../services/platform/paths";
 import type { WorkspaceName } from "../../shared/api/types";
 import type { Logger } from "../../services/logging";
-import { getErrorMessage } from "../../services/errors";
+import { getErrorMessage } from "../../shared/error-utils";
 
 /**
  * Sidebar minimized width in pixels.

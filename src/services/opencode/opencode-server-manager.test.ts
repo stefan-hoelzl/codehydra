@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OpenCodeServerManager } from "./opencode-server-manager";
 import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import type { MockSpawnedProcess, MockProcessRunner } from "../platform/process.test-utils";
 import type { PortManager, HttpClient } from "../platform/network";
 import type { PathProvider } from "../platform/path-provider";
@@ -54,7 +54,6 @@ function createTestPathProvider(): PathProvider {
     vscodeExtensionsDir: "/test/app-data/vscode/extensions",
     vscodeUserDataDir: "/test/app-data/vscode/user-data",
     setupMarkerPath: "/test/app-data/.setup-completed",
-    legacySetupMarkerPath: "/test/app-data/vscode/.setup-completed",
     electronDataDir: "/test/app-data/electron",
     vscodeAssetsDir: "/mock/assets",
     appIconPath: "/test/resources/icon.png",
@@ -99,7 +98,7 @@ describe("OpenCodeServerManager", () => {
       mockPortManager,
       mockHttpClient,
       mockPathProvider,
-      createSilentLogger()
+      SILENT_LOGGER
     );
   });
 
@@ -154,7 +153,7 @@ describe("OpenCodeServerManager", () => {
         mockPortManager,
         mockHttpClient,
         mockPathProvider,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       await expect(manager.startServer("/workspace/feature-a")).rejects.toThrow();
@@ -171,7 +170,7 @@ describe("OpenCodeServerManager", () => {
         mockPortManager,
         mockHttpClient,
         mockPathProvider,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       try {
@@ -192,7 +191,7 @@ describe("OpenCodeServerManager", () => {
         mockPortManager,
         mockHttpClient,
         mockPathProvider,
-        createSilentLogger(),
+        SILENT_LOGGER,
         { healthCheckTimeoutMs: 100 } // Short timeout for testing
       );
 
@@ -277,7 +276,7 @@ describe("OpenCodeServerManager", () => {
         mockPortManager,
         mockHttpClient,
         mockPathProvider,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       await manager.startServer("/workspace/feature-a");
@@ -317,7 +316,7 @@ describe("OpenCodeServerManager", () => {
         mockPortManager,
         mockHttpClient,
         mockPathProvider,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       await manager.startServer("/workspace/feature-a");
@@ -334,7 +333,7 @@ describe("OpenCodeServerManager", () => {
     it("logs warning when kill fails", async () => {
       // Create a mock logger to verify logging
       const loggerWithSpy = {
-        ...createSilentLogger(),
+        ...SILENT_LOGGER,
         warn: vi.fn(),
         info: vi.fn(),
         debug: vi.fn(),

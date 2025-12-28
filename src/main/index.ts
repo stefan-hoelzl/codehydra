@@ -45,7 +45,7 @@ import type { WorkspaceName, WorkspaceStatus } from "../shared/api/types";
 import { ApiIpcChannels } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
-import { getErrorMessage } from "../services/errors";
+import { getErrorMessage } from "../shared/error-utils";
 
 /**
  * Parses Electron command-line flags from a string.

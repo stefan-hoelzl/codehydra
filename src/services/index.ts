@@ -4,7 +4,7 @@
  */
 
 // Shared types
-export type { IDisposable, Unsubscribe } from "./types";
+export type { IDisposable, Unsubscribe } from "../shared/types";
 
 // Error types
 export {
@@ -110,7 +110,7 @@ export {
   ElectronLogService,
   createMockLogger,
   createMockLoggingService,
-  createSilentLogger,
+  SILENT_LOGGER,
 } from "./logging";
 export type {
   Logger,

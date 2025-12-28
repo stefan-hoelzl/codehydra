@@ -9,7 +9,7 @@ import { wirePluginApi, type WorkspaceResolver } from "./wire-plugin-api";
 import type { PluginServer, ApiCallHandlers } from "../../services/plugin-server";
 import type { ICodeHydraApi } from "../../shared/api/interfaces";
 import type { WorkspaceName } from "../../shared/api/types";
-import { createSilentLogger } from "../../services/logging";
+import { SILENT_LOGGER } from "../../services/logging";
 
 // =============================================================================
 // Mock Factories
@@ -77,7 +77,7 @@ describe("wirePluginApi", () => {
   let pluginServer: PluginServer & { registeredHandlers: ApiCallHandlers | null };
   let api: ICodeHydraApi;
   let workspaceResolver: WorkspaceResolver;
-  const logger = createSilentLogger();
+  const logger = SILENT_LOGGER;
 
   beforeEach(() => {
     pluginServer = createMockPluginServer();

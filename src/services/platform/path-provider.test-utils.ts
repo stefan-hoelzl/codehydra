@@ -48,8 +48,6 @@ export function createMockPathProvider(overrides?: MockPathProviderOptions): Pat
     vscodeUserDataDir:
       overrides?.vscodeUserDataDir ?? join("/test", "app-data", "vscode", "user-data"),
     setupMarkerPath: overrides?.setupMarkerPath ?? join("/test", "app-data", ".setup-completed"),
-    legacySetupMarkerPath:
-      overrides?.legacySetupMarkerPath ?? join("/test", "app-data", "vscode", ".setup-completed"),
     electronDataDir: overrides?.electronDataDir ?? join("/test", "app-data", "electron"),
     vscodeAssetsDir: overrides?.vscodeAssetsDir ?? join("/mock", "assets"),
     appIconPath: overrides?.appIconPath ?? join("/test", "resources", "icon.png"),

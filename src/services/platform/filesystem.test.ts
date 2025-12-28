@@ -15,7 +15,7 @@ import {
   readFile as nodeReadFile,
 } from "node:fs/promises";
 import { DefaultFileSystemLayer } from "./filesystem";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import { FileSystemError } from "../errors";
 import { createTempDir } from "../test-utils";
 
@@ -24,7 +24,7 @@ describe("DefaultFileSystemLayer.copyTree", () => {
   let tempDir: { path: string; cleanup: () => Promise<void> };
 
   beforeEach(async () => {
-    fs = new DefaultFileSystemLayer(createSilentLogger());
+    fs = new DefaultFileSystemLayer(SILENT_LOGGER);
     tempDir = await createTempDir();
   });
 
@@ -114,7 +114,7 @@ describe("DefaultFileSystemLayer.makeExecutable", () => {
   let tempDir: { path: string; cleanup: () => Promise<void> };
 
   beforeEach(async () => {
-    fs = new DefaultFileSystemLayer(createSilentLogger());
+    fs = new DefaultFileSystemLayer(SILENT_LOGGER);
     tempDir = await createTempDir();
   });
 

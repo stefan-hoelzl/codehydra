@@ -5,7 +5,7 @@
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { projects } from "$lib/stores/projects.svelte.js";
   import { createLogger } from "$lib/logging";
-  import { getErrorMessage } from "$lib/utils/error-utils";
+  import { getErrorMessage } from "@shared/error-utils";
   import type { ProjectId } from "@shared/api/types";
 
   const logger = createLogger("ui");

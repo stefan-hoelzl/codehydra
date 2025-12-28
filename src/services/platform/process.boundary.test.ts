@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import { ExecaProcessRunner, type SpawnedProcess, type ProcessRunner } from "./process";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import {
   isWindows,
   spawnIgnoringSignals,
@@ -65,8 +65,7 @@ describe("ExecaProcessRunner", () => {
   const runningProcesses: SpawnedProcess[] = [];
 
   beforeEach(async () => {
-    const logger = createSilentLogger();
-    runner = new ExecaProcessRunner(logger);
+    runner = new ExecaProcessRunner(SILENT_LOGGER);
   });
 
   afterEach(async () => {

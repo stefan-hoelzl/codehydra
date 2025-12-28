@@ -9,7 +9,7 @@
 
 import * as api from "$lib/api";
 import { createLogger } from "$lib/logging";
-import { getErrorMessage } from "$lib/utils/error-utils";
+import { getErrorMessage } from "@shared/error-utils";
 import type { UIModeChangedEvent } from "@shared/ipc";
 import { openCreateDialog, openRemoveDialog } from "./dialogs.svelte";
 import { getDeletionStatus } from "./deletion.svelte";
@@ -33,15 +33,7 @@ import {
 } from "@shared/shortcuts";
 
 // Import from central ui-mode store (one-way dependency: shortcuts → ui-mode)
-import {
-  uiMode,
-  shortcutModeActive,
-  setModeFromMain,
-  reset as resetUiMode,
-} from "./ui-mode.svelte.js";
-
-// Re-export for existing consumers
-export { uiMode, shortcutModeActive };
+import { shortcutModeActive, setModeFromMain, reset as resetUiMode } from "./ui-mode.svelte.js";
 
 // Create logger for this module
 const logger = createLogger("ui");

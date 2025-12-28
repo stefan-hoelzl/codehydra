@@ -9,14 +9,13 @@ import { writeFileSync } from "fs";
 import { join } from "path";
 import type { SpawnedProcess, ProcessRunner } from "../platform/process";
 import { ExecaProcessRunner } from "../platform/process";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 
 /**
  * Creates a default ProcessRunner for boundary tests.
  */
 function createDefaultRunner(): ProcessRunner {
-  const logger = createSilentLogger();
-  return new ExecaProcessRunner(logger);
+  return new ExecaProcessRunner(SILENT_LOGGER);
 }
 
 /**

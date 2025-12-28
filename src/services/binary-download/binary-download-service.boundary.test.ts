@@ -14,7 +14,7 @@ import { DefaultArchiveExtractor } from "./archive-extractor";
 import { BINARY_CONFIGS, CODE_SERVER_VERSION } from "./versions";
 import { DefaultNetworkLayer } from "../platform/network";
 import { DefaultFileSystemLayer } from "../platform/filesystem";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
 import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
 import { createTestTarGzWithRoot, cleanupTestArchive } from "./test-utils";
@@ -26,7 +26,7 @@ const skipNetworkTests = process.env.CI === "true" && process.env.NETWORK_TESTS 
 describe("BinaryDownloadService (boundary)", () => {
   describe("URL validation", () => {
     // Test that GitHub release URLs are valid using HEAD requests
-    const networkLayer = new DefaultNetworkLayer(createSilentLogger());
+    const networkLayer = new DefaultNetworkLayer(SILENT_LOGGER);
 
     const platformCombinations: Array<{ platform: SupportedPlatform; arch: SupportedArch }> = [
       { platform: "darwin", arch: "x64" },
@@ -134,7 +134,7 @@ describe("BinaryDownloadService (boundary)", () => {
 
       const service = new DefaultBinaryDownloadService(
         mockHttpClient,
-        new DefaultFileSystemLayer(createSilentLogger()),
+        new DefaultFileSystemLayer(SILENT_LOGGER),
         new DefaultArchiveExtractor(),
         mockPathProvider,
         mockPlatformInfo
@@ -192,7 +192,7 @@ describe("BinaryDownloadService (boundary)", () => {
 
       const service = new DefaultBinaryDownloadService(
         mockHttpClient,
-        new DefaultFileSystemLayer(createSilentLogger()),
+        new DefaultFileSystemLayer(SILENT_LOGGER),
         new DefaultArchiveExtractor(),
         mockPathProvider,
         createMockPlatformInfo({ platform: "linux", arch: "x64" })
@@ -246,7 +246,7 @@ describe("BinaryDownloadService (boundary)", () => {
 
       const service = new DefaultBinaryDownloadService(
         mockHttpClient,
-        new DefaultFileSystemLayer(createSilentLogger()),
+        new DefaultFileSystemLayer(SILENT_LOGGER),
         new DefaultArchiveExtractor(),
         mockPathProvider,
         createMockPlatformInfo({ platform: "linux", arch: "x64" })

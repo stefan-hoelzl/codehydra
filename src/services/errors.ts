@@ -4,6 +4,9 @@
 
 import type { FileSystemErrorCode } from "./platform/filesystem";
 
+// Re-export getErrorMessage for internal services use
+export { getErrorMessage } from "../shared/error-utils";
+
 /**
  * Error codes for binary download operations.
  */
@@ -225,6 +228,3 @@ export class FileSystemError extends ServiceError {
 export function isServiceError(error: unknown): error is ServiceError {
   return error instanceof ServiceError;
 }
-
-// Re-export getErrorMessage from shared module for backwards compatibility
-export { getErrorMessage } from "../shared/error-utils";

@@ -112,7 +112,7 @@ vi.mock("../utils/external-url", () => ({
 
 import { ViewManager, SIDEBAR_MINIMIZED_WIDTH } from "./view-manager";
 import type { WindowManager } from "./window-manager";
-import { createSilentLogger } from "../../services/logging";
+import { SILENT_LOGGER } from "../../services/logging";
 
 describe("ViewManager", () => {
   beforeEach(() => {
@@ -139,7 +139,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(manager).toBeInstanceOf(ViewManager);
@@ -152,7 +152,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(MockWebContentsViewClass).toHaveBeenCalledWith({
@@ -172,7 +172,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalled();
@@ -185,7 +185,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       const uiView = MockWebContentsViewClass.mock.results[0]?.value;
@@ -199,7 +199,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(mockWindowManager.onResize).toHaveBeenCalledWith(expect.any(Function));
@@ -214,7 +214,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       const uiView = manager.getUIView();
@@ -232,7 +232,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Clear calls from create (UI view)
@@ -255,7 +255,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -276,7 +276,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -298,7 +298,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -325,7 +325,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -352,7 +352,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -389,7 +389,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Clear calls from UI view creation
@@ -419,7 +419,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -439,7 +439,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       const view = manager.createWorkspaceView(
@@ -461,7 +461,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create view (detached by default)
@@ -482,7 +482,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -509,7 +509,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -539,7 +539,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create and activate workspace (this loads the URL)
@@ -579,7 +579,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -599,7 +599,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -621,7 +621,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -641,7 +641,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -665,7 +665,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -692,7 +692,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -721,7 +721,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -752,7 +752,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -774,7 +774,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -799,7 +799,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -833,7 +833,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -868,7 +868,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -898,7 +898,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -927,7 +927,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -950,7 +950,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -982,7 +982,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1008,7 +1008,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Destroy workspace that was never created
@@ -1022,7 +1022,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1053,7 +1053,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1074,7 +1074,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       const view = manager.getWorkspaceView("/path/to/nonexistent");
@@ -1092,7 +1092,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1135,7 +1135,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create workspaces but don't activate any
@@ -1172,7 +1172,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.updateBounds();
@@ -1194,7 +1194,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1222,7 +1222,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1255,7 +1255,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1285,7 +1285,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1317,7 +1317,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1369,7 +1369,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1406,7 +1406,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1437,7 +1437,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1469,7 +1469,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1494,7 +1494,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1527,7 +1527,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
       const uiView = MockWebContentsViewClass.mock.results[0]?.value;
 
@@ -1565,7 +1565,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1590,7 +1590,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1620,7 +1620,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1641,7 +1641,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1664,7 +1664,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1689,7 +1689,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1713,7 +1713,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Should not throw
@@ -1729,7 +1729,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.focusUI();
@@ -1747,7 +1747,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1775,7 +1775,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1810,7 +1810,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1851,7 +1851,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.destroy();
@@ -1866,7 +1866,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1899,7 +1899,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       const uiView = MockWebContentsViewClass.mock.results[0]!.value;
@@ -1916,7 +1916,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1943,7 +1943,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       const uiView = MockWebContentsViewClass.mock.results[0]!.value;
@@ -1965,7 +1965,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -1996,7 +1996,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -2036,7 +2036,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(ShortcutController).toHaveBeenCalledWith(mockWindowManager.getWindow(), {
@@ -2055,7 +2055,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -2074,7 +2074,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -2094,7 +2094,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.destroy();
@@ -2109,7 +2109,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(
@@ -2134,7 +2134,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Set to dialog first to ensure we're changing state
@@ -2158,7 +2158,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create and activate workspace
@@ -2188,7 +2188,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       mockWindowManager.getWindow().contentView.addChildView.mockClear();
@@ -2208,7 +2208,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create and activate workspace
@@ -2240,7 +2240,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       mockWindowManager.getWindow().contentView.addChildView.mockClear();
@@ -2259,7 +2259,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create and activate workspace
@@ -2290,7 +2290,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
       manager.onModeChange(onModeChange);
 
@@ -2312,7 +2312,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
       manager.onModeChange(onModeChange);
 
@@ -2331,7 +2331,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(manager.getMode()).toBe("workspace");
@@ -2353,7 +2353,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       mockWindowManager.getWindow().contentView.addChildView.mockClear();
@@ -2372,7 +2372,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create and activate workspace
@@ -2402,7 +2402,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
       const uiView = MockWebContentsViewClass.mock.results[0]?.value;
 
@@ -2442,7 +2442,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create multiple workspaces (all detached by default)
@@ -2498,7 +2498,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create and activate workspace
@@ -2542,7 +2542,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       // Create workspaces
@@ -2586,7 +2586,7 @@ describe("ViewManager", () => {
           uiPreloadPath: "/path/to/preload.js",
           codeServerPort: 8080,
         },
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       manager.createWorkspaceView(

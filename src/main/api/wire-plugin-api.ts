@@ -18,7 +18,7 @@ import type {
 import type { ICodeHydraApi } from "../../shared/api/interfaces";
 import type { ProjectId, WorkspaceName } from "../../shared/api/types";
 import type { Logger } from "../../services/logging";
-import { getErrorMessage } from "../../services/errors";
+import { getErrorMessage } from "../../shared/error-utils";
 
 /**
  * Interface for resolving workspace paths to project information.

@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PluginServer } from "./plugin-server";
 import { STARTUP_COMMANDS, sendStartupCommands } from "./startup-commands";
 import { DefaultNetworkLayer } from "../platform/network";
-import { createSilentLogger, createBehavioralLogger } from "../logging/logging.test-utils";
+import { SILENT_LOGGER, createBehavioralLogger } from "../logging/logging.test-utils";
 import { delay } from "../test-utils";
 import {
   createTestClient,
@@ -32,8 +32,8 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
   let clients: TestClientSocket[] = [];
 
   beforeEach(async () => {
-    networkLayer = new DefaultNetworkLayer(createSilentLogger());
-    server = new PluginServer(networkLayer, createSilentLogger(), { transports: ["polling"] });
+    networkLayer = new DefaultNetworkLayer(SILENT_LOGGER);
+    server = new PluginServer(networkLayer, SILENT_LOGGER, { transports: ["polling"] });
     port = await server.start();
   });
 
@@ -73,7 +73,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
 
       // Register onConnect callback to send startup commands
       server.onConnect((workspacePath) => {
-        void sendStartupCommands(server, workspacePath, createSilentLogger(), 0);
+        void sendStartupCommands(server, workspacePath, SILENT_LOGGER, 0);
       });
 
       // Connect and wait for startup commands
@@ -99,7 +99,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
 
       // Register onConnect callback
       server.onConnect((workspacePath) => {
-        void sendStartupCommands(server, workspacePath, createSilentLogger(), 0);
+        void sendStartupCommands(server, workspacePath, SILENT_LOGGER, 0);
       });
 
       await waitForConnect(client);
@@ -136,7 +136,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
 
       // Register onConnect callback
       server.onConnect((workspacePath) => {
-        void sendStartupCommands(server, workspacePath, createSilentLogger(), 0);
+        void sendStartupCommands(server, workspacePath, SILENT_LOGGER, 0);
       });
 
       await waitForConnect(client);
@@ -167,7 +167,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
 
       // Register onConnect callback
       server.onConnect((workspacePath) => {
-        void sendStartupCommands(server, workspacePath, createSilentLogger(), 0);
+        void sendStartupCommands(server, workspacePath, SILENT_LOGGER, 0);
       });
 
       // Connect both clients
@@ -199,8 +199,8 @@ describe("wirePluginApi (integration)", { timeout: TEST_TIMEOUT }, () => {
   let mockWorkspaceResolver: WorkspaceResolver;
 
   beforeEach(async () => {
-    networkLayer = new DefaultNetworkLayer(createSilentLogger());
-    server = new PluginServer(networkLayer, createSilentLogger(), { transports: ["polling"] });
+    networkLayer = new DefaultNetworkLayer(SILENT_LOGGER);
+    server = new PluginServer(networkLayer, SILENT_LOGGER, { transports: ["polling"] });
     port = await server.start();
 
     // Create mock ICodeHydraApi
@@ -235,7 +235,7 @@ describe("wirePluginApi (integration)", { timeout: TEST_TIMEOUT }, () => {
     };
 
     // Wire up the plugin API
-    wirePluginApi(server, mockApi, mockWorkspaceResolver, createSilentLogger());
+    wirePluginApi(server, mockApi, mockWorkspaceResolver, SILENT_LOGGER);
   });
 
   afterEach(async () => {
@@ -442,9 +442,9 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
   let extensionLogger: ReturnType<typeof createBehavioralLogger>;
 
   beforeEach(async () => {
-    networkLayer = new DefaultNetworkLayer(createSilentLogger());
+    networkLayer = new DefaultNetworkLayer(SILENT_LOGGER);
     extensionLogger = createBehavioralLogger();
-    server = new PluginServer(networkLayer, createSilentLogger(), {
+    server = new PluginServer(networkLayer, SILENT_LOGGER, {
       transports: ["polling"],
       extensionLogger,
     });

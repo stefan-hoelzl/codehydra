@@ -10,7 +10,7 @@ import type { PathProvider } from "../platform/path-provider";
 import type { ICoreApi } from "../../shared/api/interfaces";
 import type { Logger } from "../logging";
 import { SILENT_LOGGER } from "../logging";
-import type { IDisposable } from "./types";
+import type { IDisposable } from "../../shared/types";
 import type { WorkspaceLookup } from "./workspace-resolver";
 import { McpServer, createDefaultMcpServer, type McpServerFactory } from "./mcp-server";
 

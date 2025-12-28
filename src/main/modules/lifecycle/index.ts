@@ -19,8 +19,8 @@ import type {
 } from "../../../services/vscode-setup/types";
 import type { Logger } from "../../../services/logging/index";
 import { ApiIpcChannels } from "../../../shared/ipc";
-import { createSilentLogger } from "../../../services/logging";
-import { getErrorMessage } from "../../../services/errors";
+import { SILENT_LOGGER } from "../../../services/logging";
+import { getErrorMessage } from "../../../shared/error-utils";
 
 // =============================================================================
 // Types
@@ -79,7 +79,7 @@ export class LifecycleModule implements IApiModule {
     private readonly api: IApiRegistry,
     private readonly deps: LifecycleModuleDeps
   ) {
-    this.logger = deps.logger ?? createSilentLogger();
+    this.logger = deps.logger ?? SILENT_LOGGER;
     this.registerMethods();
   }
 

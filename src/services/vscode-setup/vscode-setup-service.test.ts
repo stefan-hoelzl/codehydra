@@ -100,7 +100,6 @@ describe("VscodeSetupService", () => {
       vscodeExtensionsDir: "/mock/vscode/extensions",
       vscodeUserDataDir: "/mock/vscode/user-data",
       setupMarkerPath: "/mock/.setup-completed",
-      legacySetupMarkerPath: "/mock/vscode/.setup-completed",
       vscodeAssetsDir: "/mock/assets",
       binDir: "/mock/bin",
     });

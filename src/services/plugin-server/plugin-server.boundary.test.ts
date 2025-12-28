@@ -9,7 +9,7 @@ import { io as ioClient } from "socket.io-client";
 import { PluginServer } from "./plugin-server";
 import type { ApiCallHandlers } from "./plugin-server";
 import { DefaultNetworkLayer } from "../platform/network";
-import { createSilentLogger } from "../logging/logging.test-utils";
+import { SILENT_LOGGER } from "../logging/logging.test-utils";
 import { delay } from "../test-utils";
 import {
   createTestClient,
@@ -34,10 +34,10 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
   let clients: TestClientSocket[] = [];
 
   beforeEach(async () => {
-    networkLayer = new DefaultNetworkLayer(createSilentLogger());
+    networkLayer = new DefaultNetworkLayer(SILENT_LOGGER);
     // Use polling transport in tests - websocket transport doesn't work in vitest
     // due to vitest's module transformation breaking the ws package
-    server = new PluginServer(networkLayer, createSilentLogger(), { transports: ["polling"] });
+    server = new PluginServer(networkLayer, SILENT_LOGGER, { transports: ["polling"] });
     port = await server.start();
   });
 
@@ -213,7 +213,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       await waitForDisconnect(client);
 
       // Start new server on new port
-      server = new PluginServer(networkLayer, createSilentLogger(), { transports: ["polling"] });
+      server = new PluginServer(networkLayer, SILENT_LOGGER, { transports: ["polling"] });
       const newPort = await server.start();
 
       // Client should not auto-reconnect to new port (different URL)
@@ -282,7 +282,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       await server.close();
 
       // Restart - should get a new port
-      server = new PluginServer(networkLayer, createSilentLogger(), { transports: ["polling"] });
+      server = new PluginServer(networkLayer, SILENT_LOGGER, { transports: ["polling"] });
       port = await server.start();
 
       // Port should be valid
@@ -765,7 +765,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
     it("sends config with isDevelopment: true when configured", async () => {
       // Close default server and create one with isDevelopment: true
       await server.close();
-      server = new PluginServer(networkLayer, createSilentLogger(), {
+      server = new PluginServer(networkLayer, SILENT_LOGGER, {
         transports: ["polling"],
         isDevelopment: true,
       });
@@ -789,7 +789,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
     it("sends config with isDevelopment: false when configured", async () => {
       // Close default server and create one with isDevelopment: false
       await server.close();
-      server = new PluginServer(networkLayer, createSilentLogger(), {
+      server = new PluginServer(networkLayer, SILENT_LOGGER, {
         transports: ["polling"],
         isDevelopment: false,
       });
@@ -827,7 +827,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
 
     it("sends config event on reconnection", async () => {
       await server.close();
-      server = new PluginServer(networkLayer, createSilentLogger(), {
+      server = new PluginServer(networkLayer, SILENT_LOGGER, {
         transports: ["polling"],
         isDevelopment: true,
       });

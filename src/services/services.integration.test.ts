@@ -10,7 +10,7 @@ import { SimpleGitClient } from "./git/simple-git-client";
 import { GitWorktreeProvider } from "./git/git-worktree-provider";
 import { ProjectStore } from "./project/project-store";
 import { DefaultFileSystemLayer } from "./platform/filesystem";
-import { createSilentLogger } from "./logging";
+import { SILENT_LOGGER } from "./logging";
 import { createMockFileSystemLayer } from "./platform/filesystem.test-utils";
 import { createGitWorktreeProvider } from "./index";
 import { projectDirName } from "./platform/paths";
@@ -45,7 +45,7 @@ describe("Services Integration", () => {
 
     it("performs complete project and workspace workflow", async () => {
       // 1. Create project store and save project
-      const fileSystemLayer = new DefaultFileSystemLayer(createSilentLogger());
+      const fileSystemLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
       const projectStore = new ProjectStore(projectsDir, fileSystemLayer);
       await projectStore.saveProject(repoPath);
 
@@ -54,7 +54,7 @@ describe("Services Integration", () => {
       expect(savedProjects).toContain(repoPath);
 
       // 2. Create GitWorktreeProvider with SimpleGitClient
-      const gitClient = new SimpleGitClient(createSilentLogger());
+      const gitClient = new SimpleGitClient(SILENT_LOGGER);
       const workspacesDir = getWorkspacesDir(repoPath);
       const provider = await GitWorktreeProvider.create(
         repoPath,
@@ -91,8 +91,8 @@ describe("Services Integration", () => {
     });
 
     it("handles multiple workspaces", async () => {
-      const fileSystemLayer = new DefaultFileSystemLayer(createSilentLogger());
-      const gitClient = new SimpleGitClient(createSilentLogger());
+      const fileSystemLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
+      const gitClient = new SimpleGitClient(SILENT_LOGGER);
       const workspacesDir = getWorkspacesDir(repoPath);
       const provider = await GitWorktreeProvider.create(
         repoPath,
@@ -150,12 +150,12 @@ describe("Services Integration", () => {
 
     it("createGitWorktreeProvider creates provider successfully", async () => {
       const workspacesDir = getWorkspacesDir(repoPath);
-      const fileSystemLayer = new DefaultFileSystemLayer(createSilentLogger());
+      const fileSystemLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
       const provider = await createGitWorktreeProvider(
         repoPath,
         workspacesDir,
         fileSystemLayer,
-        createSilentLogger()
+        SILENT_LOGGER
       );
 
       expect(provider.projectRoot).toBe(repoPath);
@@ -169,14 +169,9 @@ describe("Services Integration", () => {
       const nonGitDir = await createTempDir();
       try {
         const workspacesDir = getWorkspacesDir(nonGitDir.path);
-        const fileSystemLayer = new DefaultFileSystemLayer(createSilentLogger());
+        const fileSystemLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
         await expect(
-          createGitWorktreeProvider(
-            nonGitDir.path,
-            workspacesDir,
-            fileSystemLayer,
-            createSilentLogger()
-          )
+          createGitWorktreeProvider(nonGitDir.path, workspacesDir, fileSystemLayer, SILENT_LOGGER)
         ).rejects.toThrow();
       } finally {
         await nonGitDir.cleanup();
@@ -251,8 +246,8 @@ describe("Services Integration", () => {
       }
 
       try {
-        const fileSystemLayer = new DefaultFileSystemLayer(createSilentLogger());
-        const gitClient = new SimpleGitClient(createSilentLogger());
+        const fileSystemLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
+        const gitClient = new SimpleGitClient(SILENT_LOGGER);
         const workspacesDir = getWorkspacesDir(repo.path);
         const provider = await GitWorktreeProvider.create(
           repo.path,

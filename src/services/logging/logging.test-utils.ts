@@ -123,17 +123,6 @@ export const SILENT_LOGGER: Logger = {
   error: () => {},
 };
 
-/**
- * Create a silent no-op logger.
- * Useful when you don't want to assert on log calls.
- *
- * @returns Logger that does nothing
- * @deprecated Use SILENT_LOGGER constant instead for consistency
- */
-export function createSilentLogger(): Logger {
-  return SILENT_LOGGER;
-}
-
 // ============================================================================
 // Behavioral Logger Mock
 // ============================================================================

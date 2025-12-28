@@ -87,8 +87,8 @@ describe("CodeServerManager (boundary)", () => {
     cleanup = temp.cleanup;
 
     // Real dependencies - no mocks
-    const { createSilentLogger } = await import("../logging");
-    const logger = createSilentLogger();
+    const { SILENT_LOGGER } = await import("../logging");
+    const logger = SILENT_LOGGER;
     const runner = new ExecaProcessRunner(logger);
     const networkLayer = new DefaultNetworkLayer(logger);
 

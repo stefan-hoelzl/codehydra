@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OpenCodeServerManager } from "./opencode-server-manager";
 import { AgentStatusManager } from "./agent-status-manager";
 import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
-import { createSilentLogger } from "../logging";
+import { SILENT_LOGGER } from "../logging";
 import type { MockSpawnedProcess, MockProcessRunner } from "../platform/process.test-utils";
 import type { PortManager, HttpClient } from "../platform/network";
 import type { PathProvider } from "../platform/path-provider";
@@ -53,7 +53,6 @@ function createTestPathProvider(): PathProvider {
     vscodeExtensionsDir: "/test/app-data/vscode/extensions",
     vscodeUserDataDir: "/test/app-data/vscode/user-data",
     setupMarkerPath: "/test/app-data/.setup-completed",
-    legacySetupMarkerPath: "/test/app-data/vscode/.setup-completed",
     electronDataDir: "/test/app-data/electron",
     vscodeAssetsDir: "/mock/assets",
     appIconPath: "/test/resources/icon.png",
@@ -99,13 +98,13 @@ describe("OpenCodeServerManager integration", () => {
       mockPortManager,
       mockHttpClient,
       mockPathProvider,
-      createSilentLogger()
+      SILENT_LOGGER
     );
 
     // Create AgentStatusManager with mock SDK
     const mockSdk = createMockSdkClient();
     const mockSdkFactory = createMockSdkFactory(mockSdk);
-    agentStatusManager = new AgentStatusManager(createSilentLogger(), mockSdkFactory);
+    agentStatusManager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
   });
 
   afterEach(async () => {

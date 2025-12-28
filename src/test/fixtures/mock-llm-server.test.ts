@@ -8,7 +8,6 @@ import {
   type MockLlmServer,
   createInstantCompletion,
   createToolCallCompletion,
-  createSubAgentCompletion,
   createRateLimitResponse,
 } from "./mock-llm-server";
 
@@ -192,11 +191,22 @@ describe("response builders", () => {
     expect(choice?.finish_reason).toBe("tool_calls");
   });
 
-  it("createSubAgentCompletion creates agent mention", () => {
-    const completion = createSubAgentCompletion("general", "Search for files");
+  it("createToolCallCompletion creates task tool call for sub-agents", () => {
+    const completion = createToolCallCompletion("task", {
+      description: "Search for files",
+      prompt: "Find all TypeScript files",
+    });
     const choice = completion.choices[0];
+    const toolCall = choice?.message.tool_calls?.[0];
 
-    expect(choice?.message.content).toBe("@general Search for files");
+    expect(choice?.message.content).toBeNull();
+    expect(choice?.message.tool_calls).toHaveLength(1);
+    expect(toolCall?.function.name).toBe("task");
+    expect(JSON.parse(toolCall?.function.arguments ?? "{}")).toEqual({
+      description: "Search for files",
+      prompt: "Find all TypeScript files",
+    });
+    expect(choice?.finish_reason).toBe("tool_calls");
   });
 
   it("createRateLimitResponse creates 429 response", () => {

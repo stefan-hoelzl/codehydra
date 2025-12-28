@@ -12,7 +12,7 @@ import type {
 } from "./registry-types";
 import { ALL_METHOD_PATHS } from "./registry-types";
 import type { ICodeHydraApi, ApiEvents, Unsubscribe } from "../../shared/api/interfaces";
-import { createSilentLogger, type Logger } from "../../services/logging";
+import { SILENT_LOGGER, type Logger } from "../../services/logging";
 
 // Generic handler type to avoid complex variance issues
 type AnyHandler = (payload: unknown) => Promise<unknown>;
@@ -41,7 +41,7 @@ export class ApiRegistry implements IApiRegistry {
   private disposed = false;
 
   constructor(logger?: Logger) {
-    this.logger = logger ?? createSilentLogger();
+    this.logger = logger ?? SILENT_LOGGER;
   }
 
   /**
