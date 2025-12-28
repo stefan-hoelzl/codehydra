@@ -3,7 +3,7 @@
  * Unit tests for WrapperScriptGenerationService.
  */
 
-import { sep } from "path";
+import { dirname, sep } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WrapperScriptGenerationService } from "./wrapper-script-generation-service";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
@@ -265,8 +265,8 @@ describe("WrapperScriptGenerationService", () => {
       await service.regenerate();
 
       // Should create directory for OpenCode config (dirname of mcpConfigPath)
-      // mcpConfigPath is /test/app-data/opencode/codehydra-mcp.json
-      expect(mockFs.mkdir).toHaveBeenCalledWith("/test/app-data/opencode");
+      // Use dirname() to handle platform path differences (forward vs backslash)
+      expect(mockFs.mkdir).toHaveBeenCalledWith(dirname(mockPathProvider.mcpConfigPath));
     });
   });
 });
