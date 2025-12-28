@@ -4,7 +4,7 @@
 
 export { VscodeSetupService } from "./vscode-setup-service";
 export { WrapperScriptGenerationService } from "./wrapper-script-generation-service";
-export { generateScript, generateScripts } from "./bin-scripts";
+export { generateScripts } from "./bin-scripts";
 export {
   CURRENT_SETUP_VERSION,
   type IVscodeSetup,

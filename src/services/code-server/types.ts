@@ -26,13 +26,3 @@ export interface CodeServerConfig {
   /** Optional port for the PluginServer (CODEHYDRA_PLUGIN_PORT env var) */
   readonly pluginPort?: number;
 }
-
-/**
- * Information about a running code-server instance.
- */
-export interface CodeServerInfo {
-  /** Port the server is listening on */
-  readonly port: number;
-  /** Full URL to access the server */
-  readonly url: string;
-}

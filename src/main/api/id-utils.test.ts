@@ -2,8 +2,8 @@
  * Tests for ID generation utilities.
  */
 import { describe, it, expect } from "vitest";
-import { generateProjectId, toWorkspaceName } from "./id-utils";
-import { isProjectId, isWorkspaceName } from "../../shared/api/types";
+import { generateProjectId } from "./id-utils";
+import { isProjectId } from "../../shared/api/types";
 
 describe("generateProjectId", () => {
   describe("deterministic generation", () => {
@@ -136,55 +136,6 @@ describe("generateProjectId", () => {
       const id2 = generateProjectId("/home/user/myapp");
       // Names will be different (MyApp vs myapp), hashes will be different
       expect(id1).not.toBe(id2);
-    });
-  });
-});
-
-describe("toWorkspaceName", () => {
-  describe("valid conversions", () => {
-    it("should convert simple branch name", () => {
-      const name = toWorkspaceName("feature-branch");
-      expect(isWorkspaceName(name)).toBe(true);
-      expect(name).toBe("feature-branch");
-    });
-
-    it("should convert branch with forward slashes", () => {
-      const name = toWorkspaceName("feature/login");
-      expect(isWorkspaceName(name)).toBe(true);
-      expect(name).toBe("feature/login");
-    });
-
-    it("should convert branch with dots", () => {
-      const name = toWorkspaceName("release.1.0");
-      expect(isWorkspaceName(name)).toBe(true);
-      expect(name).toBe("release.1.0");
-    });
-  });
-
-  describe("invalid inputs", () => {
-    it("should throw for empty string", () => {
-      expect(() => toWorkspaceName("")).toThrow();
-    });
-
-    it("should throw for string exceeding max length", () => {
-      const tooLong = "a".repeat(101);
-      expect(() => toWorkspaceName(tooLong)).toThrow();
-    });
-
-    it("should throw for name starting with dash", () => {
-      expect(() => toWorkspaceName("-feature")).toThrow();
-    });
-
-    it("should throw for name starting with dot", () => {
-      expect(() => toWorkspaceName(".hidden")).toThrow();
-    });
-
-    it("should throw for name with spaces", () => {
-      expect(() => toWorkspaceName("feature branch")).toThrow();
-    });
-
-    it("should throw for name with special characters", () => {
-      expect(() => toWorkspaceName("feature@branch")).toThrow();
     });
   });
 });

@@ -152,25 +152,3 @@ export function setupDomainEvents(
     unsubscribes.forEach((unsub) => unsub());
   };
 }
-
-// =============================================================================
-// Legacy exports for backward compatibility (will be removed in future)
-// =============================================================================
-
-/** @deprecated Use ApiEvents instead */
-export type ApiEventsV2 = ApiEvents;
-
-/** @deprecated Use DomainEventApi instead */
-export type DomainEventApiV2 = DomainEventApi;
-
-/** @deprecated Use DomainStores instead */
-export type DomainStoresV2 = DomainStores;
-
-/** @deprecated Use DomainEventOptions instead */
-export type DomainEventOptionsV2 = DomainEventOptions;
-
-/** @deprecated Use DomainEventHooks instead */
-export type DomainEventHooksV2 = DomainEventHooks;
-
-/** @deprecated Use setupDomainEvents instead */
-export const setupDomainEventsV2 = setupDomainEvents;

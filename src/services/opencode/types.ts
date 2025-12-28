@@ -36,40 +36,6 @@ export interface IDisposable {
   dispose(): void | Promise<void>;
 }
 
-// ============ Port Info ============
-
-/**
- * Information about a listening port.
- */
-export interface PortInfo {
-  readonly port: number;
-  readonly pid: number;
-}
-
-// ============ OpenCode API Responses ============
-
-/**
- * Response from OpenCode /path endpoint.
- */
-export interface PathResponse {
-  readonly worktree: string;
-  readonly directory: string;
-}
-
-/**
- * Individual session status value in the response.
- * Uses 'type' property for status value.
- */
-export interface SessionStatusValue {
-  readonly type: "idle" | "busy" | "retry";
-}
-
-/**
- * Response from OpenCode /session/status endpoint.
- * OpenCode returns an array of status values (not keyed by session ID).
- */
-export type SessionStatusResponse = readonly SessionStatusValue[];
-
 /**
  * Client status - simplified to just idle or busy.
  * Used for port-based status tracking (1 agent per port).
@@ -102,26 +68,7 @@ export type SessionStatus =
   | { readonly type: "busy"; readonly sessionId: string }
   | { readonly type: "deleted"; readonly sessionId: string };
 
-// ============ SSE Event Types ============
-
-/**
- * SSE event types from OpenCode.
- */
-export type OpenCodeEventType =
-  | "session.status"
-  | "session.deleted"
-  | "session.idle"
-  | "permission.updated"
-  | "permission.replied";
-
-/**
- * SSE event payload from OpenCode.
- */
-export interface OpenCodeEvent {
-  readonly type: OpenCodeEventType;
-  readonly sessionId: string;
-  readonly status?: "idle" | "busy";
-}
+// ============ Permission Event Types ============
 
 /**
  * Permission request event from OpenCode.
@@ -144,82 +91,9 @@ export interface PermissionRepliedEvent {
   readonly response: "once" | "always" | "reject";
 }
 
-// ============ Error Types ============
-
-/**
- * Specific error codes for discovery operations.
- */
-export type DiscoveryErrorCode =
-  | "SCAN_IN_PROGRESS"
-  | "PORT_SCAN_FAILED"
-  | "PROCESS_TREE_FAILED"
-  | "PROBE_FAILED";
-
-/**
- * Error details for discovery operations.
- */
-export interface DiscoveryError {
-  readonly code: DiscoveryErrorCode;
-  readonly message: string;
-  readonly cause?: unknown;
-}
-
-/**
- * Specific error codes for probe operations.
- */
-export type ProbeErrorCode =
-  | "TIMEOUT"
-  | "CONNECTION_REFUSED"
-  | "INVALID_RESPONSE"
-  | "NOT_OPENCODE"
-  | "NON_LOCALHOST";
-
-/**
- * Error details for probe operations.
- */
-export interface ProbeError {
-  readonly code: ProbeErrorCode;
-  readonly message: string;
-  readonly cause?: unknown;
-}
-
-/**
- * Specific error codes for scan operations.
- */
-export type ScanErrorCode = "NETSTAT_FAILED" | "PARSE_ERROR";
-
-/**
- * Error details for scan operations.
- */
-export interface ScanError {
-  readonly code: ScanErrorCode;
-  readonly message: string;
-  readonly cause?: unknown;
-}
-
 // ============ Unsubscribe ============
 
 /**
  * Function to unsubscribe from an event.
  */
 export type Unsubscribe = () => void;
-
-// ============ Non-OpenCode Port Cache Entry ============
-
-/**
- * Cache entry for ports that are not OpenCode instances.
- */
-export interface NonOpenCodePortEntry {
-  readonly pid: number;
-  readonly timestamp: number;
-}
-
-// ============ Discovered Instance ============
-
-/**
- * Information about a discovered OpenCode instance.
- * Contains only the port number - PID tracking is internal to DiscoveryService.
- */
-export interface DiscoveredInstance {
-  readonly port: number;
-}

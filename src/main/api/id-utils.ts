@@ -5,7 +5,7 @@
  */
 import * as crypto from "node:crypto";
 import * as path from "node:path";
-import { type ProjectId, type WorkspaceName, isWorkspaceName } from "../../shared/api/types";
+import { type ProjectId } from "../../shared/api/types";
 
 /**
  * Generate a deterministic ProjectId from an absolute path.
@@ -49,29 +49,4 @@ export function generateProjectId(absolutePath: string): ProjectId {
   const hash = crypto.createHash("sha256").update(normalizedPath).digest("hex").slice(0, 8);
 
   return `${safeName}-${hash}` as ProjectId;
-}
-
-/**
- * Convert a string to a validated WorkspaceName.
- * Throws if the string is not a valid workspace name.
- *
- * @param name The workspace name to validate and convert
- * @returns A validated WorkspaceName
- * @throws Error if the name is not valid
- *
- * @example
- * ```typescript
- * toWorkspaceName("feature-branch") // "feature-branch" as WorkspaceName
- * toWorkspaceName("feature/login")  // "feature/login" as WorkspaceName
- * toWorkspaceName("")               // throws Error
- * ```
- */
-export function toWorkspaceName(name: string): WorkspaceName {
-  if (!isWorkspaceName(name)) {
-    throw new Error(
-      `Invalid workspace name: "${name}". ` +
-        "Must be 1-100 characters, start with alphanumeric, and contain only alphanumeric, dashes, underscores, dots, or forward slashes."
-    );
-  }
-  return name;
 }

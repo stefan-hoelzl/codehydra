@@ -35,7 +35,7 @@ export type { IWorkspaceProvider } from "./git/workspace-provider";
 export { GitWorktreeProvider } from "./git/git-worktree-provider";
 
 // Code server
-export type { InstanceState, CodeServerConfig, CodeServerInfo } from "./code-server/types";
+export type { InstanceState, CodeServerConfig } from "./code-server/types";
 export { CodeServerManager, urlForFolder } from "./code-server/code-server-manager";
 
 // Project store

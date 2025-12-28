@@ -10,7 +10,6 @@
 
 declare const ProjectPathBrand: unique symbol;
 declare const WorkspacePathBrand: unique symbol;
-declare const PortBrand: unique symbol;
 
 /**
  * Branded type for project paths (git repository root directories).
@@ -21,11 +20,6 @@ export type ProjectPath = string & { readonly [ProjectPathBrand]: true };
  * Branded type for workspace paths (git worktree directories).
  */
 export type WorkspacePath = string & { readonly [WorkspacePathBrand]: true };
-
-/**
- * Branded type for network port numbers.
- */
-export type Port = number & { readonly [PortBrand]: true };
 
 // ============ Domain Types ============
 
@@ -121,14 +115,6 @@ export type AggregatedAgentStatus =
   | { readonly status: "busy"; readonly counts: AgentStatusCounts }
   | { readonly status: "mixed"; readonly counts: AgentStatusCounts };
 
-/**
- * Event payload for agent status changes.
- */
-export interface AgentStatusChangedEvent {
-  readonly workspacePath: WorkspacePath;
-  readonly status: AggregatedAgentStatus;
-}
-
 // ============ UI Mode Types ============
 
 /**
@@ -146,34 +132,6 @@ export type UIMode = "workspace" | "dialog" | "shortcut" | "hover";
 export interface UIModeChangedEvent {
   readonly mode: UIMode;
   readonly previousMode: UIMode;
-}
-
-// ============ Legacy Event Payload Types ============
-// NOTE: These legacy event types are used by v1 domain event handlers (setupDomainEvents).
-// They're kept for backward compatibility but new code should use v2 API types from @shared/api/types.
-
-export interface ProjectOpenedEvent {
-  readonly project: Project;
-}
-
-export interface ProjectClosedEvent {
-  readonly path: ProjectPath;
-}
-
-export interface WorkspaceCreatedEvent {
-  readonly projectPath: ProjectPath;
-  readonly workspace: Workspace;
-  /** The base branch used for workspace creation (updates project's defaultBaseBranch) */
-  readonly defaultBaseBranch?: string;
-}
-
-export interface WorkspaceRemovedEvent {
-  readonly projectPath: ProjectPath;
-  readonly workspacePath: WorkspacePath;
-}
-
-export interface WorkspaceSwitchedEvent {
-  readonly workspacePath: WorkspacePath | null;
 }
 
 // ============ API Layer IPC Channels ============
@@ -228,86 +186,6 @@ export const ApiIpcChannels = {
   SHORTCUT_KEY: "api:shortcut:key",
   SETUP_PROGRESS: "api:setup:progress",
 } as const satisfies Record<string, string>;
-
-// ============ API Layer Payload Types ============
-
-/**
- * Payload for api:project:open command.
- */
-export interface ApiProjectOpenPayload {
-  readonly path: string;
-}
-
-/**
- * Payload for api:project:close command.
- */
-export interface ApiProjectClosePayload {
-  readonly projectId: string;
-}
-
-/**
- * Payload for api:project:get command.
- */
-export interface ApiProjectGetPayload {
-  readonly projectId: string;
-}
-
-/**
- * Payload for api:project:fetch-bases command.
- */
-export interface ApiProjectFetchBasesPayload {
-  readonly projectId: string;
-}
-
-/**
- * Payload for api:workspace:create command.
- */
-export interface ApiWorkspaceCreatePayload {
-  readonly projectId: string;
-  readonly name: string;
-  readonly base: string;
-}
-
-/**
- * Payload for api:workspace:remove command.
- */
-export interface ApiWorkspaceRemovePayload {
-  readonly projectId: string;
-  readonly workspaceName: string;
-  readonly keepBranch?: boolean;
-}
-
-/**
- * Payload for api:workspace:get command.
- */
-export interface ApiWorkspaceGetPayload {
-  readonly projectId: string;
-  readonly workspaceName: string;
-}
-
-/**
- * Payload for api:workspace:get-status command.
- */
-export interface ApiWorkspaceGetStatusPayload {
-  readonly projectId: string;
-  readonly workspaceName: string;
-}
-
-/**
- * Payload for api:ui:switch-workspace command.
- */
-export interface ApiUiSwitchWorkspacePayload {
-  readonly projectId: string;
-  readonly workspaceName: string;
-  readonly focus?: boolean;
-}
-
-/**
- * Payload for api:ui:set-mode command.
- */
-export interface ApiUiSetModePayload {
-  readonly mode: UIMode;
-}
 
 // ============ Log API Types ============
 

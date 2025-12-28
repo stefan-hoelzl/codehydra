@@ -5,44 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
-import { delay } from "@services/test-utils";
-import type {
-  Project,
-  ProjectPath,
-  Workspace,
-  ProjectOpenedEvent,
-  ProjectClosedEvent,
-  WorkspaceCreatedEvent,
-  WorkspaceRemovedEvent,
-  WorkspaceSwitchedEvent,
-} from "@shared/ipc";
-
-// Helper to create typed paths
-function asProjectPath(path: string): ProjectPath {
-  return path as ProjectPath;
-}
-
-// Event callback storage for old API (kept for backwards compatibility with some tests)
-type EventCallbacks = {
-  onProjectOpened: ((event: ProjectOpenedEvent) => void) | null;
-  onProjectClosed: ((event: ProjectClosedEvent) => void) | null;
-  onWorkspaceCreated: ((event: WorkspaceCreatedEvent) => void) | null;
-  onWorkspaceRemoved: ((event: WorkspaceRemovedEvent) => void) | null;
-  onWorkspaceSwitched: ((event: WorkspaceSwitchedEvent) => void) | null;
-  onShortcutEnable: (() => void) | null;
-  onShortcutDisable: (() => void) | null;
-};
-
-// Create mock API functions with callback capture
-const callbacks: EventCallbacks = {
-  onProjectOpened: null,
-  onProjectClosed: null,
-  onWorkspaceCreated: null,
-  onWorkspaceRemoved: null,
-  onWorkspaceSwitched: null,
-  onShortcutEnable: null,
-  onShortcutDisable: null,
-};
+import type { Project, Workspace, ProjectId, WorkspaceName } from "@shared/api/types";
 
 // v2 API event callbacks - MainView uses api.v2.on() which stores callbacks here
 type V2EventCallback = (...args: unknown[]) => void;
@@ -205,27 +168,26 @@ function readCssFile(relativePath: string): string {
 // Helper to create mock workspace (v2 API format)
 function createWorkspace(name: string, projectPath: string, projectId?: string): Workspace {
   return {
-    name,
+    projectId: (projectId ?? "test-12345678") as ProjectId,
+    name: name as WorkspaceName,
     path: `${projectPath}/.worktrees/${name}`,
     branch: name,
     metadata: { base: "main" },
-    // v2 API adds projectId to workspaces
-    ...(projectId ? { projectId } : {}),
   };
 }
 
 // Helper to generate consistent project ID from name
-function projectIdFromName(name: string): string {
+function projectIdFromName(name: string): ProjectId {
   // Simple hash for deterministic IDs in tests
-  return `${name}-12345678`;
+  return `${name}-12345678` as ProjectId;
 }
 
 // Helper to create mock project (v2 API format with ID)
-function createProject(name: string, workspaces: Workspace[] = []): Project & { id: string } {
+function createProject(name: string, workspaces: Workspace[] = []): Project {
   const id = projectIdFromName(name);
   return {
     id,
-    path: asProjectPath(`/test/${name}`),
+    path: `/test/${name}`,
     name,
     // Add projectId to each workspace for v2 format
     workspaces: workspaces.map((ws) => ({ ...ws, projectId: id })),
@@ -244,15 +206,6 @@ describe("Integration tests", () => {
 
     // Reset v2 event callbacks
     clearV2EventCallbacks();
-
-    // Reset old callbacks (for backwards compatibility)
-    callbacks.onProjectOpened = null;
-    callbacks.onProjectClosed = null;
-    callbacks.onWorkspaceCreated = null;
-    callbacks.onWorkspaceRemoved = null;
-    callbacks.onWorkspaceSwitched = null;
-    callbacks.onShortcutEnable = null;
-    callbacks.onShortcutDisable = null;
 
     // Default mocks for v2 API
     mockApi.projects.list.mockResolvedValue([]);
@@ -1301,7 +1254,7 @@ describe("Integration tests", () => {
       });
 
       // Give time for any auto-open to trigger
-      await delay(50);
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Verify NO dialog opened
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

@@ -30,7 +30,6 @@ export interface SerializedError {
     | "opencode"
     | "vscode-setup"
     | "filesystem"
-    | "keepfiles"
     | "binary-download"
     | "archive";
   readonly message: string;
@@ -107,8 +106,7 @@ export abstract class ServiceError extends Error {
           json.path ?? "",
           json.message
         );
-      case "keepfiles":
-        return new KeepFilesError(json.message, json.code);
+
       case "binary-download":
         return new BinaryDownloadError(json.message, json.code as BinaryDownloadErrorCode);
       case "archive":
@@ -157,13 +155,6 @@ export class OpenCodeError extends ServiceError {
  */
 export class VscodeSetupError extends ServiceError {
   readonly type = "vscode-setup" as const;
-}
-
-/**
- * Error from KeepFiles operations (copying gitignored files to workspaces).
- */
-export class KeepFilesError extends ServiceError {
-  readonly type = "keepfiles" as const;
 }
 
 /**

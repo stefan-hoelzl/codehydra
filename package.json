@@ -51,7 +51,6 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/archiver": "^7.0.0",
     "@types/node": "^24.10.1",
-    "@types/ws": "^8.18.1",
     "@types/yauzl": "^2.10.3",
     "@vitest/coverage-v8": "^4.0.15",
     "@vscode/vsce": "^3.7.1",

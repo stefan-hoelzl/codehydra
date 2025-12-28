@@ -8,6 +8,6 @@ export { AgentStatusManager, type StatusChangedCallback } from "./agent-status-m
 export { OpenCodeServerManager } from "./opencode-server-manager";
 
 // Re-export types
-export type { Result, PortInfo, SessionStatus, IDisposable, Unsubscribe } from "./types";
+export type { Result, SessionStatus, IDisposable, Unsubscribe } from "./types";
 
 export { ok, err } from "./types";

@@ -5,10 +5,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ProjectId, WorkspaceName, Project, Workspace, WorkspaceRef } from "@shared/api/types";
 import {
-  setupDomainEventsV2,
-  type DomainEventApiV2,
-  type DomainStoresV2,
-  type ApiEventsV2,
+  setupDomainEvents,
+  type DomainEventApi,
+  type DomainStores,
+  type ApiEvents,
 } from "./domain-events";
 import { AgentNotificationService } from "$lib/services/agent-notifications";
 
@@ -46,30 +46,27 @@ const TEST_WORKSPACE_REF: WorkspaceRef = {
 // Mock API Factory
 // =============================================================================
 
-type EventHandler<E extends keyof ApiEventsV2> = ApiEventsV2[E];
+type EventHandler<E extends keyof ApiEvents> = ApiEvents[E];
 
 function createMockApi(): {
-  api: DomainEventApiV2;
-  handlers: Map<keyof ApiEventsV2, EventHandler<keyof ApiEventsV2>>;
-  emit: <E extends keyof ApiEventsV2>(event: E, ...args: Parameters<ApiEventsV2[E]>) => void;
+  api: DomainEventApi;
+  handlers: Map<keyof ApiEvents, EventHandler<keyof ApiEvents>>;
+  emit: <E extends keyof ApiEvents>(event: E, ...args: Parameters<ApiEvents[E]>) => void;
 } {
-  const handlers = new Map<keyof ApiEventsV2, EventHandler<keyof ApiEventsV2>>();
+  const handlers = new Map<keyof ApiEvents, EventHandler<keyof ApiEvents>>();
 
-  const api: DomainEventApiV2 = {
-    on: vi.fn(<E extends keyof ApiEventsV2>(event: E, handler: ApiEventsV2[E]) => {
-      handlers.set(event, handler as EventHandler<keyof ApiEventsV2>);
+  const api: DomainEventApi = {
+    on: vi.fn(<E extends keyof ApiEvents>(event: E, handler: ApiEvents[E]) => {
+      handlers.set(event, handler as EventHandler<keyof ApiEvents>);
       return () => {
         handlers.delete(event);
       };
     }),
   };
 
-  const emit = <E extends keyof ApiEventsV2>(
-    event: E,
-    ...args: Parameters<ApiEventsV2[E]>
-  ): void => {
+  const emit = <E extends keyof ApiEvents>(event: E, ...args: Parameters<ApiEvents[E]>): void => {
     const handler = handlers.get(event) as
-      | ((...args: Parameters<ApiEventsV2[E]>) => void)
+      | ((...args: Parameters<ApiEvents[E]>) => void)
       | undefined;
     if (handler) {
       handler(...args);
@@ -83,9 +80,9 @@ function createMockApi(): {
 // Tests
 // =============================================================================
 
-describe("setupDomainEventsV2", () => {
+describe("setupDomainEvents", () => {
   let mockApi: ReturnType<typeof createMockApi>;
-  let mockStores: DomainStoresV2;
+  let mockStores: DomainStores;
 
   beforeEach(() => {
     mockApi = createMockApi();
@@ -102,7 +99,7 @@ describe("setupDomainEventsV2", () => {
 
   describe("project events", () => {
     it("calls addProject when project:opened is emitted", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       mockApi.emit("project:opened", { project: TEST_PROJECT });
 
@@ -110,7 +107,7 @@ describe("setupDomainEventsV2", () => {
     });
 
     it("calls removeProject when project:closed is emitted", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       mockApi.emit("project:closed", { projectId: TEST_PROJECT_ID });
 
@@ -120,7 +117,7 @@ describe("setupDomainEventsV2", () => {
 
   describe("workspace events", () => {
     it("calls addWorkspace and setActiveWorkspace when workspace:created is emitted", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       mockApi.emit("workspace:created", {
         projectId: TEST_PROJECT_ID,
@@ -137,7 +134,7 @@ describe("setupDomainEventsV2", () => {
     });
 
     it("calls removeWorkspace when workspace:removed is emitted", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       mockApi.emit("workspace:removed", TEST_WORKSPACE_REF);
 
@@ -145,7 +142,7 @@ describe("setupDomainEventsV2", () => {
     });
 
     it("calls setActiveWorkspace when workspace:switched is emitted", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       mockApi.emit("workspace:switched", TEST_WORKSPACE_REF);
 
@@ -153,7 +150,7 @@ describe("setupDomainEventsV2", () => {
     });
 
     it("calls setActiveWorkspace with null when workspace:switched emits null", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       mockApi.emit("workspace:switched", null);
 
@@ -163,7 +160,7 @@ describe("setupDomainEventsV2", () => {
 
   describe("status events", () => {
     it("calls updateAgentStatus when workspace:status-changed is emitted", () => {
-      setupDomainEventsV2(mockApi.api, mockStores);
+      setupDomainEvents(mockApi.api, mockStores);
 
       const status = {
         isDirty: false,
@@ -181,7 +178,7 @@ describe("setupDomainEventsV2", () => {
     it("calls onProjectOpenedHook after addProject when provided", () => {
       const hookSpy = vi.fn();
 
-      setupDomainEventsV2(mockApi.api, mockStores, {
+      setupDomainEvents(mockApi.api, mockStores, {
         onProjectOpenedHook: hookSpy,
       });
 
@@ -195,7 +192,7 @@ describe("setupDomainEventsV2", () => {
 
     it("works without hooks (backward compatible)", () => {
       expect(() => {
-        setupDomainEventsV2(mockApi.api, mockStores);
+        setupDomainEvents(mockApi.api, mockStores);
       }).not.toThrow();
 
       mockApi.emit("project:opened", { project: TEST_PROJECT });
@@ -206,7 +203,7 @@ describe("setupDomainEventsV2", () => {
 
   describe("cleanup", () => {
     it("returns cleanup function that unsubscribes all events", () => {
-      const cleanup = setupDomainEventsV2(mockApi.api, mockStores);
+      const cleanup = setupDomainEvents(mockApi.api, mockStores);
 
       // Verify handlers were registered
       expect(mockApi.handlers.size).toBeGreaterThan(0);
@@ -219,7 +216,7 @@ describe("setupDomainEventsV2", () => {
     });
 
     it("does not call stores after cleanup", () => {
-      const cleanup = setupDomainEventsV2(mockApi.api, mockStores);
+      const cleanup = setupDomainEvents(mockApi.api, mockStores);
 
       cleanup();
 
@@ -244,7 +241,7 @@ describe("setupDomainEventsV2", () => {
     it("calls notification service on agent status change with counts", () => {
       const handleStatusChangeSpy = vi.spyOn(mockNotificationService, "handleStatusChange");
 
-      setupDomainEventsV2(mockApi.api, mockStores, undefined, {
+      setupDomainEvents(mockApi.api, mockStores, undefined, {
         notificationService: mockNotificationService,
       });
 
@@ -264,7 +261,7 @@ describe("setupDomainEventsV2", () => {
     it("does not call notification service when agent type is none", () => {
       const handleStatusChangeSpy = vi.spyOn(mockNotificationService, "handleStatusChange");
 
-      setupDomainEventsV2(mockApi.api, mockStores, undefined, {
+      setupDomainEvents(mockApi.api, mockStores, undefined, {
         notificationService: mockNotificationService,
       });
 
@@ -280,7 +277,7 @@ describe("setupDomainEventsV2", () => {
     it("cleans up notification service when workspace is removed", () => {
       const removeWorkspaceSpy = vi.spyOn(mockNotificationService, "removeWorkspace");
 
-      setupDomainEventsV2(mockApi.api, mockStores, undefined, {
+      setupDomainEvents(mockApi.api, mockStores, undefined, {
         notificationService: mockNotificationService,
       });
 
@@ -300,7 +297,7 @@ describe("setupDomainEventsV2", () => {
         callOrder.push("notification");
       });
 
-      setupDomainEventsV2(mockApi.api, mockStores, undefined, {
+      setupDomainEvents(mockApi.api, mockStores, undefined, {
         notificationService: mockNotificationService,
       });
 

@@ -40,35 +40,24 @@ export {
   type WorkspaceKey,
 } from "$lib/utils/id-utils";
 
-// Re-export types for convenience (from old IPC types - still used by some components)
-export type {
-  Project,
-  Workspace,
-  BaseInfo,
-  ProjectPath,
-  WorkspacePath,
-  ProjectOpenedEvent,
-  ProjectClosedEvent,
-  WorkspaceCreatedEvent,
-  WorkspaceRemovedEvent,
-  WorkspaceSwitchedEvent,
-} from "@shared/ipc";
+// Re-export branded path types from IPC (still used for type safety)
+export type { ProjectPath, WorkspacePath } from "@shared/ipc";
 
 export type { Unsubscribe } from "@shared/electron-api";
 
 // Re-export v2 API types for convenience
 export type {
-  Project as ProjectV2,
-  Workspace as WorkspaceV2,
+  Project,
+  Workspace,
   WorkspaceRef,
   WorkspaceStatus,
   WorkspaceRemovalResult,
   AgentStatus,
   AgentStatusCounts,
-  BaseInfo as BaseInfoV2,
+  BaseInfo,
   SetupResult,
   SetupProgress,
-  AppState as AppStateV2,
+  AppState,
   ProjectId,
   WorkspaceName,
 } from "@shared/api/types";

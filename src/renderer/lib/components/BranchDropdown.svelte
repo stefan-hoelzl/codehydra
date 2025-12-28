@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { projects, type ProjectId, type BaseInfoV2 } from "$lib/api";
+  import { projects, type ProjectId, type BaseInfo } from "$lib/api";
   import FilterableDropdown, { type DropdownOption } from "./FilterableDropdown.svelte";
 
   interface BranchDropdownProps {
@@ -12,7 +12,7 @@
   let { projectId, value, onSelect, disabled = false }: BranchDropdownProps = $props();
 
   // State
-  let branches = $state<readonly BaseInfoV2[]>([]);
+  let branches = $state<readonly BaseInfo[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let hasValidatedInitialValue = $state(false);
@@ -24,7 +24,7 @@
 
     projects
       .fetchBases(projectId)
-      .then((result: { bases: readonly BaseInfoV2[] }) => {
+      .then((result: { bases: readonly BaseInfo[] }) => {
         branches = result.bases;
         loading = false;
       })

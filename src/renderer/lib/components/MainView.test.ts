@@ -6,7 +6,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/svelte";
 import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
-import { delay } from "@services/test-utils";
 import type { WorkspacePath } from "@shared/ipc";
 import { createMockProject } from "$lib/test-fixtures";
 
@@ -698,7 +697,7 @@ describe("MainView component", () => {
       });
 
       // Give time for any potential auto-open to trigger
-      await delay(50);
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(mockApi.ui.selectFolder).not.toHaveBeenCalled();
     });
@@ -797,7 +796,7 @@ describe("MainView component", () => {
       callback!({ project: projectWithWorkspaces });
 
       // Give time for any auto-open to trigger
-      await delay(50);
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(dialogsStore.dialogState.value.type).toBe("closed");
     });
@@ -843,7 +842,7 @@ describe("MainView component", () => {
       callback!({ project: emptyProject });
 
       // Give time for any auto-open to trigger
-      await delay(50);
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should still be remove dialog, not auto-opened create
       expect(dialogsStore.dialogState.value.type).toBe("remove");
@@ -1055,7 +1054,7 @@ describe("MainView component", () => {
       callback!(createDeletionProgress("/test/.worktrees/feature"));
 
       // Verify deletion state is set
-      expect(deletionStore.isDeleting("/test/.worktrees/feature")).toBe(true);
+      expect(deletionStore.getDeletionStatus("/test/.worktrees/feature")).not.toBe("none");
 
       // Simulate successful completion
       callback!(
@@ -1070,7 +1069,7 @@ describe("MainView component", () => {
       );
 
       // Deletion state should be cleared
-      expect(deletionStore.isDeleting("/test/.worktrees/feature")).toBe(false);
+      expect(deletionStore.getDeletionStatus("/test/.worktrees/feature")).toBe("none");
     });
 
     it("does not clear deletion state on completion with errors", async () => {
@@ -1099,7 +1098,7 @@ describe("MainView component", () => {
       );
 
       // Deletion state should NOT be cleared (user needs to see error and retry/close anyway)
-      expect(deletionStore.isDeleting("/test/.worktrees/feature")).toBe(true);
+      expect(deletionStore.getDeletionStatus("/test/.worktrees/feature")).toBe("error");
     });
 
     it("calls workspaces.remove on retry", async () => {
@@ -1160,7 +1159,7 @@ describe("MainView component", () => {
           "test-project-12345678",
           "feature",
           false, // keepBranch from the stored progress
-          true // skipSwitch - on retry, skip switching away
+          true // skipSwitch - retry keeps user on this workspace
         );
       });
     });
@@ -1227,7 +1226,7 @@ describe("MainView component", () => {
 
       // State should be cleared
       await waitFor(() => {
-        expect(deletionStore.isDeleting("/test/.worktrees/feature")).toBe(false);
+        expect(deletionStore.getDeletionStatus("/test/.worktrees/feature")).toBe("none");
       });
     });
   });

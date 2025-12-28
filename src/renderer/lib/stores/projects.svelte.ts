@@ -201,14 +201,6 @@ export function getAllWorkspaces(): Workspace[] {
 }
 
 /**
- * Get workspace by global index (0-based).
- * @returns Workspace at index, or undefined if out of range.
- */
-export function getWorkspaceByIndex(index: number): Workspace | undefined {
-  return getAllWorkspaces()[index];
-}
-
-/**
  * Get WorkspaceRef by global index (0-based).
  * Includes projectId and workspaceName for v2 API calls.
  * @returns WorkspaceRef at index, or undefined if out of range.
@@ -275,13 +267,6 @@ export function wrapIndex(index: number, length: number): number {
  * v2 API projects already include IDs, so this is just an alias.
  */
 export type ProjectWithId = Project;
-
-/**
- * Get all projects (v2 projects include IDs from the API).
- */
-export function getProjectsWithIds(): readonly Project[] {
-  return _sortedProjects;
-}
 
 /**
  * Get a project by its ID.

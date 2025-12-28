@@ -50,7 +50,6 @@ export type {
   SetupProgress,
   SetupResult,
   AppState,
-  ApiError,
 } from "./types";
 
 // Type guards

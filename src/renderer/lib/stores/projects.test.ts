@@ -4,8 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Api } from "@shared/electron-api";
-import type { ProjectPath, Workspace } from "@shared/ipc";
-import type { ProjectId, WorkspaceName } from "@shared/api/types";
+import type { ProjectPath } from "@shared/ipc";
+import type { ProjectId, WorkspaceName, Workspace } from "@shared/api/types";
 import { createMockProject, createMockWorkspace } from "$lib/test-fixtures";
 import { createMockApi } from "../test-utils";
 
@@ -33,7 +33,6 @@ import {
   removeWorkspace,
   reset,
   getAllWorkspaces,
-  getWorkspaceByIndex,
   findWorkspaceIndex,
   wrapIndex,
 } from "./projects.svelte.js";
@@ -367,49 +366,6 @@ describe("projects store", () => {
     it("should-return-empty-array-when-no-projects", () => {
       const result = getAllWorkspaces();
       expect(result).toEqual([]);
-    });
-  });
-
-  describe("getWorkspaceByIndex", () => {
-    it("should-return-workspace-at-global-index-in-alphabetical-order", () => {
-      // Add in non-alphabetical order to verify sorting
-      const wsC = createMockWorkspace({ path: "/test/p2/wsC", name: "charlie" });
-      const wsA = createMockWorkspace({ path: "/test/p1/wsA", name: "alpha" });
-      const wsB = createMockWorkspace({ path: "/test/p1/wsB", name: "bravo" });
-
-      addProject(
-        createMockProject({
-          path: "/test/p2" as ProjectPath,
-          name: "project-b",
-          workspaces: [wsC],
-        })
-      );
-      addProject(
-        createMockProject({
-          path: "/test/p1" as ProjectPath,
-          name: "project-a",
-          workspaces: [wsB, wsA], // Add in non-alphabetical order
-        })
-      );
-
-      // Should be sorted: project-a (alpha, bravo), project-b (charlie)
-      expect(getWorkspaceByIndex(0)?.name).toBe("alpha");
-      expect(getWorkspaceByIndex(1)?.name).toBe("bravo");
-      expect(getWorkspaceByIndex(2)?.name).toBe("charlie");
-    });
-
-    it("should-return-undefined-for-out-of-range-index", () => {
-      const ws = createMockWorkspace({ path: "/test/p1/ws1" });
-      addProject(
-        createMockProject({
-          path: "/test/p1" as ProjectPath,
-          workspaces: [ws],
-        })
-      );
-
-      expect(getWorkspaceByIndex(-1)).toBeUndefined();
-      expect(getWorkspaceByIndex(1)).toBeUndefined();
-      expect(getWorkspaceByIndex(100)).toBeUndefined();
     });
   });
 

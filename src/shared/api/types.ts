@@ -221,41 +221,6 @@ export type SetupResult =
 export type AppState = "setup" | "ready";
 
 // =============================================================================
-// Error Types
-// =============================================================================
-
-/**
- * Service error type constant for error categorization.
- */
-export type ServiceErrorType =
-  | "git"
-  | "workspace"
-  | "code-server"
-  | "project-store"
-  | "opencode"
-  | "vscode-setup"
-  | "filesystem";
-
-/**
- * Serialized service error for IPC transport.
- * Compatible with ServiceError.toJSON() output.
- */
-export interface SerializedServiceError {
-  readonly type: ServiceErrorType;
-  readonly message: string;
-  readonly code?: string;
-  readonly path?: string;
-}
-
-/**
- * API error types aligned with ServiceError pattern.
- */
-export type ApiError =
-  | { readonly type: "not-found"; readonly resource: "project" | "workspace"; readonly id: string }
-  | { readonly type: "validation"; readonly message: string; readonly field?: string }
-  | { readonly type: "service"; readonly cause: SerializedServiceError };
-
-// =============================================================================
 // Deletion Progress Types
 // =============================================================================
 

@@ -6,7 +6,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   setDeletionState,
   clearDeletion,
-  isDeleting,
   getDeletionState,
   getDeletionStatus,
   deletionStates,
@@ -103,21 +102,21 @@ describe("deletion store", () => {
     });
   });
 
-  describe("isDeleting", () => {
-    it("should return true only for stored workspaces", () => {
+  describe("getDeletionStatus for existence checks", () => {
+    it("should return in-progress only for stored workspaces", () => {
       const progress = createProgress("/path/to/workspace");
       setDeletionState(progress);
 
-      expect(isDeleting("/path/to/workspace")).toBe(true);
-      expect(isDeleting("/other/workspace")).toBe(false);
+      expect(getDeletionStatus("/path/to/workspace")).toBe("in-progress");
+      expect(getDeletionStatus("/other/workspace")).toBe("none");
     });
 
-    it("should return false after clearDeletion", () => {
+    it("should return none after clearDeletion", () => {
       const progress = createProgress("/path/to/workspace");
       setDeletionState(progress);
       clearDeletion("/path/to/workspace");
 
-      expect(isDeleting("/path/to/workspace")).toBe(false);
+      expect(getDeletionStatus("/path/to/workspace")).toBe("none");
     });
   });
 
@@ -158,8 +157,8 @@ describe("deletion store", () => {
       reset();
 
       expect(deletionStates.value.size).toBe(0);
-      expect(isDeleting("/path/to/workspace1")).toBe(false);
-      expect(isDeleting("/path/to/workspace2")).toBe(false);
+      expect(getDeletionStatus("/path/to/workspace1")).toBe("none");
+      expect(getDeletionStatus("/path/to/workspace2")).toBe("none");
     });
   });
 
