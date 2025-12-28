@@ -20,6 +20,7 @@ import { z } from "zod";
 import type { IMcpServer, ResolvedWorkspace, McpError } from "./types";
 import type { ICoreApi } from "../../shared/api/interfaces";
 import type { Logger, LogContext } from "../logging";
+import { SILENT_LOGGER, logAtLevel } from "../logging";
 import type { LogLevel } from "../logging/types";
 import { resolveWorkspace, type WorkspaceLookup } from "./workspace-resolver";
 import { getErrorMessage } from "../errors";
@@ -28,17 +29,6 @@ import { getErrorMessage } from "../errors";
  * X-Workspace-Path header name.
  */
 const WORKSPACE_PATH_HEADER = "x-workspace-path";
-
-/**
- * Silent logger for when no logger is provided.
- */
-const SILENT_LOGGER: Logger = {
-  silly: () => {},
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
 
 /**
  * Tool handler context providing workspace resolution.
@@ -414,23 +404,7 @@ export class McpServer implements IMcpServer {
             workspace: context.workspacePath,
           };
 
-          switch (level) {
-            case "silly":
-              this.logger.silly(args.message, logContext);
-              break;
-            case "debug":
-              this.logger.debug(args.message, logContext);
-              break;
-            case "info":
-              this.logger.info(args.message, logContext);
-              break;
-            case "warn":
-              this.logger.warn(args.message, logContext);
-              break;
-            case "error":
-              this.logger.error(args.message, logContext);
-              break;
-          }
+          logAtLevel(this.logger, level, args.message, logContext);
 
           return this.successResult(null);
         }

@@ -60,6 +60,7 @@
   import type { ProjectId, WorkspaceRef } from "$lib/api";
   import type { AggregatedAgentStatus } from "@shared/ipc";
   import type { Project, WorkspaceStatus, AgentStatus, DeletionProgress } from "@shared/api/types";
+  import { getErrorMessage } from "$lib/utils/error-utils";
 
   const logger = createLogger("ui");
 
@@ -274,7 +275,7 @@
     try {
       await api.projects.open(path);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to open project";
+      const message = getErrorMessage(error);
       logger.warn("Failed to open project", { path, error: message });
       openProjectError = message;
     }
@@ -292,7 +293,7 @@
     try {
       await api.projects.open(path);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to open project";
+      const message = getErrorMessage(error);
       logger.warn("Failed to open project", { path, error: message });
       openProjectError = message;
     }
@@ -362,8 +363,7 @@
       );
       clearDeletion(activeDeletionState.workspacePath);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Force remove failed";
-      logger.warn("Force remove failed", { error: message });
+      logger.warn("Force remove failed", { error: getErrorMessage(error) });
     }
   }
 </script>

@@ -14,6 +14,7 @@ import { Server, type Socket } from "socket.io";
 import { createServer, type Server as HttpServer } from "node:http";
 import path from "node:path";
 import type { Logger } from "../logging";
+import { SILENT_LOGGER, logAtLevel } from "../logging";
 import type { PortManager } from "../platform/network";
 import {
   type ServerToClientEvents,
@@ -140,16 +141,6 @@ export interface ApiCallHandlers {
  * await server.close();
  * ```
  */
-/**
- * No-op logger implementation for when no logger is provided.
- */
-const SILENT_LOGGER: Logger = {
-  silly: () => {},
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
 
 /**
  * Configuration options for PluginServer.
@@ -639,23 +630,7 @@ export class PluginServer {
       };
 
       const level = request.level as LogLevel;
-      switch (level) {
-        case "silly":
-          this.extensionLogger.silly(request.message, context);
-          break;
-        case "debug":
-          this.extensionLogger.debug(request.message, context);
-          break;
-        case "info":
-          this.extensionLogger.info(request.message, context);
-          break;
-        case "warn":
-          this.extensionLogger.warn(request.message, context);
-          break;
-        case "error":
-          this.extensionLogger.error(request.message, context);
-          break;
-      }
+      logAtLevel(this.extensionLogger, level, request.message, context);
     });
   }
 

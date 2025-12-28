@@ -17,13 +17,12 @@ import type {
   UiSwitchWorkspacePayload,
   UiSetModePayload,
 } from "../../api/registry-types";
-import type { ProjectId, WorkspaceName, WorkspaceRef } from "../../../shared/api/types";
+import type { WorkspaceRef } from "../../../shared/api/types";
 import type { AppState } from "../../app-state";
 import type { IViewManager } from "../../managers/view-manager.interface";
 import type { Unsubscribe } from "../../../shared/api/interfaces";
 import { ApiIpcChannels } from "../../../shared/ipc";
-import { generateProjectId } from "../../api/id-utils";
-import * as path from "node:path";
+import { generateProjectId, extractWorkspaceName, resolveProjectPath } from "../../api/id-utils";
 
 // =============================================================================
 // Types
@@ -138,7 +137,7 @@ export class UiModule implements IApiModule {
     }
 
     const projectId = generateProjectId(project.path);
-    const workspaceName = path.basename(activeWorkspacePath) as WorkspaceName;
+    const workspaceName = extractWorkspaceName(activeWorkspacePath);
 
     return {
       projectId,
@@ -148,7 +147,7 @@ export class UiModule implements IApiModule {
   }
 
   private async switchWorkspace(payload: UiSwitchWorkspacePayload): Promise<void> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) {
       throw new Error(`Project not found: ${payload.projectId}`);
     }
@@ -159,7 +158,7 @@ export class UiModule implements IApiModule {
     }
 
     const workspace = internalProject.workspaces.find(
-      (w) => path.basename(w.path) === payload.workspaceName
+      (w) => extractWorkspaceName(w.path) === payload.workspaceName
     );
     if (!workspace) {
       throw new Error(`Workspace not found: ${payload.workspaceName}`);
@@ -177,20 +176,6 @@ export class UiModule implements IApiModule {
 
   private async setMode(payload: UiSetModePayload): Promise<void> {
     this.deps.viewManager.setMode(payload.mode);
-  }
-
-  // ===========================================================================
-  // Helper Methods
-  // ===========================================================================
-
-  private async resolveProjectPath(projectId: ProjectId): Promise<string | undefined> {
-    const projects = await this.deps.appState.getAllProjects();
-    for (const project of projects) {
-      if (generateProjectId(project.path) === projectId) {
-        return project.path;
-      }
-    }
-    return undefined;
   }
 
   // ===========================================================================

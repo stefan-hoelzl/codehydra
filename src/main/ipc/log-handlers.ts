@@ -24,6 +24,19 @@ function toLoggerName(name: string): LoggerName {
 }
 
 /**
+ * Log level to IPC channel mapping.
+ */
+const LOG_LEVEL_CHANNELS: ReadonlyArray<{
+  level: "debug" | "info" | "warn" | "error";
+  channel: string;
+}> = [
+  { level: "debug", channel: ApiIpcChannels.LOG_DEBUG },
+  { level: "info", channel: ApiIpcChannels.LOG_INFO },
+  { level: "warn", channel: ApiIpcChannels.LOG_WARN },
+  { level: "error", channel: ApiIpcChannels.LOG_ERROR },
+];
+
+/**
  * Register log IPC handlers.
  *
  * These handlers delegate to the provided LoggingService.
@@ -33,47 +46,15 @@ function toLoggerName(name: string): LoggerName {
  * @param loggingService - The LoggingService instance to delegate to
  */
 export function registerLogHandlers(loggingService: LoggingService): void {
-  // Debug level
-  ipcMain.on(ApiIpcChannels.LOG_DEBUG, (_event, payload: ApiLogPayload) => {
-    try {
-      const loggerName = toLoggerName(payload.logger);
-      const logger = loggingService.createLogger(loggerName);
-      logger.debug(payload.message, payload.context as LogContext | undefined);
-    } catch {
-      // Swallow errors - logging should never crash the app
-    }
-  });
-
-  // Info level
-  ipcMain.on(ApiIpcChannels.LOG_INFO, (_event, payload: ApiLogPayload) => {
-    try {
-      const loggerName = toLoggerName(payload.logger);
-      const logger = loggingService.createLogger(loggerName);
-      logger.info(payload.message, payload.context as LogContext | undefined);
-    } catch {
-      // Swallow errors - logging should never crash the app
-    }
-  });
-
-  // Warn level
-  ipcMain.on(ApiIpcChannels.LOG_WARN, (_event, payload: ApiLogPayload) => {
-    try {
-      const loggerName = toLoggerName(payload.logger);
-      const logger = loggingService.createLogger(loggerName);
-      logger.warn(payload.message, payload.context as LogContext | undefined);
-    } catch {
-      // Swallow errors - logging should never crash the app
-    }
-  });
-
-  // Error level
-  ipcMain.on(ApiIpcChannels.LOG_ERROR, (_event, payload: ApiLogPayload) => {
-    try {
-      const loggerName = toLoggerName(payload.logger);
-      const logger = loggingService.createLogger(loggerName);
-      logger.error(payload.message, payload.context as LogContext | undefined);
-    } catch {
-      // Swallow errors - logging should never crash the app
-    }
-  });
+  for (const { level, channel } of LOG_LEVEL_CHANNELS) {
+    ipcMain.on(channel, (_event, payload: ApiLogPayload) => {
+      try {
+        const loggerName = toLoggerName(payload.logger);
+        const logger = loggingService.createLogger(loggerName);
+        logger[level](payload.message, payload.context as LogContext | undefined);
+      } catch {
+        // Swallow errors - logging should never crash the app
+      }
+    });
+  }
 }

@@ -6,6 +6,7 @@
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { getProjectById } from "$lib/stores/projects.svelte.js";
   import { createLogger } from "$lib/logging";
+  import { getErrorMessage } from "$lib/utils/error-utils";
 
   const logger = createLogger("ui");
 
@@ -125,7 +126,7 @@
       await ui.switchWorkspace(selectedProjectId, workspace.name);
       closeDialog();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create workspace";
+      const message = getErrorMessage(error);
       logger.warn("UI error", { component: "CreateWorkspaceDialog", error: message });
       submitError = message;
       isSubmitting = false;

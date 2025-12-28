@@ -9,7 +9,6 @@
  * Created in startServices() after setup is complete.
  */
 
-import * as path from "node:path";
 import type {
   IApiRegistry,
   IApiModule,
@@ -40,7 +39,8 @@ import type { IViewManager } from "../../managers/view-manager.interface";
 import type { Logger } from "../../../services/logging/index";
 import { ApiIpcChannels } from "../../../shared/ipc";
 import { createSilentLogger } from "../../../services/logging";
-import { generateProjectId } from "../../api/id-utils";
+import { getErrorMessage } from "../../../services/errors";
+import { generateProjectId, extractWorkspaceName, resolveProjectPath } from "../../api/id-utils";
 import type {
   Project as InternalProject,
   Workspace as InternalWorkspace,
@@ -206,7 +206,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async projectClose(payload: ProjectIdPayload): Promise<void> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) {
       throw new Error(`Project not found: ${payload.projectId}`);
     }
@@ -222,7 +222,7 @@ export class CoreModule implements IApiModule {
   }
 
   private async projectGet(payload: ProjectIdPayload): Promise<Project | undefined> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) return undefined;
 
     const internalProject = this.deps.appState.getProject(projectPath);
@@ -235,7 +235,7 @@ export class CoreModule implements IApiModule {
   private async projectFetchBases(
     payload: ProjectIdPayload
   ): Promise<{ readonly bases: readonly BaseInfo[] }> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) {
       throw new Error(`Project not found: ${payload.projectId}`);
     }
@@ -259,7 +259,7 @@ export class CoreModule implements IApiModule {
   // ===========================================================================
 
   private async workspaceCreate(payload: WorkspaceCreatePayload): Promise<Workspace> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) {
       throw new Error(`Project not found: ${payload.projectId}`);
     }
@@ -436,16 +436,6 @@ export class CoreModule implements IApiModule {
   // Helper Methods
   // ===========================================================================
 
-  private async resolveProjectPath(projectId: ProjectId): Promise<string | undefined> {
-    const projects = await this.deps.appState.getAllProjects();
-    for (const project of projects) {
-      if (generateProjectId(project.path) === projectId) {
-        return project.path;
-      }
-    }
-    return undefined;
-  }
-
   private toApiProject(
     internalProject: {
       path: string;
@@ -476,7 +466,7 @@ export class CoreModule implements IApiModule {
       metadata: Readonly<Record<string, string>>;
     }
   ): Workspace {
-    const name = this.extractWorkspaceName(internalWorkspace.path) as WorkspaceName;
+    const name = extractWorkspaceName(internalWorkspace.path);
     return {
       projectId,
       name,
@@ -486,16 +476,12 @@ export class CoreModule implements IApiModule {
     };
   }
 
-  private extractWorkspaceName(workspacePath: string): string {
-    return path.basename(workspacePath);
-  }
-
   /**
    * Resolve a workspace from payload, throwing on not found.
    * Used by methods that require the workspace to exist.
    */
   private async resolveWorkspace(payload: WorkspaceRefPayload): Promise<ResolvedWorkspace> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) {
       throw new Error(`Project not found: ${payload.projectId}`);
     }
@@ -506,7 +492,7 @@ export class CoreModule implements IApiModule {
     }
 
     const workspace = project.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+      (w) => extractWorkspaceName(w.path) === payload.workspaceName
     );
     if (!workspace) {
       throw new Error(`Workspace not found: ${payload.workspaceName}`);
@@ -522,14 +508,14 @@ export class CoreModule implements IApiModule {
   private async tryResolveWorkspace(
     payload: WorkspaceRefPayload
   ): Promise<ResolvedWorkspace | undefined> {
-    const projectPath = await this.resolveProjectPath(payload.projectId);
+    const projectPath = await resolveProjectPath(payload.projectId, this.deps.appState);
     if (!projectPath) return undefined;
 
     const project = this.deps.appState.getProject(projectPath);
     if (!project) return undefined;
 
     const workspace = project.workspaces.find(
-      (w) => this.extractWorkspaceName(w.path) === payload.workspaceName
+      (w) => extractWorkspaceName(w.path) === payload.workspaceName
     );
     if (!workspace) return undefined;
 
@@ -548,7 +534,7 @@ export class CoreModule implements IApiModule {
       const otherWorkspace = currentProject.workspaces.find((w) => w.path !== excludeWorkspacePath);
       if (otherWorkspace) {
         const projectId = generateProjectId(currentProjectPath);
-        const workspaceName = this.extractWorkspaceName(otherWorkspace.path) as WorkspaceName;
+        const workspaceName = extractWorkspaceName(otherWorkspace.path);
         this.deps.viewManager.setActiveWorkspace(otherWorkspace.path, false);
         this.api.emit("workspace:switched", {
           projectId,
@@ -565,7 +551,7 @@ export class CoreModule implements IApiModule {
       const firstWorkspace = project.workspaces[0];
       if (firstWorkspace) {
         const projectId = generateProjectId(project.path);
-        const workspaceName = this.extractWorkspaceName(firstWorkspace.path) as WorkspaceName;
+        const workspaceName = extractWorkspaceName(firstWorkspace.path);
         this.deps.viewManager.setActiveWorkspace(firstWorkspace.path, false);
         this.api.emit("workspace:switched", {
           projectId,
@@ -655,8 +641,10 @@ export class CoreModule implements IApiModule {
           await this.deps.killTerminalsCallback(workspacePath);
           updateOp("kill-terminals", "done");
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          this.logger.warn("Kill terminals failed", { workspacePath, error: errorMessage });
+          this.logger.warn("Kill terminals failed", {
+            workspacePath,
+            error: getErrorMessage(error),
+          });
           updateOp("kill-terminals", "done");
         }
       } else {
@@ -685,8 +673,7 @@ export class CoreModule implements IApiModule {
           operations.some((op) => op.status === "error")
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Server stop failed";
-        updateOp("stop-server", "error", message);
+        updateOp("stop-server", "error", getErrorMessage(error));
         emitProgress(false, true);
       }
 
@@ -705,8 +692,7 @@ export class CoreModule implements IApiModule {
           operations.some((op) => op.status === "error")
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : "View cleanup failed";
-        updateOp("cleanup-vscode", "error", message);
+        updateOp("cleanup-vscode", "error", getErrorMessage(error));
         emitProgress(false, true);
       }
 
@@ -724,8 +710,7 @@ export class CoreModule implements IApiModule {
         }
         updateOp("cleanup-workspace", "done");
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Workspace cleanup failed";
-        updateOp("cleanup-workspace", "error", message);
+        updateOp("cleanup-workspace", "error", getErrorMessage(error));
       }
 
       // Finalize
@@ -746,12 +731,12 @@ export class CoreModule implements IApiModule {
         { workspacePath, workspaceName },
         error instanceof Error ? error : undefined
       );
-      const message = error instanceof Error ? error.message : "Deletion failed";
+      const errorMsg = getErrorMessage(error);
 
       for (let i = 0; i < operations.length; i++) {
         const op = operations[i];
         if (op && op.status === "in-progress") {
-          operations[i] = { id: op.id, label: op.label, status: "error", error: message };
+          operations[i] = { id: op.id, label: op.label, status: "error", error: errorMsg };
         }
       }
 

@@ -5,6 +5,7 @@
   import { closeDialog } from "$lib/stores/dialogs.svelte.js";
   import { projects } from "$lib/stores/projects.svelte.js";
   import { createLogger } from "$lib/logging";
+  import { getErrorMessage } from "$lib/utils/error-utils";
   import type { ProjectId } from "@shared/api/types";
 
   const logger = createLogger("ui");
@@ -77,7 +78,7 @@
       await projectsApi.close(projectId);
       closeDialog();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to close project";
+      const message = getErrorMessage(error);
       logger.warn("UI error", { component: "CloseProjectDialog", error: message });
       submitError = message;
       isSubmitting = false;

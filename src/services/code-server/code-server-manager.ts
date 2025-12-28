@@ -242,9 +242,9 @@ export class CodeServerManager {
       this.currentPid = null;
       this.process = null;
 
-      const message = error instanceof Error ? error.message : "Unknown error starting code-server";
-      this.logger.error("Start failed", { error: message });
-      throw new CodeServerError(`Failed to start code-server: ${message}`);
+      const errorMsg = getErrorMessage(error);
+      this.logger.error("Start failed", { error: errorMsg });
+      throw new CodeServerError(`Failed to start code-server: ${errorMsg}`);
     }
   }
 

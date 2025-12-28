@@ -1,11 +1,12 @@
 /**
  * ID generation utilities for CodeHydra API.
  *
- * Provides deterministic ID generation for projects and workspace name validation.
+ * Provides deterministic ID generation for projects, workspace name extraction,
+ * and project resolution utilities.
  */
 import * as crypto from "node:crypto";
 import * as path from "node:path";
-import { type ProjectId } from "../../shared/api/types";
+import { type ProjectId, type WorkspaceName } from "../../shared/api/types";
 
 /**
  * Generate a deterministic ProjectId from an absolute path.
@@ -49,4 +50,57 @@ export function generateProjectId(absolutePath: string): ProjectId {
   const hash = crypto.createHash("sha256").update(normalizedPath).digest("hex").slice(0, 8);
 
   return `${safeName}-${hash}` as ProjectId;
+}
+
+/**
+ * Extract the workspace name from a workspace path.
+ * The workspace name is the basename of the path.
+ *
+ * @param workspacePath Absolute path to the workspace directory
+ * @returns The workspace name (basename of the path)
+ *
+ * @example
+ * ```typescript
+ * extractWorkspaceName("/home/user/projects/.worktrees/feature-1") // "feature-1"
+ * ```
+ */
+export function extractWorkspaceName(workspacePath: string): WorkspaceName {
+  return path.basename(workspacePath) as WorkspaceName;
+}
+
+/**
+ * Interface for project list accessor.
+ * Used for resolving project paths from IDs.
+ */
+export interface ProjectListAccessor {
+  getAllProjects(): Promise<ReadonlyArray<{ path: string }>>;
+}
+
+/**
+ * Resolve a project path from a project ID.
+ * Searches through all projects to find one matching the given ID.
+ *
+ * @param projectId The project ID to resolve
+ * @param accessor Object providing getAllProjects method
+ * @returns The project path or undefined if not found
+ *
+ * @example
+ * ```typescript
+ * const path = await resolveProjectPath("my-app-12345678", appState);
+ * if (path) {
+ *   // Use the resolved path
+ * }
+ * ```
+ */
+export async function resolveProjectPath(
+  projectId: ProjectId,
+  accessor: ProjectListAccessor
+): Promise<string | undefined> {
+  const projects = await accessor.getAllProjects();
+  for (const project of projects) {
+    if (generateProjectId(project.path) === projectId) {
+      return project.path;
+    }
+  }
+  return undefined;
 }

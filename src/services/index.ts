@@ -3,6 +3,12 @@
  * All services are pure Node.js - no Electron dependencies.
  */
 
+// Shared types
+export type { IDisposable, Unsubscribe } from "./types";
+
+// Event emitter utility
+export { EventEmitter, VoidEventEmitter } from "./event-emitter";
+
 // Error types
 export {
   ServiceError,

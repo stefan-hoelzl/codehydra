@@ -29,12 +29,8 @@ export function err<E>(error: E): Result<never, E> {
 
 // ============ IDisposable ============
 
-/**
- * Interface for resources that need cleanup.
- */
-export interface IDisposable {
-  dispose(): void | Promise<void>;
-}
+// Re-export IDisposable from shared types for backward compatibility
+export type { IDisposable } from "../types";
 
 /**
  * Client status - simplified to just idle or busy.

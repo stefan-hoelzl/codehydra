@@ -111,19 +111,27 @@ export function createMockLoggingService(): MockLoggingService {
 }
 
 /**
+ * Silent no-op logger instance.
+ * Use this when you need a logger that does nothing (e.g., as a default when no logger is provided).
+ * This is a shared singleton - safe because the logger has no state.
+ */
+export const SILENT_LOGGER: Logger = {
+  silly: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
+
+/**
  * Create a silent no-op logger.
  * Useful when you don't want to assert on log calls.
  *
  * @returns Logger that does nothing
+ * @deprecated Use SILENT_LOGGER constant instead for consistency
  */
 export function createSilentLogger(): Logger {
-  return {
-    silly: () => {},
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-  };
+  return SILENT_LOGGER;
 }
 
 // ============================================================================

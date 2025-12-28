@@ -192,16 +192,7 @@ export class AppState {
       const url = this.getWorkspaceUrl(workspace.path);
       this.viewManager.createWorkspaceView(workspace.path, url, projectPath);
 
-      // Start OpenCode server for the workspace (agent status tracking is wired via callback)
-      if (this.serverManager) {
-        void this.serverManager.startServer(workspace.path).catch((err: unknown) => {
-          this.logger.error(
-            "Failed to start OpenCode server",
-            { workspacePath: workspace.path },
-            err instanceof Error ? err : undefined
-          );
-        });
-      }
+      this.startOpenCodeServerAsync(workspace.path);
     }
 
     // Set first workspace as active, or null if none
@@ -394,11 +385,19 @@ export class AppState {
     });
 
     // Start OpenCode server for the workspace (agent status tracking is wired via callback)
+    this.startOpenCodeServerAsync(workspace.path);
+  }
+
+  /**
+   * Start OpenCode server asynchronously with error logging.
+   * Fire-and-forget pattern - failures are logged but don't block.
+   */
+  private startOpenCodeServerAsync(workspacePath: string): void {
     if (this.serverManager) {
-      void this.serverManager.startServer(workspace.path).catch((err: unknown) => {
+      void this.serverManager.startServer(workspacePath).catch((err: unknown) => {
         this.logger.error(
           "Failed to start OpenCode server",
-          { workspacePath: workspace.path },
+          { workspacePath },
           err instanceof Error ? err : undefined
         );
       });

@@ -5,7 +5,7 @@
 import path from "path";
 import type { ProjectConfig } from "./types";
 import { CURRENT_PROJECT_VERSION } from "./types";
-import { ProjectStoreError } from "../errors";
+import { ProjectStoreError, getErrorMessage } from "../errors";
 import { projectDirName } from "../platform/paths";
 import type { FileSystemLayer } from "../platform/filesystem";
 
@@ -51,8 +51,7 @@ export class ProjectStore {
       // Write the config file
       await this.fs.writeFile(configPath, JSON.stringify(config, null, 2));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unknown error saving project";
-      throw new ProjectStoreError(`Failed to save project: ${message}`);
+      throw new ProjectStoreError(`Failed to save project: ${getErrorMessage(error)}`);
     }
   }
 

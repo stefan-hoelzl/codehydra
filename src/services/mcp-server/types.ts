@@ -3,6 +3,7 @@
  */
 
 import type { ProjectId, WorkspaceName } from "../../shared/api/types";
+import type { IDisposable } from "../types";
 
 // =============================================================================
 // Resolved Workspace
@@ -51,12 +52,8 @@ export type McpToolResult<T> =
 // MCP Server Types
 // =============================================================================
 
-/**
- * Disposable interface for cleanup.
- */
-export interface IDisposable {
-  dispose(): void | Promise<void>;
-}
+// Re-export IDisposable from shared types for backward compatibility
+export type { IDisposable } from "../types";
 
 /**
  * MCP Server interface.

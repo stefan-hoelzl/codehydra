@@ -105,6 +105,58 @@
   --ch-z-sidebar-expanded: 50;
 }
 
+/* ============================================================================
+ * Global Dialog Styles
+ * Shared styles for dialog components to reduce CSS duplication.
+ * ============================================================================ */
+
+/* Dialog title - consistent h2 styling across all dialogs */
+.ch-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ch-foreground);
+}
+
+/* Alert box - used for errors, warnings in dialogs */
+.ch-alert-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--ch-error-bg);
+  border-radius: 2px;
+  font-size: 13px;
+  color: var(--ch-error-fg);
+}
+
+/* Alert box icon container */
+.ch-alert-box-icon {
+  flex-shrink: 0;
+}
+
+/* Form field container - consistent spacing */
+.ch-form-field {
+  margin-bottom: 16px;
+}
+
+/* Form label - consistent label styling */
+.ch-form-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--ch-foreground);
+}
+
+/* Status message - informational text with reduced opacity */
+.ch-status-message {
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--ch-foreground);
+  opacity: 0.8;
+}
+
 /**
  * Light theme overrides.
  * Only fallback values change - VS Code variable references stay the same.

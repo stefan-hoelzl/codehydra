@@ -151,3 +151,27 @@ export interface LoggingService {
    */
   dispose(): void;
 }
+
+/**
+ * Log a message at the specified level.
+ * Useful when the log level is dynamic (e.g., from a switch statement).
+ *
+ * @param logger - The logger instance
+ * @param level - The log level to use
+ * @param message - The log message
+ * @param context - Optional context data
+ *
+ * @example
+ * ```typescript
+ * // Instead of switch statement:
+ * logAtLevel(logger, level, message, context);
+ * ```
+ */
+export function logAtLevel(
+  logger: Logger,
+  level: LogLevel,
+  message: string,
+  context?: LogContext
+): void {
+  logger[level](message, context);
+}

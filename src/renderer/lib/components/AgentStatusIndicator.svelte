@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getStatusText } from "$lib/utils/sidebar-utils";
+
   interface AgentStatusIndicatorProps {
     idleCount: number;
     busyCount: number;
@@ -28,22 +30,8 @@
   // Derive if pulsing animation should be applied
   const isPulsing = $derived(status === "busy" || status === "mixed");
 
-  // Generate status text for aria-label and tooltip
-  const statusText = $derived.by(() => {
-    if (status === "none") {
-      return "No agents running";
-    }
-    if (status === "idle") {
-      const noun = idleCount === 1 ? "agent" : "agents";
-      return `${idleCount} ${noun} idle`;
-    }
-    if (status === "busy") {
-      const noun = busyCount === 1 ? "agent" : "agents";
-      return `${busyCount} ${noun} busy`;
-    }
-    // mixed
-    return `${idleCount} idle, ${busyCount} busy`;
-  });
+  // Generate status text for aria-label and tooltip using shared utility
+  const statusText = $derived(getStatusText(idleCount, busyCount));
 
   // Tooltip visibility state
   let showTooltip = $state(false);

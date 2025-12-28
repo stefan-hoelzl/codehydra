@@ -12,12 +12,58 @@ import type {
   ProjectId,
   WorkspaceName,
   SetupProgress,
+  WorkspaceRef,
 } from "./api/types";
+import type { ProjectPath } from "./ipc";
 
 /**
  * Default project ID used in test fixtures.
  */
 export const DEFAULT_PROJECT_ID = "test-project-12345678" as ProjectId;
+
+// =============================================================================
+// Type Cast Helpers
+// =============================================================================
+
+/**
+ * Cast a string to ProjectId.
+ * Use in tests when you need to create a typed project ID from a plain string.
+ */
+export function asProjectId(id: string): ProjectId {
+  return id as ProjectId;
+}
+
+/**
+ * Cast a string to WorkspaceName.
+ * Use in tests when you need to create a typed workspace name from a plain string.
+ */
+export function asWorkspaceName(name: string): WorkspaceName {
+  return name as WorkspaceName;
+}
+
+/**
+ * Cast a string to ProjectPath.
+ * Use in tests when you need to create a typed project path from a plain string.
+ */
+export function asProjectPath(path: string): ProjectPath {
+  return path as ProjectPath;
+}
+
+/**
+ * Create a WorkspaceRef from plain strings.
+ * Use in tests when you need a typed workspace reference.
+ */
+export function asWorkspaceRef(
+  projectId: string,
+  workspaceName: string,
+  path: string
+): WorkspaceRef {
+  return {
+    projectId: asProjectId(projectId),
+    workspaceName: asWorkspaceName(workspaceName),
+    path,
+  };
+}
 
 // =============================================================================
 // Simple Mock Factories (backward-compatible with main process tests)
