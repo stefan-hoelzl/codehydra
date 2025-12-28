@@ -20,10 +20,36 @@ const TEST_VERSION = "1.0.163";
 const isWindows = process.platform === "win32";
 
 /**
+ * Output from the fake opencode binary.
+ * Used for structured assertions in tests.
+ */
+interface FakeOpencodeOutput {
+  args: string[];
+}
+
+/**
+ * Parse the JSON output from the fake opencode binary.
+ *
+ * @param stdout - stdout from the script execution
+ * @returns Parsed output or null if parsing fails
+ */
+function parseFakeOpencodeOutput(stdout: string): FakeOpencodeOutput | null {
+  try {
+    return JSON.parse(stdout.trim()) as FakeOpencodeOutput;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Create the directory structure for testing the opencode script.
  * Creates:
- * - bin/opencode.cjs
- * - opencode/<version>/opencode (fake binary)
+ * - bin/opencode.cjs (the script being tested)
+ * - opencode/<version>/opencode-fake.cjs (cross-platform fake binary)
+ * - opencode/<version>/opencode or opencode.cmd (thin platform wrapper)
+ *
+ * The fake binary outputs JSON for structured test assertions and uses
+ * Node.js for reliable cross-platform exit code handling.
  *
  * @param basePath Base directory to create structure in
  */
@@ -39,28 +65,37 @@ async function createOpencodeTestStructure(basePath: string): Promise<{
   await mkdir(binDir, { recursive: true });
   await mkdir(opencodeVersionDir, { recursive: true });
 
-  // Write the Node.js script
+  // Write the Node.js script (the one being tested)
   const scriptPath = join(binDir, "opencode.cjs");
   await writeFile(scriptPath, generateOpencodeNodeScript(TEST_VERSION));
 
-  // Create a fake opencode binary that just exits with the first arg as exit code
-  // or 0 if no args. This lets us test exit code propagation.
-  // On Windows, use .cmd extension (batch scripts can't run as .exe files).
-  // The generated script has fallback logic to find .cmd when .exe doesn't exist.
+  // Create a cross-platform Node.js fake binary that outputs JSON
+  const fakeScriptPath = join(opencodeVersionDir, "opencode-fake.cjs");
+  const fakeNodeContent = `#!/usr/bin/env node
+// Fake opencode binary for testing - outputs JSON for structured assertions
+const output = {
+  args: process.argv.slice(2)
+};
+console.log(JSON.stringify(output));
+const exitCode = parseInt(process.env.OPENCODE_EXIT_CODE || "0", 10);
+process.exit(isNaN(exitCode) ? 0 : exitCode);
+`;
+  await writeFile(fakeScriptPath, fakeNodeContent);
+
+  // Create platform-specific wrapper that invokes the Node.js script
   const fakeOpencodePath = join(opencodeVersionDir, isWindows ? "opencode.cmd" : "opencode");
 
   if (isWindows) {
-    // Windows batch script that echoes args and exits with code from env
+    // Windows: batch wrapper calling node
     const batchContent = `@echo off
-echo ATTACH_CALLED %*
-exit /b %OPENCODE_EXIT_CODE%
+node "%~dp0opencode-fake.cjs" %*
+exit /b %ERRORLEVEL%
 `;
     await writeFile(fakeOpencodePath, batchContent);
   } else {
-    // Unix shell script
+    // Unix: shell wrapper calling node
     const shellContent = `#!/bin/sh
-echo "ATTACH_CALLED $*"
-exit \${OPENCODE_EXIT_CODE:-0}
+exec node "$(dirname "$0")/opencode-fake.cjs" "$@"
 `;
     await writeFile(fakeOpencodePath, shellContent);
     await chmod(fakeOpencodePath, 0o755);
@@ -186,23 +221,28 @@ describe("opencode.cjs boundary tests", () => {
       const result = executeScript(testStructure.scriptPath, "14001");
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("ATTACH_CALLED");
-      expect(result.stdout).toContain("attach");
-      expect(result.stdout).toContain("http://127.0.0.1:14001");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("attach");
+      expect(output!.args).toContain("http://127.0.0.1:14001");
     });
 
     it("handles maximum valid port", async () => {
       const result = executeScript(testStructure.scriptPath, "65535");
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("http://127.0.0.1:65535");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("http://127.0.0.1:65535");
     });
 
     it("handles minimum valid port", async () => {
       const result = executeScript(testStructure.scriptPath, "1");
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("http://127.0.0.1:1");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("http://127.0.0.1:1");
     });
 
     it("propagates exit code 0 on success", async () => {
@@ -297,10 +337,12 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("--session");
-      expect(result.stdout).toContain("ses-1");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("--session");
+      expect(output!.args).toContain("ses-1");
       // Note: --agent flag is not used since opencode attach doesn't support it
-      expect(result.stdout).not.toContain("--agent");
+      expect(output!.args).not.toContain("--agent");
 
       // Verify the expected endpoints were called
       expect(mockServer.requests).toContainEqual({ method: "GET", url: "/session" });
@@ -324,7 +366,9 @@ describe("session restoration boundary tests", () => {
 
       expect(result.status).toBe(0);
       // Should fall back to no flags when session fetch times out
-      expect(result.stdout).not.toContain("--session");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).not.toContain("--session");
     }, 10000); // Increase test timeout to allow for the delay
 
     it("handles empty sessions array", async () => {
@@ -337,7 +381,9 @@ describe("session restoration boundary tests", () => {
 
       expect(result.status).toBe(0);
       // Should still work but without --session flag
-      expect(result.stdout).not.toContain("--session");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).not.toContain("--session");
     });
 
     it("handles HTTP 404 from /session endpoint", async () => {
@@ -349,7 +395,9 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).not.toContain("--session");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).not.toContain("--session");
     });
 
     it("handles HTTP 500 from /session endpoint", async () => {
@@ -361,7 +409,9 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).not.toContain("--session");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).not.toContain("--session");
     });
 
     it("handles connection refused gracefully", async () => {
@@ -395,7 +445,9 @@ describe("session restoration boundary tests", () => {
 
       // Should still work but without session/agent flags
       expect(result.status).toBe(0);
-      expect(result.stdout).not.toContain("--session");
+      const output = parseFakeOpencodeOutput(result.stdout ?? "");
+      expect(output).not.toBeNull();
+      expect(output!.args).not.toContain("--session");
     });
   });
 
@@ -418,8 +470,10 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("ses-parent");
-      expect(result.stdout).not.toContain("ses-child");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("ses-parent");
+      expect(output!.args).not.toContain("ses-child");
     });
 
     it("handles all sessions having parentID - no root sessions", async () => {
@@ -435,7 +489,9 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).not.toContain("--session");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).not.toContain("--session");
     });
 
     it("filters by matching directory", async () => {
@@ -452,8 +508,10 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("ses-match");
-      expect(result.stdout).not.toContain("ses-other");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("ses-match");
+      expect(output!.args).not.toContain("ses-other");
     });
 
     it("selects most recently updated session", async () => {
@@ -470,7 +528,9 @@ describe("session restoration boundary tests", () => {
       const result = await executeWithMockServer(workspaceDir);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("ses-new");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("ses-new");
     });
 
     it("handles malformed session (missing time.updated)", async () => {
@@ -488,7 +548,9 @@ describe("session restoration boundary tests", () => {
 
       expect(result.status).toBe(0);
       // Should select the one with time.updated since the other is treated as 0
-      expect(result.stdout).toContain("ses-with-time");
+      const output = parseFakeOpencodeOutput(result.stdout);
+      expect(output).not.toBeNull();
+      expect(output!.args).toContain("ses-with-time");
     });
   });
 
