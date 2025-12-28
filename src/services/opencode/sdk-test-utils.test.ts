@@ -19,6 +19,7 @@ import {
   createPermissionRepliedEvent,
 } from "./sdk-test-utils";
 import type { Event, Session } from "@opencode-ai/sdk";
+import { delay } from "../test-utils";
 
 describe("createMockSdkClient", () => {
   it("returns client with session.list() returning provided sessions", async () => {
@@ -158,7 +159,7 @@ describe("createEmptyEventStream", () => {
     });
 
     // Give it a moment to potentially resolve
-    await new Promise((r) => setTimeout(r, 10));
+    await delay(10);
 
     expect(resolved).toBe(false);
 
@@ -182,7 +183,7 @@ describe("createControllableEventStream", () => {
     pushEvent(createSessionIdleEvent("ses-1"));
 
     // Give consumer time to process
-    await new Promise((r) => setTimeout(r, 10));
+    await delay(10);
 
     complete();
     await consumer;

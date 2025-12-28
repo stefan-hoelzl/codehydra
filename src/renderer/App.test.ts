@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
+import { delay } from "@services/test-utils";
 import type { ProjectPath } from "@shared/ipc";
 import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
 
@@ -763,7 +764,7 @@ describe("App component", () => {
       fireEvent("shortcut:key", "5");
 
       // Should NOT call switchWorkspace (index out of range)
-      await new Promise((r) => setTimeout(r, 50)); // Short wait
+      await delay(50); // Short wait
       expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
     });
 

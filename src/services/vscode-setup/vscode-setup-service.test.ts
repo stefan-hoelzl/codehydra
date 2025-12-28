@@ -6,7 +6,11 @@ import { type SetupMarker, type ProcessRunner, type ProcessResult } from "./type
 import type { SpawnedProcess } from "../platform/process";
 import type { PathProvider } from "../platform/path-provider";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
-import { createMockFileSystemLayer } from "../platform/filesystem.test-utils";
+import {
+  createMockFileSystemLayer,
+  createSpyFileSystemLayer,
+  createDirEntry,
+} from "../platform/filesystem.test-utils";
 import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
 import { FileSystemError, VscodeSetupError } from "../errors";
 import type { FileSystemLayer } from "../platform/filesystem";
@@ -893,129 +897,67 @@ describe("VscodeSetupService", () => {
 
   describe("cleanComponents", () => {
     it("removes only specified extension directories", async () => {
-      // Create mock with spyable rm method
-      const rmSpy = vi.fn().mockResolvedValue(undefined);
-      const spyFs: FileSystemLayer = {
-        readFile: vi.fn().mockResolvedValue(""),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockResolvedValue(undefined),
-        readdir: vi.fn().mockResolvedValue([
-          {
-            name: "codehydra.codehydra-0.0.1",
-            isDirectory: true,
-            isFile: false,
-            isSymbolicLink: false,
-          },
-          {
-            name: "sst-dev.opencode-1.0.0",
-            isDirectory: true,
-            isFile: false,
-            isSymbolicLink: false,
-          },
-          {
-            name: "other.extension-2.0.0",
-            isDirectory: true,
-            isFile: false,
-            isSymbolicLink: false,
-          },
-        ]),
-        unlink: vi.fn().mockResolvedValue(undefined),
-        rm: rmSpy,
-        copyTree: vi.fn().mockResolvedValue(undefined),
-        makeExecutable: vi.fn().mockResolvedValue(undefined),
-        writeFileBuffer: vi.fn().mockResolvedValue(undefined),
-        symlink: vi.fn().mockResolvedValue(undefined),
-        rename: vi.fn().mockResolvedValue(undefined),
-      };
+      const spyFs = createSpyFileSystemLayer({
+        readdir: {
+          entries: [
+            createDirEntry("codehydra.codehydra-0.0.1", { isDirectory: true }),
+            createDirEntry("sst-dev.opencode-1.0.0", { isDirectory: true }),
+            createDirEntry("other.extension-2.0.0", { isDirectory: true }),
+          ],
+        },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, spyFs);
       await service.cleanComponents(["codehydra.codehydra"]);
 
       // Should only remove the specified extension
-      expect(rmSpy).toHaveBeenCalledWith(
+      expect(spyFs.rm).toHaveBeenCalledWith(
         join("/mock/vscode/extensions", "codehydra.codehydra-0.0.1"),
         { recursive: true, force: true }
       );
       // Should not remove other extensions
-      expect(rmSpy).not.toHaveBeenCalledWith(
+      expect(spyFs.rm).not.toHaveBeenCalledWith(
         expect.stringContaining("sst-dev.opencode"),
         expect.anything()
       );
-      expect(rmSpy).not.toHaveBeenCalledWith(
+      expect(spyFs.rm).not.toHaveBeenCalledWith(
         expect.stringContaining("other.extension"),
         expect.anything()
       );
     });
 
     it("handles extension that is not installed (no error)", async () => {
-      // Create mock with spyable rm method
-      const rmSpy = vi.fn().mockResolvedValue(undefined);
-      const spyFs: FileSystemLayer = {
-        readFile: vi.fn().mockResolvedValue(""),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockResolvedValue(undefined),
-        readdir: vi.fn().mockResolvedValue([
-          {
-            name: "sst-dev.opencode-1.0.0",
-            isDirectory: true,
-            isFile: false,
-            isSymbolicLink: false,
-          },
-        ]),
-        unlink: vi.fn().mockResolvedValue(undefined),
-        rm: rmSpy,
-        copyTree: vi.fn().mockResolvedValue(undefined),
-        makeExecutable: vi.fn().mockResolvedValue(undefined),
-        writeFileBuffer: vi.fn().mockResolvedValue(undefined),
-        symlink: vi.fn().mockResolvedValue(undefined),
-        rename: vi.fn().mockResolvedValue(undefined),
-      };
+      const spyFs = createSpyFileSystemLayer({
+        readdir: {
+          entries: [createDirEntry("sst-dev.opencode-1.0.0", { isDirectory: true })],
+        },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, spyFs);
       // Should not throw even if extension is not found
       await expect(service.cleanComponents(["codehydra.codehydra"])).resolves.not.toThrow();
-      expect(rmSpy).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("cleans multiple extensions at once", async () => {
-      // Create mock with spyable rm method
-      const rmSpy = vi.fn().mockResolvedValue(undefined);
-      const spyFs: FileSystemLayer = {
-        readFile: vi.fn().mockResolvedValue(""),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockResolvedValue(undefined),
-        readdir: vi.fn().mockResolvedValue([
-          {
-            name: "codehydra.codehydra-0.0.1",
-            isDirectory: true,
-            isFile: false,
-            isSymbolicLink: false,
-          },
-          {
-            name: "sst-dev.opencode-1.0.0",
-            isDirectory: true,
-            isFile: false,
-            isSymbolicLink: false,
-          },
-        ]),
-        unlink: vi.fn().mockResolvedValue(undefined),
-        rm: rmSpy,
-        copyTree: vi.fn().mockResolvedValue(undefined),
-        makeExecutable: vi.fn().mockResolvedValue(undefined),
-        writeFileBuffer: vi.fn().mockResolvedValue(undefined),
-        symlink: vi.fn().mockResolvedValue(undefined),
-        rename: vi.fn().mockResolvedValue(undefined),
-      };
+      const spyFs = createSpyFileSystemLayer({
+        readdir: {
+          entries: [
+            createDirEntry("codehydra.codehydra-0.0.1", { isDirectory: true }),
+            createDirEntry("sst-dev.opencode-1.0.0", { isDirectory: true }),
+          ],
+        },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, spyFs);
       await service.cleanComponents(["codehydra.codehydra", "sst-dev.opencode"]);
 
       // Should remove both extensions
-      expect(rmSpy).toHaveBeenCalledWith(
+      expect(spyFs.rm).toHaveBeenCalledWith(
         join("/mock/vscode/extensions", "codehydra.codehydra-0.0.1"),
         { recursive: true, force: true }
       );
-      expect(rmSpy).toHaveBeenCalledWith(
+      expect(spyFs.rm).toHaveBeenCalledWith(
         join("/mock/vscode/extensions", "sst-dev.opencode-1.0.0"),
         { recursive: true, force: true }
       );

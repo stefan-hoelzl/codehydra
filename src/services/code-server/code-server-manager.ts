@@ -14,6 +14,7 @@ import type { HttpClient, PortManager } from "../platform/network";
 import { encodePathForUrl } from "../platform/paths";
 import { CodeServerError } from "../errors";
 import type { Logger } from "../logging";
+import { waitForHealthy } from "../platform/health-check";
 
 /**
  * Function to unsubscribe from PID change events.
@@ -227,7 +228,7 @@ export class CodeServerManager {
       this.currentPid = this.process.pid ?? null;
 
       // Wait for health check
-      await this.waitForHealthy(port);
+      await this.waitForServerHealthy(port);
 
       // Notify listeners of PID change
       if (this.currentPid !== null) {
@@ -249,26 +250,15 @@ export class CodeServerManager {
 
   /**
    * Wait for the server to become healthy.
-   * Retries up to 30 times with 100ms delay (3s total timeout).
+   * Uses shared health check utility with 3s timeout.
    */
-  private async waitForHealthy(port: number): Promise<void> {
-    const maxRetries = 30;
-    const retryDelay = 100;
-
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const healthy = await this.checkHealth(port);
-        if (healthy) {
-          return;
-        }
-      } catch {
-        // Ignore errors during health check
-      }
-
-      await this.sleep(retryDelay);
-    }
-
-    throw new CodeServerError("Health check timed out after 3 seconds");
+  private async waitForServerHealthy(port: number): Promise<void> {
+    await waitForHealthy({
+      checkFn: () => this.checkHealth(port),
+      timeoutMs: 3000,
+      intervalMs: 100,
+      errorMessage: "Health check timed out after 3 seconds",
+    });
   }
 
   /**
@@ -287,10 +277,6 @@ export class CodeServerManager {
       this.logger.warn("Health check failed", { error: errMsg });
       return false;
     }
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

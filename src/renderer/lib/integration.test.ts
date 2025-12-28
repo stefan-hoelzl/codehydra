@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
+import { delay } from "@services/test-utils";
 import type {
   Project,
   ProjectPath,
@@ -1300,7 +1301,7 @@ describe("Integration tests", () => {
       });
 
       // Give time for any auto-open to trigger
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await delay(50);
 
       // Verify NO dialog opened
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

@@ -15,7 +15,7 @@ import { OpenCodeClient } from "./opencode-client";
 import { createMockLlmServer, type MockLlmServer } from "../../test/fixtures/mock-llm-server";
 import { startOpencode, type OpencodeProcess } from "./boundary-test-utils";
 import { waitForPort, CI_TIMEOUT_MS } from "../platform/network.test-utils";
-import { createTestGitRepo } from "../test-utils";
+import { createTestGitRepo, delay } from "../test-utils";
 import { createSilentLogger } from "../logging";
 import { DefaultPathProvider } from "../platform/path-provider";
 import { NodePlatformInfo } from "../../main/platform-info";
@@ -164,7 +164,7 @@ describe("OpenCodeClient boundary tests", () => {
     }
 
     // Small delay for event queue to drain
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await delay(100);
   });
 
   describe("Phase 1.3: Mock LLM Integration", () => {
@@ -185,7 +185,7 @@ describe("OpenCodeClient boundary tests", () => {
       });
 
       // Wait a bit for processing
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       // If we got here without error, the mock LLM received the request
       // The fact that opencode didn't crash means integration works
@@ -239,7 +239,7 @@ describe("OpenCodeClient boundary tests", () => {
       });
 
       // Give it time to start processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       // Check status during processing
       const result = await client.getStatus();
@@ -380,7 +380,7 @@ describe("OpenCodeClient boundary tests", () => {
         }
 
         // Give time for events
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await delay(500);
 
         // Statuses should contain only idle or busy (retry mapped to busy)
         for (const status of statuses) {
@@ -493,7 +493,7 @@ describe("OpenCodeClient boundary tests", () => {
       const sessionId = session.data!.id;
 
       // Give time for SSE event to be processed
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await delay(200);
 
       // Refetch to update tracking
       const updatedResult = await client.fetchRootSessions();
@@ -535,7 +535,7 @@ describe("OpenCodeClient boundary tests", () => {
       const childSessionId = childSession.data!.id;
 
       // Give time for SSE event to be processed
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await delay(200);
 
       // Refetch root sessions
       const afterResult = await client.fetchRootSessions();
@@ -759,7 +759,7 @@ describe("OpenCodeClient permission flow boundary tests", () => {
     }
 
     // Small delay for event queue to drain
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await delay(100);
   });
 
   describe("Step 6.2: Permission Approval Flow", () => {

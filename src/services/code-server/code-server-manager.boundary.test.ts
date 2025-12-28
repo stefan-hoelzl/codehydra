@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { CodeServerManager } from "./code-server-manager";
 import { ExecaProcessRunner } from "../platform/process";
 import { DefaultNetworkLayer } from "../platform/network";
-import { createTempDir } from "../test-utils";
+import { createTempDir, delay } from "../test-utils";
 import { CODE_SERVER_VERSION } from "../binary-download/versions";
 import type { CodeServerConfig } from "./types";
 
@@ -377,7 +377,7 @@ describe("CodeServerManager (boundary)", () => {
         // Act - kill process externally
         process.kill(pid!, "SIGKILL");
         // Wait for process to die
-        await new Promise((r) => setTimeout(r, 100));
+        await delay(100);
 
         // Assert - calling stop() should handle it gracefully
         await expect(manager.stop()).resolves.toBeUndefined();

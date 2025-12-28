@@ -19,6 +19,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { CI_TIMEOUT_MS } from "../platform/network.test-utils";
+import { delay } from "../test-utils";
 
 /**
  * Check if opencode binary exists and is executable.
@@ -189,7 +190,7 @@ describe("OpenCodeServerManager Boundary Tests", () => {
     await manager.stopServer(workspacePath);
 
     // Wait a bit for port to be released
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await delay(1000);
 
     // Verify server is stopped (connection should fail)
     try {

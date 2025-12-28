@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+import { delay } from "../services/test-utils";
 import type { IViewManager } from "./managers/view-manager.interface";
 import {
   createMockPathProvider,
@@ -561,7 +562,7 @@ describe("AppState", () => {
 
       expect(project.path).toBe("/project");
       // Give the async cleanup a chance to complete
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await delay(10);
       // Logging is an implementation detail - we just verify the operation succeeded
     });
 
@@ -578,7 +579,7 @@ describe("AppState", () => {
       await appState.openProject("/project");
 
       // Give the async cleanup a chance to be called
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await delay(10);
       expect(mockWorkspaceProvider.cleanupOrphanedWorkspaces).toHaveBeenCalled();
     });
   });

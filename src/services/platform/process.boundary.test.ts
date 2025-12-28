@@ -12,6 +12,7 @@ import {
   spawnWithExitCode,
   spawnWithChild,
 } from "./process.boundary-test-utils";
+import { delay } from "../test-utils";
 
 // Default timeout for boundary tests
 const TEST_TIMEOUT = 5000;
@@ -54,7 +55,7 @@ async function waitForProcessDeath(pid: number, maxMs = 500): Promise<boolean> {
     if (!isProcessRunning(pid)) {
       return true;
     }
-    await new Promise((r) => setTimeout(r, interval));
+    await delay(interval);
   }
   return false;
 }
@@ -232,7 +233,7 @@ describe("ExecaProcessRunner", () => {
         trackProcess(proc);
 
         // Wait for child to spawn and PID to be printed
-        await new Promise((r) => setTimeout(r, 200));
+        await delay(200);
 
         // Kill parent - should kill children too via taskkill /t
         const killResult = await proc.kill(1000, 1000);
@@ -412,7 +413,7 @@ describe("ExecaProcessRunner", () => {
         await proc.wait();
 
         // Delay then call wait() again
-        await new Promise((r) => setTimeout(r, 100));
+        await delay(100);
 
         const start = Date.now();
         const result = await proc.wait();
@@ -602,7 +603,7 @@ describe("ExecaProcessRunner", () => {
         trackProcess(proc);
 
         // Wait for child to spawn and PID to be printed
-        await new Promise((r) => setTimeout(r, 200));
+        await delay(200);
 
         // Kill parent with graceful shutdown
         const killResult = await proc.kill(1000, 1000);
@@ -635,7 +636,7 @@ describe("ExecaProcessRunner", () => {
         trackProcess(proc);
 
         // Wait for child PID to be printed
-        await new Promise((r) => setTimeout(r, 100));
+        await delay(100);
 
         // Kill parent with graceful shutdown (SIGTERM with 1s timeout)
         const killResult = await proc.kill(1000, 100);
@@ -667,7 +668,7 @@ describe("ExecaProcessRunner", () => {
         trackProcess(proc);
 
         // Wait for child PID to be printed
-        await new Promise((r) => setTimeout(r, 100));
+        await delay(100);
 
         // Kill parent with short SIGTERM timeout (will escalate to SIGKILL)
         const killResult = await proc.kill(200, 500);

@@ -11,6 +11,7 @@ import type { WorkspaceLookup } from "./workspace-resolver";
 import type { ProjectId, WorkspaceName, WorkspaceStatus } from "../../shared/api/types";
 import { createMockLogger } from "../logging";
 import { vi } from "vitest";
+import { delay } from "../test-utils";
 
 /**
  * Create a mock ICoreApi for testing.
@@ -243,7 +244,7 @@ describe("McpServer Boundary Tests", () => {
       }).catch(() => null); // Ignore errors from aborted request
 
       // Give request time to start
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await delay(50);
 
       // Stop should complete without hanging
       await server.stop();

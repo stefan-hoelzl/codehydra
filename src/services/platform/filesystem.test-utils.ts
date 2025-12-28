@@ -298,6 +298,65 @@ export function createMockFileSystemLayer(options?: MockFileSystemLayerOptions):
 }
 
 // ============================================================================
+// Spy FileSystemLayer Factory
+// ============================================================================
+
+import { vi, type Mock } from "vitest";
+
+/**
+ * FileSystemLayer with vi.fn() spies for asserting on method calls.
+ * Each method is a Vitest Mock that wraps the mock implementation.
+ */
+export interface SpyFileSystemLayer extends FileSystemLayer {
+  readFile: Mock<FileSystemLayer["readFile"]>;
+  writeFile: Mock<FileSystemLayer["writeFile"]>;
+  mkdir: Mock<FileSystemLayer["mkdir"]>;
+  readdir: Mock<FileSystemLayer["readdir"]>;
+  unlink: Mock<FileSystemLayer["unlink"]>;
+  rm: Mock<FileSystemLayer["rm"]>;
+  copyTree: Mock<FileSystemLayer["copyTree"]>;
+  makeExecutable: Mock<FileSystemLayer["makeExecutable"]>;
+  writeFileBuffer: Mock<FileSystemLayer["writeFileBuffer"]>;
+  symlink: Mock<FileSystemLayer["symlink"]>;
+  rename: Mock<FileSystemLayer["rename"]>;
+}
+
+/**
+ * Create a FileSystemLayer with vi.fn() spies for testing.
+ * Use when you need to assert on method calls.
+ *
+ * @example Basic usage - assert on calls
+ * ```typescript
+ * const fs = createSpyFileSystemLayer();
+ * await service.doSomething(fs);
+ * expect(fs.writeFile).toHaveBeenCalledWith('/path', 'content');
+ * ```
+ *
+ * @example With custom behavior
+ * ```typescript
+ * const fs = createSpyFileSystemLayer({
+ *   readdir: { entries: [createDirEntry('file.txt', { isFile: true })] }
+ * });
+ * ```
+ */
+export function createSpyFileSystemLayer(options?: MockFileSystemLayerOptions): SpyFileSystemLayer {
+  const mock = createMockFileSystemLayer(options);
+  return {
+    readFile: vi.fn(mock.readFile),
+    writeFile: vi.fn(mock.writeFile),
+    mkdir: vi.fn(mock.mkdir),
+    readdir: vi.fn(mock.readdir),
+    unlink: vi.fn(mock.unlink),
+    rm: vi.fn(mock.rm),
+    copyTree: vi.fn(mock.copyTree),
+    makeExecutable: vi.fn(mock.makeExecutable),
+    writeFileBuffer: vi.fn(mock.writeFileBuffer),
+    symlink: vi.fn(mock.symlink),
+    rename: vi.fn(mock.rename),
+  };
+}
+
+// ============================================================================
 // Helper Functions for Creating Common Test Scenarios
 // ============================================================================
 

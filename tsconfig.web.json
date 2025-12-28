@@ -10,9 +10,15 @@
     "baseUrl": ".",
     "paths": {
       "$lib/*": ["src/renderer/lib/*"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@services/*": ["src/services/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "src/test/**/*"],
+  "include": [
+    "src/renderer/**/*",
+    "src/shared/**/*",
+    "src/test/**/*",
+    "src/services/test-utils.ts"
+  ],
   "exclude": ["node_modules", "app-data"]
 }

@@ -11,6 +11,7 @@ import { PluginServer } from "./plugin-server";
 import { STARTUP_COMMANDS, sendStartupCommands } from "./startup-commands";
 import { DefaultNetworkLayer } from "../platform/network";
 import { createSilentLogger, createBehavioralLogger } from "../logging/logging.test-utils";
+import { delay } from "../test-utils";
 import {
   createTestClient,
   waitForConnect,
@@ -79,7 +80,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
       await waitForConnect(client);
 
       // Wait for all commands to be processed (give some time for async commands)
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       // All 5 startup commands should be received
       expect(receivedCommands).toHaveLength(STARTUP_COMMANDS.length);
@@ -102,7 +103,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
       });
 
       await waitForConnect(client);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       // Commands should be in exact order
       expect(receivedCommands[0]).toBe("workbench.action.closeSidebar");
@@ -139,7 +140,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
       });
 
       await waitForConnect(client);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       // Commands should only come after connect
       expect(commandsReceivedBeforeConnect).toBe(false);
@@ -171,7 +172,7 @@ describe("PluginServer (integration)", { timeout: TEST_TIMEOUT }, () => {
 
       // Connect both clients
       await Promise.all([waitForConnect(client1), waitForConnect(client2)]);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       // Each workspace should receive its own set of startup commands
       expect(workspace1Commands).toHaveLength(STARTUP_COMMANDS.length);
@@ -480,7 +481,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       client.emit("api:log", { level: "info", message: "Test message" });
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       const messages = extensionLogger.getMessages();
       expect(messages).toHaveLength(1);
@@ -500,7 +501,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       }
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await delay(200);
 
       for (const level of levels) {
         const messages = extensionLogger.getMessagesByLevel(level);
@@ -520,7 +521,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       client.emit("api:log", { level: "info", message: "Test" });
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       const messages = extensionLogger.getMessages();
       expect(messages).toHaveLength(1);
@@ -539,7 +540,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       });
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       const messages = extensionLogger.getMessages();
       expect(messages).toHaveLength(1);
@@ -563,7 +564,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       });
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       expect(extensionLogger.getMessages()).toHaveLength(0);
     });
@@ -575,7 +576,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       client.emit("api:log", { level: "info", message: "" });
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       expect(extensionLogger.getMessages()).toHaveLength(0);
     });
@@ -592,7 +593,7 @@ describe("PluginServer log events (integration)", { timeout: TEST_TIMEOUT }, () 
       });
 
       // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       expect(extensionLogger.getMessages()).toHaveLength(0);
     });

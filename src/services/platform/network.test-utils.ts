@@ -14,6 +14,7 @@ import {
   type ServerResponse,
 } from "http";
 import { type HttpClient, type HttpRequestOptions, type PortManager } from "./network";
+import { delay } from "../test-utils";
 
 // ============================================================================
 // Mock Option Types
@@ -312,7 +313,7 @@ export async function waitForPort(port: number, timeoutMs?: number): Promise<voi
     if (await isPortOpen(port)) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, PORT_CHECK_INTERVAL_MS));
+    await delay(PORT_CHECK_INTERVAL_MS);
   }
 
   throw new Error(`Timeout waiting for port ${port} to become available (${timeout}ms)`);

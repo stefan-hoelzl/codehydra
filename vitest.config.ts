@@ -64,6 +64,7 @@ export default defineConfig({
     alias: {
       $lib: resolve("./src/renderer/lib"),
       "@shared": resolve("./src/shared"),
+      "@services": resolve("./src/services"),
     },
   },
 });

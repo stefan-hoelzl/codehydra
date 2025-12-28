@@ -10,6 +10,7 @@ import { PluginServer } from "./plugin-server";
 import type { ApiCallHandlers } from "./plugin-server";
 import { DefaultNetworkLayer } from "../platform/network";
 import { createSilentLogger } from "../logging/logging.test-utils";
+import { delay } from "../test-utils";
 import {
   createTestClient,
   waitForConnect,
@@ -92,7 +93,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       client.connect();
 
       // Wait for rejection
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       expect(rejected || !client.connected).toBe(true);
     });
@@ -121,7 +122,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       client.connect();
 
       // Wait for rejection
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       expect(rejected || !client.connected).toBe(true);
     });
@@ -504,6 +505,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
     it("handles rapid sequential calls from same workspace", async () => {
       let callCount = 0;
       const handlers: ApiCallHandlers = {
+        ...createMockApiHandlers(),
         getStatus: vi.fn().mockImplementation(() => {
           callCount++;
           return Promise.resolve({
@@ -511,11 +513,6 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
             data: { isDirty: false, agent: { type: "none" } },
           });
         }),
-        getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
-        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
-        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
-        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
-        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -541,12 +538,8 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
 
     it("handles handler exception gracefully", async () => {
       const handlers: ApiCallHandlers = {
+        ...createMockApiHandlers(),
         getStatus: vi.fn().mockRejectedValue(new Error("Database error")),
-        getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
-        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
-        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
-        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
-        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -564,6 +557,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
     it("handles socket disconnect mid-request", async () => {
       // Create a handler that delays long enough for us to disconnect
       const handlers: ApiCallHandlers = {
+        ...createMockApiHandlers(),
         getStatus: vi.fn().mockImplementation(
           () =>
             new Promise((resolve) => {
@@ -573,11 +567,6 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
               }, 5000);
             })
         ),
-        getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
-        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
-        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
-        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
-        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -590,7 +579,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       });
 
       // Wait a bit for the request to be in-flight
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       // Disconnect while request is pending
       client.disconnect();
@@ -719,17 +708,13 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
     it("handles request timeout", async () => {
       // Create a handler that never responds (simulates a hanging API call)
       const handlers: ApiCallHandlers = {
+        ...createMockApiHandlers(),
         getStatus: vi.fn().mockImplementation(
           () =>
             new Promise(() => {
               // Never resolves - simulates a hung operation
             })
         ),
-        getOpencodePort: vi.fn().mockResolvedValue({ success: true, data: null }),
-        getMetadata: vi.fn().mockResolvedValue({ success: true, data: {} }),
-        setMetadata: vi.fn().mockResolvedValue({ success: true, data: undefined }),
-        delete: vi.fn().mockResolvedValue({ success: true, data: { started: true } }),
-        executeCommand: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       };
       server.onApiCall(handlers);
 
@@ -868,7 +853,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       await reconnectPromise;
 
       // Should receive config again
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
       expect(configCount).toBe(2);
     });
   });
@@ -1033,7 +1018,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       client.connect();
 
       // Wait for potential callback
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
 
       expect(callbackCalled).toBe(false);
     });
@@ -1053,7 +1038,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       await waitForConnect(client);
 
       // Give callbacks time to execute
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       expect(calls).toHaveLength(2);
       expect(calls).toContain("callback1:/test/workspace");
@@ -1075,7 +1060,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       await waitForConnect(client);
 
       // Give callbacks time to execute
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       // Second callback should still be called despite first throwing
       expect(calls).toContain("callback2:/test/workspace");
@@ -1095,7 +1080,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       await waitForConnect(client);
 
       // Give potential callback time to execute
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       // Callback should not have been called
       expect(calls).toHaveLength(0);
@@ -1120,7 +1105,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
       ]);
 
       // Give callbacks time to execute
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
 
       // All three workspaces should trigger callbacks
       expect(connectedWorkspaces).toHaveLength(3);

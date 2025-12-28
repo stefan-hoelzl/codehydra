@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vite
 import { ExecaSpawnedProcess } from "./process";
 import { createSilentLogger } from "../logging";
 import type { Logger } from "../logging";
+import { delay } from "../test-utils";
 
 // Mock execa to capture taskkill calls
 vi.mock("execa", () => ({
@@ -162,14 +163,14 @@ describe("ExecaSpawnedProcess", () => {
       const killPromise = proc.kill(50, 100);
 
       // Wait for SIGTERM to be sent
-      await new Promise((r) => setTimeout(r, 10));
+      await delay(10);
 
       // Verify SIGTERM was called
       const sigtermCalls = processKillSpy.mock.calls.filter((call) => call[1] === "SIGTERM");
       expect(sigtermCalls.length).toBeGreaterThan(0);
 
       // Wait for graceful timeout to expire and SIGKILL to be sent
-      await new Promise((r) => setTimeout(r, 100));
+      await delay(100);
 
       // Verify SIGKILL was called
       const sigkillCalls = processKillSpy.mock.calls.filter((call) => call[1] === "SIGKILL");

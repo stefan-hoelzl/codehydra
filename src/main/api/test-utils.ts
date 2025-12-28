@@ -341,38 +341,26 @@ function createMockLifecycleApi(options?: MockLifecycleApiOptions): ILifecycleAp
 // Test Data Factories
 // ============================================================================
 
+// Re-export shared test fixtures
+import {
+  createMockProject,
+  createMockWorkspace,
+  DEFAULT_PROJECT_ID,
+} from "../../shared/test-fixtures";
+
+export { createMockProject, createMockWorkspace, DEFAULT_PROJECT_ID };
+
 /**
  * Create a test Project for use in tests.
- *
- * @example
- * const project = createTestProject({ name: 'my-app' });
+ * @deprecated Use createMockProject from @shared/test-fixtures
  */
-export function createTestProject(overrides?: Partial<Project>): Project {
-  return {
-    id: "test-project-12345678" as ProjectId,
-    name: "test-project",
-    path: "/test/project",
-    workspaces: [],
-    ...overrides,
-  };
-}
+export const createTestProject = createMockProject;
 
 /**
  * Create a test Workspace for use in tests.
- *
- * @example
- * const workspace = createTestWorkspace({ name: 'feature-branch' as WorkspaceName });
+ * @deprecated Use createMockWorkspace from @shared/test-fixtures
  */
-export function createTestWorkspace(overrides?: Partial<Workspace>): Workspace {
-  return {
-    projectId: "test-project-12345678" as ProjectId,
-    name: "test-workspace" as WorkspaceName,
-    branch: "main",
-    metadata: { base: "main" },
-    path: "/test/workspace",
-    ...overrides,
-  };
-}
+export const createTestWorkspace = createMockWorkspace;
 
 /**
  * Create a test WorkspaceRef for use in tests.

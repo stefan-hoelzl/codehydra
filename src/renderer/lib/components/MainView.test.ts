@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/svelte";
 import type { ProjectId, WorkspaceName, WorkspaceRef } from "@shared/api/types";
+import { delay } from "@services/test-utils";
 import type { WorkspacePath } from "@shared/ipc";
 import { createMockProject } from "$lib/test-fixtures";
 
@@ -697,7 +698,7 @@ describe("MainView component", () => {
       });
 
       // Give time for any potential auto-open to trigger
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await delay(50);
 
       expect(mockApi.ui.selectFolder).not.toHaveBeenCalled();
     });
@@ -796,7 +797,7 @@ describe("MainView component", () => {
       callback!({ project: projectWithWorkspaces });
 
       // Give time for any auto-open to trigger
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await delay(50);
 
       expect(dialogsStore.dialogState.value.type).toBe("closed");
     });
@@ -842,7 +843,7 @@ describe("MainView component", () => {
       callback!({ project: emptyProject });
 
       // Give time for any auto-open to trigger
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await delay(50);
 
       // Should still be remove dialog, not auto-opened create
       expect(dialogsStore.dialogState.value.type).toBe("remove");

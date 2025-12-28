@@ -14,7 +14,15 @@ import type {
   ICodeHydraApi,
 } from "./registry-types";
 import { ALL_METHOD_PATHS } from "./registry-types";
-import type { ProjectId, WorkspaceName, Project, Workspace } from "../../shared/api/types";
+
+// Import and re-export shared test fixtures for backward compatibility
+import {
+  createMockProject,
+  createMockWorkspace,
+  DEFAULT_PROJECT_ID,
+} from "../../shared/test-fixtures";
+
+export { createMockProject, createMockWorkspace, DEFAULT_PROJECT_ID };
 
 // =============================================================================
 // Mock Types
@@ -213,6 +221,13 @@ function createMockCodeHydraApi(
         get("workspaces.setMetadata")({ projectId, workspaceName, key, value }),
       getMetadata: (projectId, workspaceName) =>
         get("workspaces.getMetadata")({ projectId, workspaceName }),
+      executeCommand: (projectId, workspaceName, command, args) =>
+        get("workspaces.executeCommand")({
+          projectId,
+          workspaceName,
+          command,
+          ...(args && { args }),
+        }),
     },
     ui: {
       selectFolder: () => get("ui.selectFolder")({}),
@@ -232,33 +247,6 @@ function createMockCodeHydraApi(
     },
     on: vi.fn().mockReturnValue(() => {}),
     dispose: vi.fn(),
-  };
-}
-
-/**
- * Create a mock Project for testing.
- */
-export function createMockProject(overrides: Partial<Project> = {}): Project {
-  return {
-    id: "test-project-12345678" as ProjectId,
-    name: "test-project",
-    path: "/test/path",
-    workspaces: [],
-    ...overrides,
-  };
-}
-
-/**
- * Create a mock Workspace for testing.
- */
-export function createMockWorkspace(overrides: Partial<Workspace> = {}): Workspace {
-  return {
-    projectId: "test-project-12345678" as ProjectId,
-    name: "test-workspace" as WorkspaceName,
-    branch: "main",
-    metadata: { base: "main" },
-    path: "/test/path/test-workspace",
-    ...overrides,
   };
 }
 
@@ -287,6 +275,7 @@ export function registerAllMethodsWithStubs(
     "workspaces.getOpencodePort": async () => null,
     "workspaces.setMetadata": async () => {},
     "workspaces.getMetadata": async () => ({}),
+    "workspaces.executeCommand": async () => undefined,
     "ui.selectFolder": async () => null,
     "ui.getActiveWorkspace": async () => null,
     "ui.switchWorkspace": async () => {},

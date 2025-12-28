@@ -12,6 +12,7 @@ import type { BranchInfo, WorktreeInfo } from "./types";
 import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
 import { FileSystemError } from "../errors";
 import { createMockLogger } from "../logging/logging.test-utils";
+import { delay } from "../test-utils";
 
 /**
  * Create a mock IGitClient for testing.
@@ -1972,7 +1973,7 @@ describe("GitWorktreeProvider", () => {
       const firstCleanup = provider.cleanupOrphanedWorkspaces();
 
       // Give a moment for the first cleanup to start
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await delay(10);
 
       // Start second cleanup while first is in progress
       const secondCleanup = provider.cleanupOrphanedWorkspaces();

@@ -7,31 +7,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WrapperScriptGenerationService } from "./wrapper-script-generation-service";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
 import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
-import type { FileSystemLayer } from "../platform/filesystem";
+import {
+  createSpyFileSystemLayer,
+  type SpyFileSystemLayer,
+} from "../platform/filesystem.test-utils";
 import type { PathProvider } from "../platform/path-provider";
 import type { PlatformInfo } from "../platform/platform-info";
 
-/**
- * Create a mock FileSystemLayer with vi.fn() spies for test assertions.
- */
-function createSpyFileSystemLayer(): FileSystemLayer {
-  return {
-    readFile: vi.fn().mockResolvedValue(""),
-    writeFile: vi.fn().mockResolvedValue(undefined),
-    mkdir: vi.fn().mockResolvedValue(undefined),
-    readdir: vi.fn().mockResolvedValue([]),
-    unlink: vi.fn().mockResolvedValue(undefined),
-    rm: vi.fn().mockResolvedValue(undefined),
-    copyTree: vi.fn().mockResolvedValue(undefined),
-    makeExecutable: vi.fn().mockResolvedValue(undefined),
-    writeFileBuffer: vi.fn().mockResolvedValue(undefined),
-    symlink: vi.fn().mockResolvedValue(undefined),
-    rename: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
 describe("WrapperScriptGenerationService", () => {
-  let mockFs: FileSystemLayer;
+  let mockFs: SpyFileSystemLayer;
   let mockPathProvider: PathProvider;
   let mockPlatformInfo: PlatformInfo;
 

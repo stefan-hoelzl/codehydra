@@ -16,6 +16,7 @@ import type { PortManager, HttpClient } from "../platform/network";
 import type { PathProvider } from "../platform/path-provider";
 import type { Logger } from "../logging";
 import type { IDisposable, Unsubscribe } from "./types";
+import { waitForHealthy } from "../platform/health-check";
 
 /**
  * Callback types for OpenCodeServerManager.
@@ -202,24 +203,17 @@ export class OpenCodeServerManager implements IDisposable {
    * Wait for health check to pass.
    */
   private async waitForHealthCheck(port: number): Promise<void> {
-    const startTime = Date.now();
     const url = `http://127.0.0.1:${port}/path`;
 
-    while (Date.now() - startTime < this.config.healthCheckTimeoutMs) {
-      try {
+    await waitForHealthy({
+      checkFn: async () => {
         const response = await this.httpClient.fetch(url, { timeout: 2000 });
-        if (response.ok) {
-          return;
-        }
-      } catch {
-        // Continue retrying
-      }
-
-      // Wait before next attempt
-      await new Promise((resolve) => setTimeout(resolve, this.config.healthCheckIntervalMs));
-    }
-
-    throw new Error(`Health check timeout after ${this.config.healthCheckTimeoutMs}ms`);
+        return response.ok;
+      },
+      timeoutMs: this.config.healthCheckTimeoutMs,
+      intervalMs: this.config.healthCheckIntervalMs,
+      errorMessage: `Health check timeout after ${this.config.healthCheckTimeoutMs}ms`,
+    });
   }
 
   /**
