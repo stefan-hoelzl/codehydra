@@ -33,6 +33,8 @@ You verify that implementation matches the approved plan. You are invoked by the
 5. **Dependency Compliance**: Verify only approved dependencies were added
 6. **Code Quality**: Catch obvious quality issues (type safety, error handling, etc.)
 7. **Silent Deviations**: Flag any deviation from plan that wasn't reported as BLOCKED
+8. **Dead Code Detection**: Identify unused code including functions, variables, imports, exports, types, CSS classes, and unreachable code paths
+9. **Code Duplication Detection**: Flag copy-pasted code blocks or highly similar patterns that should be refactored
 
 ## Review Process
 
@@ -64,6 +66,10 @@ You verify that implementation matches the approved plan. You are invoked by the
 - New code uses call-tracking mocks instead of behavioral mocks
 - Tests verify implementation calls instead of behavior outcomes
 - Tests are slow (artificial delays, excessive setup)
+- Commented-out code (must be removed before merge, use version control instead)
+- Significant code duplication (3+ similar blocks or >20 lines duplicated)
+- Exported functions/types that are never imported anywhere
+- Unused CSS classes or style rules
 
 ### Important Issues (should be addressed)
 
@@ -75,6 +81,11 @@ You verify that implementation matches the approved plan. You are invoked by the
 - Missing .cmd/.exe extensions for Windows binary references
 - Behavioral mock behavior doesn't match boundary test assertions
 - Wrong entry point used for integration tests
+- Unused imports or variables
+- Dead code paths (unreachable code after return/throw)
+- Smaller code duplications (2 similar blocks or 5-20 lines)
+- Functions or types defined but never used within the module
+- Unused Svelte component props or event handlers
 
 ### Suggestions (nice to have)
 
@@ -82,6 +93,8 @@ You verify that implementation matches the approved plan. You are invoked by the
 - Better naming or organization
 - Refactoring opportunities
 - Documentation improvements
+- Potential for extracting shared utilities from near-duplicates
+- Unused function parameters that could be removed
 
 ## Output Format
 
@@ -132,6 +145,9 @@ You MUST use this EXACT format:
 - [x] Tests verify behavior outcomes (not implementation calls)
 - [x] Correct entry points used for integration tests
 - [x] Tests run fast (no artificial delays, efficient mocks)
+- [x] No commented-out code
+- [x] No significant dead code (unused exports, unreachable code, unused CSS)
+- [x] No problematic code duplication (3+ similar blocks, >20 lines)
 
 (Use [x] for pass, [ ] for fail, note failures in issues above)
 ```
