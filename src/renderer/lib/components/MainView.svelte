@@ -302,19 +302,14 @@
   }
 
   // Handle closing a project
-  async function handleCloseProject(projectId: ProjectId): Promise<void> {
+  function handleCloseProject(projectId: ProjectId): void {
     const project = projects.value.find((p) => p.id === projectId);
     if (!project) {
       // Project already closed or not in store - early return
       return;
     }
-    if (project.workspaces.length > 0) {
-      logger.debug("Dialog opened", { type: "close-project" });
-      openCloseProjectDialog(projectId);
-    } else {
-      // Project has no workspaces, close directly
-      await api.projects.close(projectId);
-    }
+    logger.debug("Dialog opened", { type: "close-project" });
+    openCloseProjectDialog(projectId);
   }
 
   // Handle switching workspace

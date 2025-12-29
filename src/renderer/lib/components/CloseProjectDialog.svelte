@@ -114,18 +114,20 @@
   {/snippet}
 
   {#snippet content()}
-    <p id={descriptionId} class="ch-dialog-text">
-      This project has {workspaceText} that will remain on disk after closing.
-    </p>
+    {#if workspaceCount > 0}
+      <p id={descriptionId} class="ch-dialog-text">
+        This project has {workspaceText} that will remain on disk after closing.
+      </p>
 
-    <div class="ch-checkbox-row">
-      <vscode-checkbox
-        checked={removeAll}
-        onchange={handleCheckboxChange}
-        disabled={isSubmitting}
-        label="Remove all workspaces and their branches"
-      ></vscode-checkbox>
-    </div>
+      <div class="ch-checkbox-row">
+        <vscode-checkbox
+          checked={removeAll}
+          onchange={handleCheckboxChange}
+          disabled={isSubmitting}
+          label="Remove all workspaces and their branches"
+        ></vscode-checkbox>
+      </div>
+    {/if}
 
     {#if submitError}
       <div class="ch-alert-box" role="alert">

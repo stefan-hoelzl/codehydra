@@ -135,6 +135,44 @@ describe("CloseProjectDialog component", () => {
       expect(checkbox).toBeInTheDocument();
       expect(checkbox.checked).toBe(false);
     });
+
+    it("hides workspace info and checkbox when project has no workspaces", async () => {
+      const emptyProject = createProject(testProjectId, "test-project", []);
+      mockProjects.mockReturnValue([emptyProject]);
+
+      render(CloseProjectDialog, { props: defaultProps });
+      await vi.runAllTimersAsync();
+
+      // Dialog should still be present
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /close project/i })).toBeInTheDocument();
+
+      // Workspace info and checkbox should not be present
+      expect(screen.queryByText(/workspace/i)).not.toBeInTheDocument();
+      expect(document.querySelector("vscode-checkbox")).not.toBeInTheDocument();
+
+      // Close and Cancel buttons should still be present
+      expect(screen.getByRole("button", { name: /close project/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+    });
+
+    it("closes empty project directly without removal calls", async () => {
+      const emptyProject = createProject(testProjectId, "test-project", []);
+      mockProjects.mockReturnValue([emptyProject]);
+
+      render(CloseProjectDialog, { props: defaultProps });
+      await vi.runAllTimersAsync();
+
+      const submitButton = screen.getByRole("button", { name: /close project/i });
+      await fireEvent.click(submitButton);
+
+      await vi.runAllTimersAsync();
+
+      // Should only call close, not remove
+      expect(mockCloseProject).toHaveBeenCalledWith(testProjectId);
+      expect(mockRemoveWorkspace).not.toHaveBeenCalled();
+      expect(mockCloseDialog).toHaveBeenCalled();
+    });
   });
 
   describe("checkbox behavior", () => {
