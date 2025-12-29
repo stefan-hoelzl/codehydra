@@ -211,7 +211,7 @@ describe("createTestGitRepoWithRemote", () => {
     } finally {
       await cleanup();
     }
-  });
+  }, 10000);
 });
 
 describe("createCommitInRemote", () => {

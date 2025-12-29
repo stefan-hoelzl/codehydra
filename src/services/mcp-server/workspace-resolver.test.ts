@@ -4,19 +4,31 @@
 
 import { describe, it, expect } from "vitest";
 import { resolveWorkspace, type WorkspaceLookup } from "./workspace-resolver";
+import { Path } from "../platform/path";
 
 /**
  * Create a mock WorkspaceLookup for testing.
+ * Matches the real AppState behavior:
+ * - Uses Path.equals() for lookup comparison
+ * - Returns normalized paths (Path.toString() format)
  */
 function createMockAppState(
   projects: { path: string; workspaces: { path: string }[] }[]
 ): WorkspaceLookup {
   return {
     findProjectForWorkspace(workspacePath: string) {
+      // Use Path for cross-platform comparison (handles case and separator normalization)
+      const inputPath = new Path(workspacePath);
       for (const project of projects) {
-        const ws = project.workspaces.find((w) => w.path === workspacePath);
+        const ws = project.workspaces.find((w) => inputPath.equals(w.path));
         if (ws) {
-          return project;
+          // Return normalized paths like real AppState does
+          return {
+            path: new Path(project.path).toString(),
+            workspaces: project.workspaces.map((w) => ({
+              path: new Path(w.path).toString(),
+            })),
+          };
         }
       }
       return undefined;
@@ -46,7 +58,8 @@ describe("resolveWorkspace", () => {
       expect(result).not.toBeNull();
       expect(result!.projectId).toMatch(/^my-app-[a-f0-9]{8}$/);
       expect(result!.workspaceName).toBe("feature-branch");
-      expect(result!.workspacePath).toBe(workspacePath);
+      // workspacePath is returned in normalized format
+      expect(result!.workspacePath).toBe(new Path(workspacePath).toString());
     });
 
     it("handles paths with special characters in project name", () => {
@@ -67,7 +80,10 @@ describe("resolveWorkspace", () => {
       const result = resolveWorkspace(specialWorkspacePath, appState);
 
       expect(result).not.toBeNull();
-      expect(result!.projectId).toMatch(/^My-Cool-App-[a-f0-9]{8}$/);
+      // Project ID uses normalized path (lowercase on Windows)
+      expect(result!.projectId).toMatch(
+        isWindows ? /^my-cool-app-[a-f0-9]{8}$/ : /^My-Cool-App-[a-f0-9]{8}$/
+      );
       expect(result!.workspaceName).toBe("feature");
     });
 
@@ -177,7 +193,8 @@ describe("resolveWorkspace", () => {
       const result = resolveWorkspace(pathWithDoubleSlashes, appState);
 
       expect(result).not.toBeNull();
-      expect(result!.workspacePath).toBe(workspacePath);
+      // workspacePath is returned in normalized format
+      expect(result!.workspacePath).toBe(new Path(workspacePath).toString());
     });
 
     it("handles Windows backslash paths on Windows", () => {

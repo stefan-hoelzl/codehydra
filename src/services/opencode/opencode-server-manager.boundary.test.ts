@@ -97,128 +97,148 @@ describe("OpenCodeServerManager Boundary Tests", () => {
     }
   });
 
-  it.skipIf(skipTests)("opencode serve starts and listens on allocated port", async () => {
-    manager = new OpenCodeServerManager(
-      processRunner,
-      networkLayer,
-      networkLayer,
-      pathProvider,
-      SILENT_LOGGER,
-      { healthCheckTimeoutMs: CI_TIMEOUT_MS }
-    );
+  it.skipIf(skipTests)(
+    "opencode serve starts and listens on allocated port",
+    async () => {
+      manager = new OpenCodeServerManager(
+        processRunner,
+        networkLayer,
+        networkLayer,
+        pathProvider,
+        SILENT_LOGGER,
+        { healthCheckTimeoutMs: CI_TIMEOUT_MS }
+      );
 
-    const workspacePath = join(testDir, "workspace");
+      const workspacePath = join(testDir, "workspace");
 
-    const port = await manager.startServer(workspacePath);
+      const port = await manager.startServer(workspacePath);
 
-    expect(port).toBeGreaterThan(0);
-    expect(port).toBeLessThan(65536);
-    expect(manager.getPort(workspacePath)).toBe(port);
-  });
+      expect(port).toBeGreaterThan(0);
+      expect(port).toBeLessThan(65536);
+      expect(manager.getPort(workspacePath)).toBe(port);
+    },
+    CI_TIMEOUT_MS
+  );
 
-  it.skipIf(skipTests)("health check to /path succeeds after startup", async () => {
-    manager = new OpenCodeServerManager(
-      processRunner,
-      networkLayer,
-      networkLayer,
-      pathProvider,
-      SILENT_LOGGER,
-      { healthCheckTimeoutMs: CI_TIMEOUT_MS }
-    );
+  it.skipIf(skipTests)(
+    "health check to /path succeeds after startup",
+    async () => {
+      manager = new OpenCodeServerManager(
+        processRunner,
+        networkLayer,
+        networkLayer,
+        pathProvider,
+        SILENT_LOGGER,
+        { healthCheckTimeoutMs: CI_TIMEOUT_MS }
+      );
 
-    const workspacePath = join(testDir, "workspace");
-    const port = await manager.startServer(workspacePath);
+      const workspacePath = join(testDir, "workspace");
+      const port = await manager.startServer(workspacePath);
 
-    // Verify health check endpoint works
-    const response = await networkLayer.fetch(`http://127.0.0.1:${port}/path`, { timeout: 5000 });
-    expect(response.ok).toBe(true);
-  });
+      // Verify health check endpoint works
+      const response = await networkLayer.fetch(`http://127.0.0.1:${port}/path`, { timeout: 5000 });
+      expect(response.ok).toBe(true);
+    },
+    CI_TIMEOUT_MS
+  );
 
-  it.skipIf(skipTests)("graceful shutdown terminates process", async () => {
-    manager = new OpenCodeServerManager(
-      processRunner,
-      networkLayer,
-      networkLayer,
-      pathProvider,
-      SILENT_LOGGER,
-      { healthCheckTimeoutMs: CI_TIMEOUT_MS }
-    );
+  it.skipIf(skipTests)(
+    "graceful shutdown terminates process",
+    async () => {
+      manager = new OpenCodeServerManager(
+        processRunner,
+        networkLayer,
+        networkLayer,
+        pathProvider,
+        SILENT_LOGGER,
+        { healthCheckTimeoutMs: CI_TIMEOUT_MS }
+      );
 
-    const workspacePath = join(testDir, "workspace");
-    const port = await manager.startServer(workspacePath);
+      const workspacePath = join(testDir, "workspace");
+      const port = await manager.startServer(workspacePath);
 
-    // Verify server is running
-    const runningResponse = await networkLayer.fetch(`http://127.0.0.1:${port}/path`, {
-      timeout: 5000,
-    });
-    expect(runningResponse.ok).toBe(true);
+      // Verify server is running
+      const runningResponse = await networkLayer.fetch(`http://127.0.0.1:${port}/path`, {
+        timeout: 5000,
+      });
+      expect(runningResponse.ok).toBe(true);
 
-    // Stop the server
-    await manager.stopServer(workspacePath);
+      // Stop the server
+      await manager.stopServer(workspacePath);
 
-    // Wait a bit for port to be released
-    await delay(1000);
+      // Wait a bit for port to be released
+      await delay(1000);
 
-    // Verify server is stopped (connection should fail)
-    try {
-      await networkLayer.fetch(`http://127.0.0.1:${port}/path`, { timeout: 1000 });
-      // If we get here, the server is still running (unexpected)
-      expect.fail("Server should have stopped but is still responding");
-    } catch {
-      // Expected - server should be stopped
-    }
-  });
+      // Verify server is stopped (connection should fail)
+      try {
+        await networkLayer.fetch(`http://127.0.0.1:${port}/path`, { timeout: 1000 });
+        // If we get here, the server is still running (unexpected)
+        expect.fail("Server should have stopped but is still responding");
+      } catch {
+        // Expected - server should be stopped
+      }
+    },
+    CI_TIMEOUT_MS
+  );
 
-  it.skipIf(skipTests)("port is stored in memory after start", async () => {
-    manager = new OpenCodeServerManager(
-      processRunner,
-      networkLayer,
-      networkLayer,
-      pathProvider,
-      SILENT_LOGGER,
-      { healthCheckTimeoutMs: CI_TIMEOUT_MS }
-    );
+  it.skipIf(skipTests)(
+    "port is stored in memory after start",
+    async () => {
+      manager = new OpenCodeServerManager(
+        processRunner,
+        networkLayer,
+        networkLayer,
+        pathProvider,
+        SILENT_LOGGER,
+        { healthCheckTimeoutMs: CI_TIMEOUT_MS }
+      );
 
-    const workspacePath = join(testDir, "workspace");
-    const port = await manager.startServer(workspacePath);
+      const workspacePath = join(testDir, "workspace");
+      const port = await manager.startServer(workspacePath);
 
-    // Port should be retrievable via getPort
-    expect(manager.getPort(workspacePath)).toBe(port);
+      // Port should be retrievable via getPort
+      expect(manager.getPort(workspacePath)).toBe(port);
 
-    // Stop server
-    await manager.stopServer(workspacePath);
+      // Stop server
+      await manager.stopServer(workspacePath);
 
-    // Port should no longer be available
-    expect(manager.getPort(workspacePath)).toBeUndefined();
-  });
+      // Port should no longer be available
+      expect(manager.getPort(workspacePath)).toBeUndefined();
+    },
+    CI_TIMEOUT_MS
+  );
 
-  it.skipIf(skipTests)("no ports.json file is created after server start", async () => {
-    manager = new OpenCodeServerManager(
-      processRunner,
-      networkLayer,
-      networkLayer,
-      pathProvider,
-      SILENT_LOGGER,
-      { healthCheckTimeoutMs: CI_TIMEOUT_MS }
-    );
+  it.skipIf(skipTests)(
+    "no ports.json file is created after server start",
+    async () => {
+      manager = new OpenCodeServerManager(
+        processRunner,
+        networkLayer,
+        networkLayer,
+        pathProvider,
+        SILENT_LOGGER,
+        { healthCheckTimeoutMs: CI_TIMEOUT_MS }
+      );
 
-    const workspacePath = join(testDir, "workspace");
-    const portsJsonPath = join(testDir, "opencode", "ports.json");
+      const workspacePath = join(testDir, "workspace");
+      const portsJsonPath = join(testDir, "opencode", "ports.json");
 
-    // Verify no ports.json exists before starting
-    expect(existsSync(portsJsonPath)).toBe(false);
+      // Verify no ports.json exists before starting
+      expect(existsSync(portsJsonPath)).toBe(false);
 
-    // Start the server
-    await manager.startServer(workspacePath);
+      // Start the server
+      await manager.startServer(workspacePath);
 
-    // Verify no ports.json file was created
-    // Port is stored in memory only, not written to disk
-    expect(existsSync(portsJsonPath)).toBe(false);
+      // Verify no ports.json file was created
+      // Port is stored in memory only, not written to disk
+      expect(existsSync(portsJsonPath)).toBe(false);
 
-    // Stop the server
-    await manager.stopServer(workspacePath);
+      // Stop the server
+      await manager.stopServer(workspacePath);
 
-    // Still no ports.json after stopping
-    expect(existsSync(portsJsonPath)).toBe(false);
-  });
+      // Still no ports.json after stopping
+      expect(existsSync(portsJsonPath)).toBe(false);
+    },
+    CI_TIMEOUT_MS
+  );
 });

@@ -88,7 +88,7 @@ describe("ExecaSpawnedProcess", () => {
 
       // Cleanup
       await spawned.kill(0, 100);
-    });
+    }, 15000);
 
     it("handles spawn failure for nonexistent binary", async () => {
       const subprocess = createExecaProcess("nonexistent-binary-12345", []);
