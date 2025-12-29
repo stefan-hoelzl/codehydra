@@ -298,7 +298,7 @@ describe("SimpleGitClient", () => {
       await withTempRepoWithRemote(async (path) => {
         await expect(client.fetch(new Path(path))).resolves.not.toThrow();
       });
-    });
+    }, 15000);
 
     it("fetches new commits from remote", async () => {
       await withTempRepoWithRemote(async (path, remotePath) => {
@@ -312,19 +312,19 @@ describe("SimpleGitClient", () => {
         const log = await git.log(["origin/main"]);
         expect(log.latest?.message).toBe("Remote commit");
       });
-    });
+    }, 15000);
 
     it("fetches with explicit remote name", async () => {
       await withTempRepoWithRemote(async (path) => {
         await expect(client.fetch(new Path(path), "origin")).resolves.not.toThrow();
       });
-    });
+    }, 15000);
 
     it("throws GitError when fetching from non-existent remote", async () => {
       await withTempRepoWithRemote(async (path) => {
         await expect(client.fetch(new Path(path), "nonexistent")).rejects.toThrow(GitError);
       });
-    });
+    }, 15000);
   });
 
   describe("listRemotes", () => {

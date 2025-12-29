@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { join } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VscodeSetupService } from "./vscode-setup-service";
 import { type SetupMarker, type ProcessRunner, type ProcessResult } from "./types";
 import type { SpawnedProcess } from "../platform/process";
 import type { PathProvider } from "../platform/path-provider";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
+import { Path } from "../platform/path";
 import {
   createMockFileSystemLayer,
   createSpyFileSystemLayer,
@@ -284,8 +284,8 @@ describe("VscodeSetupService", () => {
 
       // Verify vsix was copied from assets to vscode dir
       expect(copiedFiles).toContainEqual({
-        src: join("/mock/assets", "codehydra-sidekick-0.0.3.vsix"),
-        dest: join("/mock/vscode", "codehydra-sidekick-0.0.3.vsix"),
+        src: new Path("/mock/assets", "codehydra-sidekick-0.0.3.vsix").toString(),
+        dest: new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toString(),
       });
     });
 
@@ -311,9 +311,9 @@ describe("VscodeSetupService", () => {
         mockPathProvider.codeServerBinaryPath.toNative(),
         [
           "--install-extension",
-          join("/mock/vscode", "codehydra-sidekick-0.0.3.vsix"),
+          new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toNative(),
           "--extensions-dir",
-          "/mock/vscode/extensions",
+          mockPathProvider.vscodeExtensionsDir.toNative(),
         ]
       );
     });
@@ -338,7 +338,12 @@ describe("VscodeSetupService", () => {
       // Second call is for marketplace extension - uses codeServerBinaryPath.toNative() from pathProvider
       expect(mockProcessRunner.run).toHaveBeenCalledWith(
         mockPathProvider.codeServerBinaryPath.toNative(),
-        ["--install-extension", "sst-dev.opencode", "--extensions-dir", "/mock/vscode/extensions"]
+        [
+          "--install-extension",
+          "sst-dev.opencode",
+          "--extensions-dir",
+          mockPathProvider.vscodeExtensionsDir.toNative(),
+        ]
       );
     });
 
@@ -363,7 +368,9 @@ describe("VscodeSetupService", () => {
       // Verify order: bundled vsix first, then marketplace
       expect(mockProcessRunner.run).toHaveBeenCalledTimes(2);
       const calls = vi.mocked(mockProcessRunner.run).mock.calls;
-      expect(calls[0]?.[1]?.[1]).toBe(join("/mock/vscode", "codehydra-sidekick-0.0.3.vsix"));
+      expect(calls[0]?.[1]?.[1]).toBe(
+        new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toNative()
+      );
       expect(calls[1]?.[1]?.[1]).toBe("sst-dev.opencode");
 
       // Verify progress messages
@@ -586,10 +593,11 @@ describe("VscodeSetupService", () => {
 
       // Should generate code script (opencode may be skipped if not found)
       // Note: code-server wrapper is not generated - we launch code-server directly
-      expect(writtenFiles.has(join("/mock/bin", "code"))).toBe(true);
+      const codePath = new Path("/mock/bin", "code").toString();
+      expect(writtenFiles.has(codePath)).toBe(true);
 
       // Scripts should be Unix-style (shebang)
-      const codeScript = writtenFiles.get(join("/mock/bin", "code"));
+      const codeScript = writtenFiles.get(codePath);
       expect(codeScript).toMatch(/^#!/);
     });
 
@@ -616,7 +624,7 @@ describe("VscodeSetupService", () => {
 
       // Should call makeExecutable for each Unix script (code, and opencode if found)
       // Note: code-server wrapper is not generated - we launch code-server directly
-      expect(executablePaths).toContain(join("/mock/bin", "code"));
+      expect(executablePaths).toContain(new Path("/mock/bin", "code").toString());
     });
 
     it("does not call makeExecutable on Windows", async () => {

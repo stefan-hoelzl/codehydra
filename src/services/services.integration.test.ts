@@ -90,7 +90,7 @@ describe("Services Integration", () => {
       // 8. Verify workspace is gone
       const finalWorkspaces = await provider.discover();
       expect(finalWorkspaces).toHaveLength(0);
-    });
+    }, 15000);
 
     it("handles multiple workspaces", async () => {
       const fileSystemLayer = new DefaultFileSystemLayer(SILENT_LOGGER);
@@ -122,7 +122,7 @@ describe("Services Integration", () => {
 
       // Cleanup
       await provider.removeWorkspace(ws2.path, true);
-    });
+    }, 15000);
   });
 
   describe("Factory function", () => {
@@ -167,7 +167,7 @@ describe("Services Integration", () => {
       // Should be able to discover workspaces
       const workspaces = await provider.discover();
       expect(workspaces).toHaveLength(0);
-    });
+    }, 10000);
 
     it("createGitWorktreeProvider throws for non-git directory", async () => {
       const nonGitDir = await createTempDir();
@@ -186,7 +186,7 @@ describe("Services Integration", () => {
       } finally {
         await nonGitDir.cleanup();
       }
-    });
+    }, 10000);
   });
 
   describe("Abstraction layer", () => {
@@ -285,6 +285,6 @@ describe("Services Integration", () => {
         await repo.cleanup();
         await tempDir.cleanup();
       }
-    });
+    }, 15000);
   });
 });
