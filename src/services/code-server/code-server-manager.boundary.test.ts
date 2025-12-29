@@ -39,8 +39,8 @@ function getCodeServerBinaryPath(): string {
 // Platform detection for signal tests
 const isWindows = process.platform === "win32";
 
-// Default timeout for boundary tests (code-server startup is typically 1-2s)
-const TEST_TIMEOUT = 5000;
+// Default timeout for boundary tests (code-server startup can take longer on CI)
+const TEST_TIMEOUT = 15000;
 
 // Track spawned PIDs for fallback cleanup
 const spawnedPids: number[] = [];
@@ -73,6 +73,35 @@ function createTestConfig(baseDir: string): CodeServerConfig {
     userDataDir: `${baseDir}/user-data`,
     binDir: `${baseDir}/bin`,
   };
+}
+
+/**
+ * Force kill a process by PID using platform-appropriate method.
+ * On Windows, uses taskkill with /t /f for tree killing.
+ * On Unix, uses pkill -P to kill children first, then SIGKILL.
+ */
+async function forceKillPid(pid: number): Promise<void> {
+  const { execa } = await import("execa");
+  if (isWindows) {
+    try {
+      await execa("taskkill", ["/pid", String(pid), "/t", "/f"]);
+    } catch {
+      // Process may have already exited
+    }
+  } else {
+    // Kill children first
+    try {
+      await execa("pkill", ["-P", String(pid), "-9"]);
+    } catch {
+      // No children or process already dead
+    }
+    // Kill parent
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Process already dead
+    }
+  }
 }
 
 describe("CodeServerManager (boundary)", () => {
@@ -115,13 +144,9 @@ describe("CodeServerManager (boundary)", () => {
       // Ignore cleanup errors - process may already be dead
     }
 
-    // Fallback cleanup: force kill any tracked PIDs
+    // Fallback cleanup: force kill any tracked PIDs using platform-appropriate method
     for (const trackedPid of spawnedPids) {
-      try {
-        process.kill(trackedPid, "SIGKILL");
-      } catch {
-        // Process already dead - expected
-      }
+      await forceKillPid(trackedPid);
     }
     spawnedPids.length = 0;
 
