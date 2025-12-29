@@ -250,14 +250,14 @@ export class CodeServerManager {
 
   /**
    * Wait for the server to become healthy.
-   * Uses shared health check utility with 3s timeout.
+   * Uses shared health check utility with 10s timeout.
    */
   private async waitForServerHealthy(port: number): Promise<void> {
     await waitForHealthy({
       checkFn: () => this.checkHealth(port),
-      timeoutMs: 3000,
+      timeoutMs: 10000,
       intervalMs: 100,
-      errorMessage: "Health check timed out after 3 seconds",
+      errorMessage: "Health check timed out after 10 seconds",
     });
   }
 
