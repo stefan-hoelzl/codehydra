@@ -290,9 +290,10 @@ describe("Integration tests", () => {
       // Get actual projectId from store (ID is regenerated from path)
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
-      // Verify close button exists
+      // Verify close button exists and click it
       const closeButton = screen.getByLabelText(/close project/i);
       expect(closeButton).toBeInTheDocument();
+      await fireEvent.click(closeButton);
 
       // Verify dialog opens (projects always show confirmation dialog)
       const dialog = await waitFor(() => {

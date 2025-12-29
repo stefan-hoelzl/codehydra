@@ -96,7 +96,7 @@
   // Subscribe to setup progress events from main process
   $effect(() => {
     const unsubProgress = api.on<{ step: string; message: string }>("setup:progress", (event) => {
-      console.log("[App.svelte] Received setup:progress event:", event);
+      logger.debug("Received setup:progress event", { step: event.step, message: event.message });
       updateProgress(event.message);
     });
 
