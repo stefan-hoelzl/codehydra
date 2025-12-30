@@ -439,7 +439,7 @@
 
   .action-btn:hover {
     opacity: 1;
-    background: var(--ch-input-bg);
+    background: var(--ch-list-hover-bg);
   }
 
   .workspace-list {
