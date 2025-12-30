@@ -172,6 +172,7 @@ path1 === path2;                     // ❌ Fails for "C:\foo" vs "C:/foo"
 | VS Code Setup   | First-run setup that installs extensions and config; uses preflight checks on every startup to detect missing/outdated components; marker at `<app-data>/.setup-completed`. See [VS Code Assets](#vs-code-assets) for details. |
 | .keepfiles      | Config file in project root listing files to copy to new workspaces. Uses gitignore syntax with **inverted semantics** - listed patterns are COPIED (not ignored). Supports negation with `!` prefix.                          |
 | App Icon Badge  | Shows visual status indicator on app icon. Red circle: all workspaces working. Half green/half red: mixed (some ready, some working). No badge: all ready. Platform: macOS dock, Windows taskbar, Linux Unity.                 |
+| View Loading    | New workspaces show a loading overlay until first OpenCode client attaches (first MCP request received) or 10-second timeout. Prevents VS Code flickering during progressive load. View URL loads but stays detached.          |
 
 ## VS Code Assets
 

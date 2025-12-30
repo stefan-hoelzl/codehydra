@@ -112,7 +112,6 @@ export function createMockSdkClient(options: MockSdkClientOptions = {}): Opencod
   return {
     session: mockSession,
     event: mockEvent,
-    // Add other namespaces as empty objects since we don't use them
     global: {},
     project: {},
     pty: {},

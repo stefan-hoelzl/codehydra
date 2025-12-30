@@ -5,7 +5,8 @@
 
 import { WebContentsView, session, type WebContents } from "electron";
 import { basename } from "node:path";
-import type { IViewManager, Unsubscribe } from "./view-manager.interface";
+import type { IViewManager, Unsubscribe, LoadingChangeCallback } from "./view-manager.interface";
+import { WORKSPACE_LOADING_TIMEOUT_MS } from "./view-manager.interface";
 import type { UIMode, UIModeChangedEvent } from "../../shared/ipc";
 import { ApiIpcChannels } from "../../shared/ipc";
 import type { WindowManager } from "./window-manager";
@@ -108,6 +109,15 @@ export class ViewManager implements IViewManager {
   private isChangingWorkspace = false;
   private readonly unsubscribeResize: Unsubscribe;
   private readonly logger: Logger;
+  /**
+   * Tracks workspaces that are loading (waiting for OpenCode client to attach).
+   * Maps workspace path to the timeout handle for cleanup.
+   */
+  private readonly loadingWorkspaces: Map<string, NodeJS.Timeout> = new Map();
+  /**
+   * Callbacks for loading state changes.
+   */
+  private readonly loadingChangeCallbacks: Set<LoadingChangeCallback> = new Set();
 
   private constructor(
     windowManager: WindowManager,
@@ -219,9 +229,16 @@ export class ViewManager implements IViewManager {
    * @param workspacePath - Absolute path to the workspace directory
    * @param url - URL to load in the view (code-server URL)
    * @param projectPath - Absolute path to the project directory (for partition naming)
+   * @param isNew - If true, marks workspace as loading until OpenCode client attaches.
+   *                Defaults to false (existing workspaces loaded on startup skip loading state).
    * @returns The created WebContentsView
    */
-  createWorkspaceView(workspacePath: string, url: string, projectPath: string): WebContentsView {
+  createWorkspaceView(
+    workspacePath: string,
+    url: string,
+    projectPath: string,
+    isNew = false
+  ): WebContentsView {
     // Generate partition name for session isolation
     // Format: persist:<projectDirName>/<workspaceName>
     // Using persist: prefix to enable persistent storage across app restarts
@@ -289,6 +306,16 @@ export class ViewManager implements IViewManager {
     // Register with shortcut controller for Alt+X detection (will work when view becomes active)
     this.shortcutController.registerView(view.webContents);
 
+    // Only mark as loading for newly created workspaces (not existing ones loaded on startup)
+    if (isNew) {
+      const timeout = setTimeout(
+        () => this.setWorkspaceLoaded(workspacePath),
+        WORKSPACE_LOADING_TIMEOUT_MS
+      );
+      this.loadingWorkspaces.set(workspacePath, timeout);
+      this.notifyLoadingChange(workspacePath, true);
+    }
+
     // Note: No addChildView() - view starts detached
     // Note: No loadURL() - URL is loaded on first activation
     // Note: No updateBounds() - detached views don't need bounds
@@ -324,6 +351,14 @@ export class ViewManager implements IViewManager {
     this.workspaceUrls.delete(workspacePath);
     this.loadedWorkspaces.delete(workspacePath);
     this.workspacePartitions.delete(workspacePath);
+
+    // Clean up loading state
+    const timeout = this.loadingWorkspaces.get(workspacePath);
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+      this.loadingWorkspaces.delete(workspacePath);
+      this.notifyLoadingChange(workspacePath, false);
+    }
 
     // Unregister from shortcut controller (safe even if view is destroyed)
     try {
@@ -410,6 +445,11 @@ export class ViewManager implements IViewManager {
    * Inactive workspaces are detached from contentView and don't need bounds.
    */
   updateBounds(): void {
+    // Guard: skip if window is destroyed (happens during app shutdown)
+    if (this.windowManager.getWindow().isDestroyed()) {
+      return;
+    }
+
     const bounds = this.windowManager.getBounds();
 
     // Clamp to minimum dimensions
@@ -540,10 +580,14 @@ export class ViewManager implements IViewManager {
       // Update state first
       this.activeWorkspacePath = workspacePath;
 
-      // Attach new view FIRST (visual continuity - no gap)
+      // Load URL and attach new view FIRST (visual continuity - no gap)
+      // But if workspace is loading, only load URL - don't attach until loaded
       if (workspacePath !== null) {
         this.loadViewUrl(workspacePath);
-        this.attachView(workspacePath);
+        // Only attach if workspace is not loading (loading workspaces stay detached)
+        if (!this.loadingWorkspaces.has(workspacePath)) {
+          this.attachView(workspacePath);
+        }
       }
 
       // Then detach previous
@@ -730,6 +774,82 @@ export class ViewManager implements IViewManager {
     return () => {
       this.workspaceChangeCallbacks.delete(callback);
     };
+  }
+
+  /**
+   * Checks if a workspace is currently loading.
+   *
+   * @param workspacePath - Absolute path to the workspace directory
+   * @returns True if the workspace is loading, false otherwise
+   */
+  isWorkspaceLoading(workspacePath: string): boolean {
+    return this.loadingWorkspaces.has(workspacePath);
+  }
+
+  /**
+   * Marks a workspace as loaded, attaching its view if active.
+   * Called when the first OpenCode client attaches or the timeout expires.
+   * Idempotent: safe to call multiple times or for non-loading workspaces.
+   *
+   * @param workspacePath - Absolute path to the workspace directory
+   */
+  setWorkspaceLoaded(workspacePath: string): void {
+    // Guard: no-op if workspace isn't loading
+    if (!this.loadingWorkspaces.has(workspacePath)) {
+      return;
+    }
+
+    // Clear the timeout
+    const timeout = this.loadingWorkspaces.get(workspacePath);
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+
+    // Remove from loading map
+    this.loadingWorkspaces.delete(workspacePath);
+
+    // Notify listeners
+    this.notifyLoadingChange(workspacePath, false);
+
+    // If this workspace is active, attach the view
+    if (this.activeWorkspacePath === workspacePath) {
+      this.attachView(workspacePath);
+    }
+
+    const workspaceName = basename(workspacePath);
+    this.logger.debug("Workspace loaded", { workspace: workspaceName });
+  }
+
+  /**
+   * Subscribe to loading state changes.
+   *
+   * @param callback - Called with (path, loading) when loading state changes
+   * @returns Unsubscribe function
+   */
+  onLoadingChange(callback: LoadingChangeCallback): Unsubscribe {
+    this.loadingChangeCallbacks.add(callback);
+    return () => {
+      this.loadingChangeCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Notifies listeners of a loading state change.
+   * @param path - Workspace path
+   * @param loading - True if workspace is now loading, false if loaded
+   */
+  private notifyLoadingChange(path: string, loading: boolean): void {
+    for (const callback of this.loadingChangeCallbacks) {
+      try {
+        callback(path, loading);
+      } catch (error) {
+        this.logger.error(
+          "Error in loading change callback",
+          { path, loading },
+          error instanceof Error ? error : undefined
+        );
+      }
+    }
   }
 
   /**

@@ -7,9 +7,22 @@ import type { WebContentsView } from "electron";
 import type { UIMode, UIModeChangedEvent } from "../../shared/ipc";
 
 /**
+ * Timeout for workspace loading in milliseconds.
+ * If the OpenCode client doesn't attach within this time, the view is shown anyway.
+ */
+export const WORKSPACE_LOADING_TIMEOUT_MS = 10000;
+
+/**
  * Function to unsubscribe from an event.
  */
 export type Unsubscribe = () => void;
+
+/**
+ * Callback for loading state changes.
+ * @param path - The workspace path
+ * @param loading - True when workspace starts loading, false when loaded
+ */
+export type LoadingChangeCallback = (path: string, loading: boolean) => void;
 
 /**
  * Interface for managing WebContentsViews.
@@ -34,9 +47,16 @@ export interface IViewManager {
    * @param workspacePath - Absolute path to the workspace directory
    * @param url - URL to load in the view (code-server URL) - stored for lazy loading
    * @param projectPath - Absolute path to the project directory (for partition naming)
+   * @param isNew - If true, marks workspace as loading until OpenCode client attaches.
+   *                Defaults to false (existing workspaces loaded on startup skip loading state).
    * @returns The created WebContentsView (detached, URL not loaded)
    */
-  createWorkspaceView(workspacePath: string, url: string, projectPath: string): WebContentsView;
+  createWorkspaceView(
+    workspacePath: string,
+    url: string,
+    projectPath: string,
+    isNew?: boolean
+  ): WebContentsView;
 
   /**
    * Destroys a workspace view.
@@ -140,4 +160,32 @@ export interface IViewManager {
    * @param port - The new code-server port
    */
   updateCodeServerPort(port: number): void;
+
+  /**
+   * Checks if a workspace is currently loading.
+   * A workspace is loading from creation until first OpenCode client attaches
+   * or the 10-second timeout expires.
+   *
+   * @param workspacePath - Absolute path to the workspace directory
+   * @returns True if the workspace is loading, false otherwise
+   */
+  isWorkspaceLoading(workspacePath: string): boolean;
+
+  /**
+   * Marks a workspace as loaded, attaching its view if active.
+   * Called when the first OpenCode client attaches or the timeout expires.
+   * Idempotent: safe to call multiple times or for non-loading workspaces.
+   *
+   * @param workspacePath - Absolute path to the workspace directory
+   */
+  setWorkspaceLoaded(workspacePath: string): void;
+
+  /**
+   * Subscribe to loading state changes.
+   * Called when a workspace starts or finishes loading.
+   *
+   * @param callback - Called with (path, loading) when loading state changes
+   * @returns Unsubscribe function
+   */
+  onLoadingChange(callback: LoadingChangeCallback): Unsubscribe;
 }

@@ -201,7 +201,8 @@ describe("AppState", () => {
       expect(mockViewManager.createWorkspaceView).toHaveBeenCalledWith(
         "/project/.worktrees/feature-1",
         expect.stringContaining("http://localhost:8080"),
-        "/project"
+        "/project",
+        true
       );
     });
 

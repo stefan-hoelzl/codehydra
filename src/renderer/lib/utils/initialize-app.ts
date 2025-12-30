@@ -16,6 +16,7 @@ import {
   setError,
 } from "$lib/stores/projects.svelte.js";
 import { setAllStatuses } from "$lib/stores/agent-status.svelte.js";
+import { setWorkspaceLoading } from "$lib/stores/workspace-loading.svelte.js";
 import type { Project, WorkspaceStatus, AgentStatus } from "@shared/api/types";
 import type { AgentNotificationService } from "$lib/services/agent-notifications";
 import * as api from "$lib/api";
@@ -110,6 +111,18 @@ export async function initializeApp(
     // Load projects
     const projectList = await apiImpl.projects.list();
     setProjects([...projectList]);
+
+    // Mark all workspaces as loading on startup.
+    // This handles the race condition where main process may have sent workspace:loading-changed
+    // events before the renderer subscribed. New workspaces will receive loading-changed(false)
+    // when they're ready. Existing workspaces (loaded with isNew=false) don't emit loading events,
+    // so this is a no-op for them - they'll never show the overlay since they're not in loading state
+    // on the main process side.
+    for (const project of projectList) {
+      for (const workspace of project.workspaces) {
+        setWorkspaceLoading(workspace.path, true);
+      }
+    }
 
     // Get initial active workspace (always set, even if null)
     const activeRef = await apiImpl.ui.getActiveWorkspace();

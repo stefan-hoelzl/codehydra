@@ -27,6 +27,11 @@ class OpenCodeProvider implements IDisposable {
   private clientStatus: ClientStatus = "idle";
   private readonly sdkFactory: SdkClientFactory | undefined;
   private readonly logger: Logger;
+  /**
+   * Whether TUI has attached (first MCP request received).
+   * Used to determine when to show status vs "none".
+   */
+  private tuiAttached = false;
 
   /**
    * Session to port mapping for permission correlation.
@@ -57,12 +62,31 @@ class OpenCodeProvider implements IDisposable {
   }
 
   /**
+   * Mark TUI as attached for this workspace.
+   * Called when the first MCP request is received.
+   */
+  setTuiAttached(): void {
+    if (!this.tuiAttached) {
+      this.tuiAttached = true;
+      this.notifyStatusChange();
+    }
+  }
+
+  /**
    * Get effective counts accounting for permission state.
    * Ports with pending permissions count as idle (waiting for user).
+   * Returns { idle: 0, busy: 0 } if TUI has not attached yet (no MCP request received).
    */
   getEffectiveCounts(): { idle: number; busy: number } {
-    if (!this.client) {
+    // No client or TUI not attached yet - show "none"
+    if (!this.client || !this.tuiAttached) {
       return { idle: 0, busy: 0 };
+    }
+
+    // TUI attached - show status based on client state
+    // If no sessions yet, show as idle (ready to use)
+    if (this.sessionToPort.size === 0) {
+      return { idle: 1, busy: 0 };
     }
 
     // Check if any session has pending permission
@@ -88,10 +112,7 @@ class OpenCodeProvider implements IDisposable {
    * but may not receive real-time updates.
    */
   async initializeClient(port: number): Promise<void> {
-    if (this.client) {
-      // Already initialized
-      return;
-    }
+    if (this.client) return;
 
     const client = new OpenCodeClient(port, this.logger, this.sdkFactory);
 
@@ -145,6 +166,7 @@ class OpenCodeProvider implements IDisposable {
       this.client = null;
     }
     this.clientStatus = "idle";
+    this.tuiAttached = false;
     this.sessionToPort.clear();
     this.pendingPermissions.clear();
     this.statusChangeListeners.clear();
@@ -161,14 +183,19 @@ class OpenCodeProvider implements IDisposable {
   /**
    * Handle session events from a client.
    * Updates sessionToPort mapping for permission correlation.
+   * Notifies listeners on session add/delete as this affects getEffectiveCounts().
    */
   private handleSessionEvent(port: number, event: { type: string; sessionId: string }): void {
     if (event.type === "deleted") {
       this.sessionToPort.delete(event.sessionId);
       this.pendingPermissions.delete(event.sessionId);
+      // Notify: session count changed (could transition from "idle" to "none")
+      this.notifyStatusChange();
     } else {
       // Map session to port for permission correlation
       this.sessionToPort.set(event.sessionId, port);
+      // Notify: session count changed (could transition from "none" to "idle")
+      this.notifyStatusChange();
     }
   }
 
@@ -271,6 +298,17 @@ export class AgentStatusManager implements IDisposable {
   }
 
   /**
+   * Mark TUI as attached for a workspace.
+   * Called when the first MCP request is received.
+   */
+  setTuiAttached(path: WorkspacePath): void {
+    const provider = this.providers.get(path);
+    if (provider) {
+      provider.setTuiAttached();
+    }
+  }
+
+  /**
    * Get status for a specific workspace.
    */
   getStatus(path: WorkspacePath): AggregatedAgentStatus {
@@ -303,9 +341,7 @@ export class AgentStatusManager implements IDisposable {
 
   private updateStatus(path: WorkspacePath): void {
     const provider = this.providers.get(path);
-    if (!provider) {
-      return;
-    }
+    if (!provider) return;
 
     // Use effective counts that account for permissions and port status
     const counts = provider.getEffectiveCounts();

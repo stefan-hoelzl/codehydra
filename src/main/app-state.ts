@@ -27,6 +27,7 @@ import type { WorkspacePath } from "../shared/ipc";
 import type { Project, ProjectId } from "../shared/api/types";
 import type { AgentStatusManager } from "../services/opencode/agent-status-manager";
 import type { OpenCodeServerManager } from "../services/opencode/opencode-server-manager";
+import type { McpServerManager } from "../services/mcp-server";
 import { getErrorMessage } from "../shared/error-utils";
 import { toIpcWorkspaces } from "./api/workspace-conversion";
 import { generateProjectId } from "../shared/api/id-utils";
@@ -69,6 +70,7 @@ export class AppState {
   private readonly lastBaseBranches: Map<string, string> = new Map();
   private agentStatusManager: AgentStatusManager | null = null;
   private serverManager: OpenCodeServerManager | null = null;
+  private mcpServerManager: McpServerManager | null = null;
 
   constructor(
     projectStore: ProjectStore,
@@ -127,6 +129,14 @@ export class AppState {
    */
   getServerManager(): OpenCodeServerManager | null {
     return this.serverManager;
+  }
+
+  /**
+   * Set the MCP server manager.
+   * Called from main process after creating services.
+   */
+  setMcpServerManager(manager: McpServerManager): void {
+    this.mcpServerManager = manager;
   }
 
   /**
@@ -224,7 +234,7 @@ export class AppState {
     for (const workspace of workspaces) {
       const workspacePathStr = workspace.path.toString();
       const url = this.getWorkspaceUrl(workspacePathStr);
-      this.viewManager.createWorkspaceView(workspacePathStr, url, projectPathStr);
+      this.viewManager.createWorkspaceView(workspacePathStr, url, projectPathStr, true);
       this.startOpenCodeServerAsync(workspacePathStr);
     }
 
@@ -425,10 +435,10 @@ export class AppState {
       return;
     }
 
-    // Create view for the workspace
+    // Create view for the workspace (mark as new to show loading overlay)
     const workspacePathStr = workspace.path.toString();
     const url = this.getWorkspaceUrl(workspacePathStr);
-    this.viewManager.createWorkspaceView(workspacePathStr, url, normalizedKey);
+    this.viewManager.createWorkspaceView(workspacePathStr, url, normalizedKey, true);
 
     // Update internal project state
     const updatedProject: OpenProject = {
@@ -479,6 +489,11 @@ export class AppState {
     // Stop OpenCode server (this will trigger onServerStopped callback, which removes agent status)
     if (this.serverManager) {
       await this.serverManager.stopServer(workspacePathStr);
+    }
+
+    // Clear workspace from MCP seen set (so onFirstRequest fires if workspace is recreated)
+    if (this.mcpServerManager) {
+      this.mcpServerManager.clearWorkspace(workspacePathStr);
     }
 
     // Destroy the workspace view

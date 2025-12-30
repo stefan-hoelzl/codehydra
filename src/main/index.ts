@@ -41,7 +41,7 @@ import type { UiModuleDeps } from "./modules/ui";
 import { generateProjectId, extractWorkspaceName } from "./api/id-utils";
 import type { ICodeHydraApi, Unsubscribe } from "../shared/api/interfaces";
 import type { WorkspaceName, WorkspaceStatus } from "../shared/api/types";
-import { ApiIpcChannels } from "../shared/ipc";
+import { ApiIpcChannels, type WorkspaceLoadingChangedPayload } from "../shared/ipc";
 import { ElectronBuildInfo } from "./build-info";
 import { NodePlatformInfo } from "./platform-info";
 import { getErrorMessage } from "../shared/error-utils";
@@ -179,6 +179,8 @@ let mcpServerManager: McpServerManager | null = null;
 let codeHydraApi: ICodeHydraApi | null = null;
 let apiEventCleanup: Unsubscribe | null = null;
 let agentStatusCleanup: Unsubscribe | null = null;
+let mcpFirstRequestCleanup: Unsubscribe | null = null;
+let loadingChangeCleanup: Unsubscribe | null = null;
 
 /**
  * PluginServer for VS Code extension communication.
@@ -360,6 +362,7 @@ async function startServices(): Promise<void> {
   // Capture references for closures (TypeScript narrow refinement doesn't persist)
   const windowManagerRef = windowManager;
   const appStateRef = appState;
+  const viewManagerRef = viewManager;
 
   // Wire API events to IPC emission (with window title updates)
   apiEventCleanup = wireApiEvents(
@@ -381,9 +384,7 @@ async function startServices(): Promise<void> {
   agentStatusCleanup = agentStatusManager.onStatusChanged((workspacePath, aggregatedStatus) => {
     // Find the project containing this workspace
     const project = appStateRef.findProjectForWorkspace(workspacePath);
-    if (!project) {
-      return; // Workspace not in any known project, skip
-    }
+    if (!project) return; // Workspace not in any known project, skip
 
     // Generate IDs
     const projectId = generateProjectId(project.path);
@@ -432,6 +433,17 @@ async function startServices(): Promise<void> {
       configPath: mcpServerManager.getConfigPath(),
     });
 
+    // Register callback for first MCP request per workspace
+    // This is the primary signal for TUI attachment (marks workspace as loaded)
+    // Also signals AgentStatusManager that TUI is attached (for status indicator)
+    const agentStatusManagerRef = agentStatusManager;
+    mcpFirstRequestCleanup = mcpServerManager.onFirstRequest((workspacePath) => {
+      // setWorkspaceLoaded is idempotent (guards internally), no need to check isWorkspaceLoading
+      viewManagerRef.setWorkspaceLoaded(workspacePath);
+      // Mark TUI as attached for status indicator (shows green when TUI attaches)
+      agentStatusManagerRef.setTuiAttached(workspacePath as import("../shared/ipc").WorkspacePath);
+    });
+
     // Configure OpenCode servers to connect to MCP
     if (serverManager) {
       serverManager.setMcpConfig({
@@ -439,6 +451,9 @@ async function startServices(): Promise<void> {
         port: mcpServerManager.getPort()!,
       });
     }
+
+    // Inject MCP server manager into AppState (for clearing seen workspaces on deletion)
+    appState.setMcpServerManager(mcpServerManager);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     loggingService.createLogger("app").warn("MCP server start failed", { error: message });
@@ -470,6 +485,23 @@ async function startServices(): Promise<void> {
       workspaceName: extractWorkspaceName(path),
       path,
     });
+  });
+
+  // Wire loading state changes to IPC
+  // This emits loading changed events to the renderer for UI overlay display
+  loadingChangeCleanup = viewManager.onLoadingChange((path, loading) => {
+    try {
+      const webContents = viewManagerRef.getUIView().webContents;
+      if (!webContents.isDestroyed()) {
+        const payload: WorkspaceLoadingChangedPayload = {
+          path: path as import("../shared/ipc").WorkspacePath,
+          loading,
+        };
+        webContents.send(ApiIpcChannels.WORKSPACE_LOADING_CHANGED, payload);
+      }
+    } catch {
+      // Ignore errors - UI might be disconnected during shutdown
+    }
   });
 
   // Set first workspace active if any projects loaded
@@ -749,6 +781,18 @@ async function cleanup(): Promise<void> {
   if (agentStatusCleanup) {
     agentStatusCleanup();
     agentStatusCleanup = null;
+  }
+
+  // Cleanup MCP first request callback
+  if (mcpFirstRequestCleanup) {
+    mcpFirstRequestCleanup();
+    mcpFirstRequestCleanup = null;
+  }
+
+  // Cleanup loading state change callback
+  if (loadingChangeCleanup) {
+    loadingChangeCleanup();
+    loadingChangeCleanup = null;
   }
 
   // Dispose API registry and modules

@@ -17,7 +17,7 @@ import {
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import type { IMcpServer, McpResolvedWorkspace, McpError } from "./types";
+import type { IMcpServer, McpResolvedWorkspace, McpError, McpRequestCallback } from "./types";
 import type { ICoreApi } from "../../shared/api/interfaces";
 import type { Logger, LogContext } from "../logging";
 import { SILENT_LOGGER, logAtLevel } from "../logging";
@@ -61,6 +61,7 @@ export class McpServer implements IMcpServer {
   private readonly appState: WorkspaceLookup;
   private readonly serverFactory: McpServerFactory;
   private readonly logger: Logger;
+  private readonly onRequest: McpRequestCallback | undefined;
 
   private mcpServer: McpServerSdk | null = null;
   private httpServer: HttpServer | null = null;
@@ -74,12 +75,14 @@ export class McpServer implements IMcpServer {
     api: ICoreApi,
     appState: WorkspaceLookup,
     serverFactory: McpServerFactory = createDefaultMcpServer,
-    logger?: Logger
+    logger?: Logger,
+    onRequest?: McpRequestCallback
   ) {
     this.api = api;
     this.appState = appState;
     this.serverFactory = serverFactory;
     this.logger = logger ?? SILENT_LOGGER;
+    this.onRequest = onRequest;
   }
 
   /**
@@ -193,6 +196,15 @@ export class McpServer implements IMcpServer {
     }
 
     this.logger.debug("Handling request", { workspacePath });
+
+    // Notify callback of incoming request (fire-and-forget)
+    if (this.onRequest) {
+      try {
+        this.onRequest(workspacePath);
+      } catch (error) {
+        this.logger.error("onRequest callback error", { error: getErrorMessage(error) });
+      }
+    }
 
     // Attach auth info with workspace path to the request
     // The MCP SDK's StreamableHTTPServerTransport.handleRequest() accepts req.auth of type AuthInfo

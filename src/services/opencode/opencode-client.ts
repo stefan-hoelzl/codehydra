@@ -338,8 +338,6 @@ export class OpenCodeClient implements IDisposable {
    * Handle an SDK event and dispatch to appropriate handlers.
    */
   private handleSdkEvent(event: SdkEvent): void {
-    this.logger.debug("Event", { type: event.type });
-
     switch (event.type) {
       case "session.status":
         this.handleSessionStatus(event.properties);
@@ -452,9 +450,7 @@ export class OpenCodeClient implements IDisposable {
    */
   private emitSessionEvent(event: SessionStatus): void {
     // Only emit events for root sessions
-    if (!this.rootSessionIds.has(event.sessionId)) {
-      return;
-    }
+    if (!this.rootSessionIds.has(event.sessionId)) return;
 
     // Handle deleted events - remove from root set
     if (event.type === "deleted") {

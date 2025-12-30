@@ -521,10 +521,10 @@ describe("OpenCodeClient", () => {
     });
 
     it("rejects when connection times out", async () => {
-      // Create a mock that never resolves subscribe()
-      const neverResolvingSubscribe = vi.fn().mockReturnValue(new Promise(() => {}));
+      // Create a mock that never resolves event.subscribe()
+      const neverResolvingEvent = vi.fn().mockReturnValue(new Promise(() => {}));
       mockSdk = createMockSdkClient();
-      mockSdk.event.subscribe = neverResolvingSubscribe;
+      mockSdk.event.subscribe = neverResolvingEvent;
       mockFactory = createMockSdkFactory(mockSdk);
 
       client = createClient(8080);
@@ -539,10 +539,10 @@ describe("OpenCodeClient", () => {
     });
 
     it("respects custom timeout parameter", async () => {
-      // Create a mock that never resolves subscribe()
-      const neverResolvingSubscribe = vi.fn().mockReturnValue(new Promise(() => {}));
+      // Create a mock that never resolves event.subscribe()
+      const neverResolvingEvent = vi.fn().mockReturnValue(new Promise(() => {}));
       mockSdk = createMockSdkClient();
-      mockSdk.event.subscribe = neverResolvingSubscribe;
+      mockSdk.event.subscribe = neverResolvingEvent;
       mockFactory = createMockSdkFactory(mockSdk);
 
       client = createClient(8080);
@@ -564,10 +564,10 @@ describe("OpenCodeClient", () => {
     });
 
     it("uses default timeout of 5000ms when not specified", async () => {
-      // Create a mock that never resolves subscribe()
-      const neverResolvingSubscribe = vi.fn().mockReturnValue(new Promise(() => {}));
+      // Create a mock that never resolves event.subscribe()
+      const neverResolvingEvent = vi.fn().mockReturnValue(new Promise(() => {}));
       mockSdk = createMockSdkClient();
-      mockSdk.event.subscribe = neverResolvingSubscribe;
+      mockSdk.event.subscribe = neverResolvingEvent;
       mockFactory = createMockSdkFactory(mockSdk);
 
       client = createClient(8080);
@@ -605,7 +605,7 @@ describe("OpenCodeClient", () => {
       await client.connect();
       await client.connect(); // Second call should be no-op
 
-      // subscribe should only be called once
+      // event.subscribe should only be called once
       expect(mockSdk.event.subscribe).toHaveBeenCalledTimes(1);
     });
 
@@ -618,7 +618,7 @@ describe("OpenCodeClient", () => {
 
       await client.connect();
 
-      // subscribe should not be called
+      // event.subscribe should not be called
       expect(mockSdk.event.subscribe).not.toHaveBeenCalled();
     });
   });

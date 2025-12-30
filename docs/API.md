@@ -603,6 +603,7 @@ const unsubscribe = on("workspace:switched", (event) => {
 | `workspace:switched`          | `WorkspaceRef \| null`                           | Active workspace changed           |
 | `workspace:status-changed`    | `WorkspaceRef & { status: WorkspaceStatus }`     | Status changed                     |
 | `workspace:metadata-changed`  | `{ projectId, workspaceName, key, value }`       | Metadata updated                   |
+| `workspace:loading-changed`   | `{ path: string, loading: boolean }`             | Workspace loading state changed    |
 | `workspace:deletion-progress` | `DeletionProgress`                               | Workspace deletion progress update |
 | `ui:mode-changed`             | `{ mode: UIMode, previousMode: UIMode }`         | UI mode changed                    |
 | `setup:progress`              | `{ step: SetupStep, message: string }`           | Setup progress                     |

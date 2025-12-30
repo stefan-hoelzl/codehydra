@@ -116,9 +116,23 @@ export const ApiIpcChannels = {
   WORKSPACE_STATUS_CHANGED: "api:workspace:status-changed",
   WORKSPACE_METADATA_CHANGED: "api:workspace:metadata-changed",
   WORKSPACE_DELETION_PROGRESS: "api:workspace:deletion-progress",
+  WORKSPACE_LOADING_CHANGED: "api:workspace:loading-changed",
   UI_MODE_CHANGED: "api:ui:mode-changed",
   SHORTCUT_KEY: "api:shortcut:key",
 } as const satisfies Record<string, string>;
+
+// ============ Workspace Loading Types ============
+
+/**
+ * Payload for workspace loading state change events.
+ * Sent when a workspace starts or finishes loading.
+ */
+export interface WorkspaceLoadingChangedPayload {
+  /** Path to the workspace */
+  readonly path: WorkspacePath;
+  /** True when loading starts, false when loading ends */
+  readonly loading: boolean;
+}
 
 // ============ Log API Types ============
 

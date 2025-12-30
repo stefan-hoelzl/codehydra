@@ -99,11 +99,22 @@ Discovery finds worktrees in ANY location; creation only in managed location.
 ### View Lifecycle
 
 ```
-[not created] ──createWorkspaceView()──► [created/detached]
+[not created] ──createWorkspaceView()──► [created/detached/loading]
                                                │
                                                │ URL not loaded, not in contentView
+                                               │ 10-second timeout started
                                                │
                                        setActiveWorkspace() [first time]
+                                               │
+                                               ▼
+                                      ┌────────────────────┐
+                                      │  [loading/detached]│
+                                      │  URL loaded        │
+                                      │  not in contentView│
+                                      │  loading overlay   │
+                                      └────────┬───────────┘
+                                               │
+                               first MCP request OR 10s timeout
                                                │
                                                ▼
                                       ┌────────────────────┐
@@ -131,6 +142,7 @@ Discovery finds worktrees in ANY location; creation only in managed location.
                         └──────────────► [destroyed]
 ```
 
+- **Loading state**: New workspaces show a loading overlay until first MCP request is received (indicating TUI attachment) or 10-second timeout. The view URL is loaded but the view remains detached (not attached to contentView).
 - **Detached views** retain their VS Code state (no reload when shown again)
 - **Detachment** (vs zero-bounds) reduces GPU usage when many workspaces are open
 - **Lazy URL loading** defers resource usage until workspace is first activated

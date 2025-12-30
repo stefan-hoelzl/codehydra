@@ -382,7 +382,7 @@ describe("ViewManager", () => {
       expect(workspaceView1?.webContents.loadURL).not.toHaveBeenCalled();
     });
 
-    it("attaches workspace view to window on activation (detached by default)", () => {
+    it("attaches workspace view to window on activation (when not loading)", () => {
       const manager = ViewManager.create(
         mockWindowManager as unknown as WindowManager,
         {
@@ -401,10 +401,16 @@ describe("ViewManager", () => {
         "/path/to/project"
       );
 
-      // View is NOT added on creation (starts detached)
+      // View is NOT added on creation (starts detached and loading)
       expect(mockWindowManager.getWindow().contentView.addChildView).not.toHaveBeenCalled();
 
-      // View is added on activation
+      // Mark workspace as loaded first
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      // Clear calls from setWorkspaceLoaded (no active workspace yet)
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      // View is added on activation when not loading
       manager.setActiveWorkspace("/path/to/workspace");
       const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
       expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(
@@ -1275,10 +1281,49 @@ describe("ViewManager", () => {
         height: 600,
       });
     });
+
+    it("updateBounds-destroyed-window: skips bounds update when window is destroyed", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project"
+      );
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      const mockWindow = mockWindowManager.getWindow();
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      const uiView = MockWebContentsViewClass.mock.results[0]?.value;
+
+      // Clear calls from setup
+      workspaceView?.setBounds.mockClear();
+      uiView?.setBounds.mockClear();
+
+      // Simulate window being destroyed
+      mockWindow.isDestroyed = vi.fn(() => true);
+
+      // Should not throw
+      expect(() => manager.updateBounds()).not.toThrow();
+
+      // setBounds should NOT be called on any view
+      expect(workspaceView?.setBounds).not.toHaveBeenCalled();
+      expect(uiView?.setBounds).not.toHaveBeenCalled();
+
+      // Reset for other tests
+      mockWindow.isDestroyed = vi.fn(() => false);
+    });
   });
 
   describe("setActiveWorkspace", () => {
-    it("setActiveWorkspace-first-activation: loads URL and attaches view", () => {
+    it("setActiveWorkspace-first-activation: loads URL and attaches view when not loading", () => {
       const manager = ViewManager.create(
         mockWindowManager as unknown as WindowManager,
         {
@@ -1295,6 +1340,9 @@ describe("ViewManager", () => {
       );
       const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
 
+      // Mark workspace as loaded first
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
       // Clear calls from create
       mockWindowManager.getWindow().contentView.addChildView.mockClear();
 
@@ -1304,13 +1352,13 @@ describe("ViewManager", () => {
       expect(workspaceView?.webContents.loadURL).toHaveBeenCalledWith(
         "http://localhost:8080/?folder=/path"
       );
-      // View should be attached
+      // View should be attached (workspace is loaded)
       expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(
         workspaceView
       );
     });
 
-    it("setActiveWorkspace-attach-before-detach: new view attached before old detached", () => {
+    it("setActiveWorkspace-attach-before-detach: new view attached before old detached (when not loading)", () => {
       const manager = ViewManager.create(
         mockWindowManager as unknown as WindowManager,
         {
@@ -1332,6 +1380,10 @@ describe("ViewManager", () => {
       );
       const workspaceView1 = MockWebContentsViewClass.mock.results[1]?.value;
       const workspaceView2 = MockWebContentsViewClass.mock.results[2]?.value;
+
+      // Mark both workspaces as loaded
+      manager.setWorkspaceLoaded("/path/to/workspace1");
+      manager.setWorkspaceLoaded("/path/to/workspace2");
 
       // Activate first workspace
       manager.setActiveWorkspace("/path/to/workspace1");
@@ -1478,6 +1530,9 @@ describe("ViewManager", () => {
         "/path/to/project"
       );
 
+      // Mark workspace as loaded so view can attach
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
       // Make addChildView throw only once
       mockWindowManager.getWindow().contentView.addChildView.mockImplementationOnce(() => {
         throw new Error("addChildView failed");
@@ -1507,6 +1562,10 @@ describe("ViewManager", () => {
         "http://localhost:8080/?folder=/path2",
         "/path/to/project"
       );
+
+      // Mark workspaces as loaded so views can attach
+      manager.setWorkspaceLoaded("/path/to/workspace1");
+      manager.setWorkspaceLoaded("/path/to/workspace2");
 
       // Activate first workspace
       manager.setActiveWorkspace("/path/to/workspace1");
@@ -1542,6 +1601,10 @@ describe("ViewManager", () => {
         "/path/to/project"
       );
 
+      // Mark workspaces as loaded so views can attach
+      manager.setWorkspaceLoaded("/path/to/workspace1");
+      manager.setWorkspaceLoaded("/path/to/workspace2");
+
       // Enable dialog mode
       manager.setMode("dialog");
 
@@ -1573,6 +1636,7 @@ describe("ViewManager", () => {
         "http://localhost:8080/?folder=/path",
         "/path/to/project"
       );
+      manager.setWorkspaceLoaded("/path/to/workspace");
       manager.setActiveWorkspace("/path/to/workspace");
       manager.updateBounds();
 
@@ -2799,6 +2863,443 @@ describe("ViewManager", () => {
       expect(callback1).toHaveBeenCalled();
       expect(callback2).toHaveBeenCalled();
       expect(callback3).toHaveBeenCalled();
+    });
+  });
+
+  describe("Loading State", () => {
+    it("isWorkspaceLoading-returns-false: existing workspace not loading by default", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      // Default: isNew = false (existing workspace loaded on startup)
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project"
+      );
+
+      expect(manager.isWorkspaceLoading("/path/to/workspace")).toBe(false);
+    });
+
+    it("isWorkspaceLoading-returns-true: new workspace is loading after creation", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      expect(manager.isWorkspaceLoading("/path/to/workspace")).toBe(true);
+    });
+
+    it("existing-workspace-attaches-immediately: existing workspace attaches on activation", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      // Default: isNew = false (existing workspace loaded on startup)
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project"
+      );
+
+      // Clear calls from creation
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      // Activate existing workspace
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      // View should be attached immediately (not loading)
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(
+        workspaceView
+      );
+    });
+
+    it("isWorkspaceLoading-returns-false: workspace not loading after setWorkspaceLoaded", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      expect(manager.isWorkspaceLoading("/path/to/workspace")).toBe(false);
+    });
+
+    it("setWorkspaceLoaded-idempotent: safe to call multiple times", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Should not throw
+      manager.setWorkspaceLoaded("/path/to/workspace");
+      manager.setWorkspaceLoaded("/path/to/workspace");
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      expect(manager.isWorkspaceLoading("/path/to/workspace")).toBe(false);
+    });
+
+    it("setWorkspaceLoaded-unknown-workspace: safe to call for non-loading workspace", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      // Should not throw
+      expect(() => manager.setWorkspaceLoaded("/nonexistent")).not.toThrow();
+    });
+
+    it("loading-workspace-stays-detached: loading workspace stays detached when activated", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Clear calls from creation
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      // Activate workspace while loading
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      // View should NOT be attached yet (workspace is loading)
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      expect(mockWindowManager.getWindow().contentView.addChildView).not.toHaveBeenCalledWith(
+        workspaceView
+      );
+    });
+
+    it("loading-workspace-attaches-when-loaded: view attaches when setWorkspaceLoaded called", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Activate workspace while loading
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      // Clear calls
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      // Mark as loaded
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      // View should now be attached
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(
+        workspaceView
+      );
+    });
+
+    it("loading-timeout: view attaches after timeout", async () => {
+      vi.useFakeTimers();
+
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Activate workspace while loading
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      // Clear calls
+      mockWindowManager.getWindow().contentView.addChildView.mockClear();
+
+      // Verify workspace is loading
+      expect(manager.isWorkspaceLoading("/path/to/workspace")).toBe(true);
+
+      // Advance past timeout (10 seconds)
+      await vi.advanceTimersByTimeAsync(11000);
+
+      // Workspace should no longer be loading
+      expect(manager.isWorkspaceLoading("/path/to/workspace")).toBe(false);
+
+      // View should be attached
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      expect(mockWindowManager.getWindow().contentView.addChildView).toHaveBeenCalledWith(
+        workspaceView
+      );
+
+      vi.useRealTimers();
+    });
+
+    it("onLoadingChange-callback-fires: callback fires on loading state change", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      const callback = vi.fn();
+      manager.onLoadingChange(callback);
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Should have been called with loading=true on creation
+      expect(callback).toHaveBeenCalledWith("/path/to/workspace", true);
+
+      callback.mockClear();
+
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      // Should be called with loading=false on loaded
+      expect(callback).toHaveBeenCalledWith("/path/to/workspace", false);
+    });
+
+    it("onLoadingChange-unsubscribe: unsubscribed callback not called", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      const callback = vi.fn();
+      const unsubscribe = manager.onLoadingChange(callback);
+
+      unsubscribe();
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew - would trigger callback, but it was unsubscribed
+      );
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it("onLoadingChange-ipc-payload: callback fires with correct payload for IPC emission", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      // Track callback arguments to verify IPC payload structure
+      const callbackArgs: Array<{ path: string; loading: boolean }> = [];
+      manager.onLoadingChange((path, loading) => {
+        callbackArgs.push({ path, loading });
+      });
+
+      // Create workspace - should trigger loading=true
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Verify first callback has correct payload for IPC
+      expect(callbackArgs).toHaveLength(1);
+      expect(callbackArgs[0]).toEqual({
+        path: "/path/to/workspace",
+        loading: true,
+      });
+
+      // Set workspace loaded - should trigger loading=false
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      // Verify second callback has correct payload for IPC
+      expect(callbackArgs).toHaveLength(2);
+      expect(callbackArgs[1]).toEqual({
+        path: "/path/to/workspace",
+        loading: false,
+      });
+    });
+
+    it("multiple-workspace-switches-preserve-loading: loading states preserved independently", () => {
+      vi.useFakeTimers();
+
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      // Create two workspaces (both start in loading state)
+      manager.createWorkspaceView(
+        "/path/to/workspaceA",
+        "http://localhost:8080/?folder=/pathA",
+        "/path/to/project",
+        true // isNew
+      );
+      manager.createWorkspaceView(
+        "/path/to/workspaceB",
+        "http://localhost:8080/?folder=/pathB",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Both should be loading
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(true);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(true);
+
+      // Activate workspace A (keep loading)
+      manager.setActiveWorkspace("/path/to/workspaceA");
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(true);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(true);
+
+      // Switch to workspace B (keep loading)
+      manager.setActiveWorkspace("/path/to/workspaceB");
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(true);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(true);
+
+      // Mark only workspace A as loaded
+      manager.setWorkspaceLoaded("/path/to/workspaceA");
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(false);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(true);
+
+      // Switch back to workspace A
+      manager.setActiveWorkspace("/path/to/workspaceA");
+      // A should still be not loading, B should still be loading
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(false);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(true);
+
+      // Switch back to B
+      manager.setActiveWorkspace("/path/to/workspaceB");
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(false);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(true);
+
+      // Mark B as loaded
+      manager.setWorkspaceLoaded("/path/to/workspaceB");
+      expect(manager.isWorkspaceLoading("/path/to/workspaceA")).toBe(false);
+      expect(manager.isWorkspaceLoading("/path/to/workspaceB")).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it("destroyWorkspaceView-clears-loading: loading state cleared on destroy", async () => {
+      vi.useFakeTimers();
+
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      const callback = vi.fn();
+      manager.onLoadingChange(callback);
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      expect(callback).toHaveBeenCalledWith("/path/to/workspace", true);
+      callback.mockClear();
+
+      await manager.destroyWorkspaceView("/path/to/workspace");
+
+      // Should fire loading=false callback
+      expect(callback).toHaveBeenCalledWith("/path/to/workspace", false);
+
+      // Advance time past timeout - should not cause errors (timeout was cleared)
+      await vi.advanceTimersByTimeAsync(15000);
+
+      vi.useRealTimers();
     });
   });
 });

@@ -23,6 +23,7 @@ import type { DomainEventApi, ApiEvents } from "./domain-events";
 import * as projectsStore from "$lib/stores/projects.svelte.js";
 import * as agentStatusStore from "$lib/stores/agent-status.svelte.js";
 import * as dialogsStore from "$lib/stores/dialogs.svelte.js";
+import * as workspaceLoadingStore from "$lib/stores/workspace-loading.svelte.js";
 import { AgentNotificationService } from "$lib/services/agent-notifications";
 
 // =============================================================================
@@ -103,12 +104,14 @@ describe("setupDomainEventBindings", () => {
     projectsStore.reset();
     agentStatusStore.reset();
     dialogsStore.reset();
+    workspaceLoadingStore.reset();
   });
 
   afterEach(() => {
     projectsStore.reset();
     agentStatusStore.reset();
     dialogsStore.reset();
+    workspaceLoadingStore.reset();
     vi.restoreAllMocks();
   });
 
@@ -195,6 +198,23 @@ describe("setupDomainEventBindings", () => {
       });
 
       expect(projectsStore.activeWorkspacePath.value).toBe(TEST_WORKSPACE_PATH);
+    });
+
+    it("marks workspace as loading when workspace:created is emitted", () => {
+      // This prevents a race condition where workspace:loading-changed might arrive
+      // after workspace:created, causing the loading overlay to not show.
+      setupDomainEventBindings(notificationService, mockApi.api);
+
+      // Verify workspace is not loading initially
+      expect(workspaceLoadingStore.isWorkspaceLoading(TEST_WORKSPACE_PATH)).toBe(false);
+
+      mockApi.emit("workspace:created", {
+        projectId: TEST_PROJECT_ID,
+        workspace: TEST_WORKSPACE,
+      });
+
+      // Workspace should be marked as loading even without workspace:loading-changed event
+      expect(workspaceLoadingStore.isWorkspaceLoading(TEST_WORKSPACE_PATH)).toBe(true);
     });
 
     it("removes workspace from store when workspace:removed is emitted", () => {

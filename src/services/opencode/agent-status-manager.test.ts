@@ -10,7 +10,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AgentStatusManager } from "./agent-status-manager";
 import type { WorkspacePath } from "../../shared/ipc";
-import { createMockSdkClient, createMockSdkFactory, createTestSession } from "./sdk-test-utils";
+import {
+  createMockSdkClient,
+  createMockSdkFactory,
+  createTestSession,
+  createMockEventStream,
+  createSessionCreatedEvent,
+} from "./sdk-test-utils";
 import type { SdkClientFactory } from "./opencode-client";
 import type { SessionStatus as SdkSessionStatus } from "@opencode-ai/sdk";
 import { SILENT_LOGGER } from "../logging";
@@ -58,12 +64,13 @@ describe("AgentStatusManager", () => {
 
       // Should have created a client and be tracking the workspace
       const status = manager.getStatus("/test/workspace" as WorkspacePath);
-      // When connected but no sessions yet, shows idle with count 1
-      expect(status.status).toBe("idle");
-      expect(status.counts.idle).toBe(1);
+      // When connected but TUI not attached yet, shows "none"
+      expect(status.status).toBe("none");
+      expect(status.counts.idle).toBe(0);
+      expect(status.counts.busy).toBe(0);
     });
 
-    it("shows idle status when connected but no sessions", async () => {
+    it("shows none status when connected but TUI not attached", async () => {
       // Mock SDK client with empty sessions
       const mockSdk = createMockSdkClient({
         sessions: [],
@@ -77,7 +84,28 @@ describe("AgentStatusManager", () => {
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
 
-      // When connected (has client) but no sessions, should show idle with count 1
+      // When connected (has client) but TUI not attached, should show "none"
+      const status = manager.getStatus("/test/workspace" as WorkspacePath);
+      expect(status.status).toBe("none");
+      expect(status.counts.idle).toBe(0);
+      expect(status.counts.busy).toBe(0);
+    });
+
+    it("shows idle status when TUI attached but no sessions", async () => {
+      // Mock SDK client with empty sessions
+      const mockSdk = createMockSdkClient({
+        sessions: [],
+        sessionStatuses: {},
+      });
+      mockSdkFactory = createMockSdkFactory(mockSdk);
+      manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
+
+      await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
+
+      // Mark TUI as attached (simulates first MCP request received)
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
+
+      // When TUI attached but no sessions, should show "idle" (ready to use)
       const status = manager.getStatus("/test/workspace" as WorkspacePath);
       expect(status.status).toBe("idle");
       expect(status.counts.idle).toBe(1);
@@ -152,9 +180,27 @@ describe("AgentStatusManager", () => {
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 14001);
 
+      // When connected but TUI not attached yet, status is "none"
       expect(listener).toHaveBeenCalledWith(
         "/test/workspace",
-        expect.objectContaining({ status: "idle" })
+        expect.objectContaining({ status: "none" })
+      );
+    });
+
+    it("notifies when TUI attaches", async () => {
+      const listener = vi.fn();
+      manager.onStatusChanged(listener);
+
+      await manager.initWorkspace("/test/workspace" as WorkspacePath, 14001);
+      listener.mockClear();
+
+      // Mark TUI as attached
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
+
+      // Should notify with "idle" status when TUI attaches (no sessions = ready to use)
+      expect(listener).toHaveBeenCalledWith(
+        "/test/workspace",
+        expect.objectContaining({ status: "idle", counts: { idle: 1, busy: 0 } })
       );
     });
 
@@ -170,6 +216,42 @@ describe("AgentStatusManager", () => {
     });
   });
 
+  describe("setTuiAttached", () => {
+    it("transitions status from none to idle when called", async () => {
+      await manager.initWorkspace("/test/workspace" as WorkspacePath, 14001);
+
+      // Before TUI attach: status is "none"
+      expect(manager.getStatus("/test/workspace" as WorkspacePath).status).toBe("none");
+
+      // Mark TUI as attached
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
+
+      // After TUI attach: status is "idle"
+      expect(manager.getStatus("/test/workspace" as WorkspacePath).status).toBe("idle");
+    });
+
+    it("only notifies once when called multiple times", async () => {
+      const listener = vi.fn();
+      manager.onStatusChanged(listener);
+
+      await manager.initWorkspace("/test/workspace" as WorkspacePath, 14001);
+      listener.mockClear();
+
+      // Call setTuiAttached multiple times
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
+
+      // Should only notify once (first call transitions from none to idle)
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("does nothing for unknown workspace", () => {
+      // Should not throw when called on unknown workspace
+      expect(() => manager.setTuiAttached("/unknown/workspace" as WorkspacePath)).not.toThrow();
+    });
+  });
+
   describe("dispose", () => {
     it("clears all state", async () => {
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 14001);
@@ -182,14 +264,19 @@ describe("AgentStatusManager", () => {
 
   describe("port-based aggregation", () => {
     it("single client idle returns { idle: 1, busy: 0 }", async () => {
+      const testSession = createTestSession({ id: "ses-1", directory: "/test" });
+      // Include session.created event to populate sessionToPort (via event stream)
       const mockSdk = createMockSdkClient({
-        sessions: [createTestSession({ id: "ses-1", directory: "/test" })],
+        sessions: [testSession],
         sessionStatuses: { "ses-1": { type: "idle" as const } },
+        eventStream: createMockEventStream([createSessionCreatedEvent(testSession)]),
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
       manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
+      // Mark TUI as attached (simulates first MCP request received)
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
 
       const status = manager.getStatus("/test/workspace" as WorkspacePath);
       expect(status.counts.idle).toBe(1);
@@ -198,14 +285,19 @@ describe("AgentStatusManager", () => {
     });
 
     it("single client busy returns { idle: 0, busy: 1 }", async () => {
+      const testSession = createTestSession({ id: "ses-1", directory: "/test" });
+      // Include session.created event to populate sessionToPort (via event stream)
       const mockSdk = createMockSdkClient({
-        sessions: [createTestSession({ id: "ses-1", directory: "/test" })],
+        sessions: [testSession],
         sessionStatuses: { "ses-1": { type: "busy" as const } },
+        eventStream: createMockEventStream([createSessionCreatedEvent(testSession)]),
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
       manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
+      // Mark TUI as attached (simulates first MCP request received)
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
 
       const status = manager.getStatus("/test/workspace" as WorkspacePath);
       expect(status.counts.idle).toBe(0);
@@ -220,14 +312,19 @@ describe("AgentStatusManager", () => {
         message: "Rate limited",
         next: Date.now() + 1000,
       };
+      const testSession = createTestSession({ id: "ses-1", directory: "/test" });
+      // Include session.created event to populate sessionToPort (via event stream)
       const mockSdk = createMockSdkClient({
-        sessions: [createTestSession({ id: "ses-1", directory: "/test" })],
+        sessions: [testSession],
         sessionStatuses: { "ses-1": retryStatus },
+        eventStream: createMockEventStream([createSessionCreatedEvent(testSession)]),
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
       manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
+      // Mark TUI as attached (simulates first MCP request received)
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
 
       const status = manager.getStatus("/test/workspace" as WorkspacePath);
       expect(status.counts.busy).toBe(1);
@@ -237,15 +334,20 @@ describe("AgentStatusManager", () => {
     it("regression: no accumulation over many status change cycles", async () => {
       // Regression test: Verify that count stays at 1 for a single workspace
       // regardless of how many status changes occur (no session accumulation bug)
+      const testSession = createTestSession({ id: "ses-1", directory: "/test" });
+      // Include session.created event to populate sessionToPort (via event stream)
       const mockSdk = createMockSdkClient({
-        sessions: [createTestSession({ id: "ses-1", directory: "/test" })],
+        sessions: [testSession],
         sessionStatuses: { "ses-1": { type: "idle" as const } },
+        eventStream: createMockEventStream([createSessionCreatedEvent(testSession)]),
       });
       mockSdkFactory = createMockSdkFactory(mockSdk);
       manager = new AgentStatusManager(SILENT_LOGGER, mockSdkFactory);
 
       // Initialize workspace (triggers first status fetch)
       await manager.initWorkspace("/test/workspace" as WorkspacePath, 8080);
+      // Mark TUI as attached (simulates first MCP request received)
+      manager.setTuiAttached("/test/workspace" as WorkspacePath);
 
       // Verify status is tracked correctly
       const status = manager.getStatus("/test/workspace" as WorkspacePath);

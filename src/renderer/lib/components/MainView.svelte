@@ -52,6 +52,7 @@
   import OpenProjectErrorDialog from "./OpenProjectErrorDialog.svelte";
   import ShortcutOverlay from "./ShortcutOverlay.svelte";
   import DeletionProgressView from "./DeletionProgressView.svelte";
+  import WorkspaceLoadingOverlay from "./WorkspaceLoadingOverlay.svelte";
   import Logo from "./Logo.svelte";
 
   import {
@@ -59,6 +60,7 @@
     getDeletionState,
     getDeletionStatus,
   } from "$lib/stores/deletion.svelte.js";
+  import { isWorkspaceLoading } from "$lib/stores/workspace-loading.svelte.js";
   import type { ProjectId, WorkspaceRef } from "$lib/api";
   import { getErrorMessage } from "@shared/error-utils";
 
@@ -87,6 +89,11 @@
   // Derive deletion state for active workspace
   const activeDeletionState = $derived(
     activeWorkspacePath.value ? getDeletionState(activeWorkspacePath.value) : undefined
+  );
+
+  // Derive loading state for active workspace
+  const activeLoading = $derived(
+    activeWorkspacePath.value ? isWorkspaceLoading(activeWorkspacePath.value) : false
   );
 
   // Initialize and subscribe to events on mount
@@ -258,14 +265,16 @@
       getDeletionStatus(activeWorkspacePath.value) === "in-progress"}
   />
 
-  <!-- Backdrop shown only when no workspace is active, to avoid white background -->
-  <!-- Show DeletionProgressView if active workspace is being deleted -->
+  <!-- Backdrop/overlay shown based on workspace state -->
+  <!-- Priority: deletion > loading > empty -->
   {#if activeDeletionState}
     <DeletionProgressView
       progress={activeDeletionState}
       onRetry={handleRetry}
       onCloseAnyway={handleCloseAnyway}
     />
+  {:else if activeLoading}
+    <WorkspaceLoadingOverlay />
   {:else if activeWorkspacePath.value === null}
     <div class="empty-backdrop" aria-hidden="true">
       <div class="backdrop-logo">

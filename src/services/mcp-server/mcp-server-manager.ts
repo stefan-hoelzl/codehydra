@@ -7,12 +7,15 @@
 
 import type { PortManager } from "../platform/network";
 import type { PathProvider } from "../platform/path-provider";
-import type { ICoreApi } from "../../shared/api/interfaces";
+import type { ICoreApi, Unsubscribe } from "../../shared/api/interfaces";
 import type { Logger } from "../logging";
 import { SILENT_LOGGER } from "../logging";
 import type { IDisposable } from "../../shared/types";
 import type { WorkspaceLookup } from "./workspace-resolver";
+import type { McpRequestCallback } from "./types";
 import { McpServer, createDefaultMcpServer, type McpServerFactory } from "./mcp-server";
+import { Path } from "../platform/path";
+import { getErrorMessage } from "../../shared/error-utils";
 
 /**
  * Configuration options for McpServerManager.
@@ -40,6 +43,10 @@ export class McpServerManager implements IDisposable {
 
   private mcpServer: McpServer | null = null;
   private port: number | null = null;
+
+  // Track which workspaces have received their first MCP request
+  private seenWorkspaces = new Set<string>();
+  private firstRequestCallbacks = new Set<McpRequestCallback>();
 
   constructor(
     portManager: PortManager,
@@ -78,7 +85,13 @@ export class McpServerManager implements IDisposable {
       this.logger.info("Allocated port", { port: this.port });
 
       // Create and start the MCP server
-      this.mcpServer = new McpServer(this.api, this.appState, this.serverFactory, this.logger);
+      this.mcpServer = new McpServer(
+        this.api,
+        this.appState,
+        this.serverFactory,
+        this.logger,
+        (workspacePath) => this.notifyFirstRequest(workspacePath)
+      );
       await this.mcpServer.start(this.port);
 
       this.logger.info("Manager started", {
@@ -104,7 +117,48 @@ export class McpServerManager implements IDisposable {
     }
 
     this.port = null;
+    this.seenWorkspaces.clear();
+    this.firstRequestCallbacks.clear();
     this.logger.info("Manager stopped");
+  }
+
+  /**
+   * Subscribe to first MCP request per workspace.
+   * Callback fires once per workspace when the first request is received.
+   * This is used to detect when the OpenCode TUI has attached.
+   *
+   * @param callback - Called with normalized workspace path on first request
+   * @returns Unsubscribe function
+   */
+  onFirstRequest(callback: McpRequestCallback): Unsubscribe {
+    this.firstRequestCallbacks.add(callback);
+    return () => this.firstRequestCallbacks.delete(callback);
+  }
+
+  /**
+   * Notify callbacks of first MCP request for a workspace.
+   * Called by McpServer for every request; this method filters to first-per-workspace.
+   */
+  private notifyFirstRequest(workspacePath: string): void {
+    const normalizedPath = new Path(workspacePath).toString();
+    if (this.seenWorkspaces.has(normalizedPath)) return;
+    this.seenWorkspaces.add(normalizedPath);
+    for (const callback of this.firstRequestCallbacks) {
+      try {
+        callback(normalizedPath);
+      } catch (error) {
+        this.logger.error("First request callback error", { error: getErrorMessage(error) });
+      }
+    }
+  }
+
+  /**
+   * Clear a workspace from the seen set.
+   * Call this when a workspace is deleted so onFirstRequest fires if it's recreated.
+   */
+  clearWorkspace(workspacePath: string): void {
+    const normalizedPath = new Path(workspacePath).toString();
+    this.seenWorkspaces.delete(normalizedPath);
   }
 
   /**
