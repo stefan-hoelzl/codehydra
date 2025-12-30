@@ -14,7 +14,6 @@ import { MOCK_WORKSPACE_API_DEFAULTS } from "@shared/test-fixtures";
  * - lifecycle.getState() returns "ready" | "setup"
  * - lifecycle.setup() runs setup and returns success/failure
  * - lifecycle.quit() quits the app
- * - on("setup:progress", handler) receives progress events
  */
 export function createMockApi(): Api {
   return {

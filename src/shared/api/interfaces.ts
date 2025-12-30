@@ -12,7 +12,6 @@ import type {
   WorkspaceStatus,
   BaseInfo,
   SetupResult,
-  SetupProgress,
   AppState,
 } from "./types";
 import type { UIMode, UIModeChangedEvent } from "../ipc";
@@ -167,7 +166,6 @@ export interface ApiEvents {
     readonly value: string | null; // null means deleted
   }) => void;
   "ui:mode-changed": (event: UIModeChangedEvent) => void;
-  "setup:progress": (event: SetupProgress) => void;
 }
 
 // =============================================================================

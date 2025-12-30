@@ -118,7 +118,6 @@ export const ApiIpcChannels = {
   WORKSPACE_DELETION_PROGRESS: "api:workspace:deletion-progress",
   UI_MODE_CHANGED: "api:ui:mode-changed",
   SHORTCUT_KEY: "api:shortcut:key",
-  SETUP_PROGRESS: "api:setup:progress",
 } as const satisfies Record<string, string>;
 
 // ============ Log API Types ============

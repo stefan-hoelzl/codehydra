@@ -84,7 +84,7 @@ export interface MockApiRegistry extends IApiRegistry {
  * expect(mockRegistry.getRegisteredPaths()).toContain("lifecycle.getState");
  *
  * // Verify events
- * mockRegistry.emit("setup:progress", { step: "extensions", message: "Installing..." });
+ * mockRegistry.emit("workspace:switched", { projectId: "test-12345678", workspaceName: "main", path: "/test" });
  * expect(mockRegistry.getEmittedEvents()).toHaveLength(1);
  * ```
  */

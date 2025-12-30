@@ -39,7 +39,7 @@
   <Logo animated={false} />
   <div class="error-content" role="alert">
     <h1>Setup Failed</h1>
-    <p class="error-description">Failed to install VSCode extensions.</p>
+    <p class="error-description">Setup could not be completed.</p>
     <p class="error-hint">Please check your internet connection.</p>
     <p class="error-details">Error: {errorMessage}</p>
   </div>
@@ -53,16 +53,14 @@
 
 <style>
   .setup-error {
-    display: contents;
-  }
-
-  .setup-error :global(img) {
-    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
   }
 
   .error-content {
     text-align: center;
-    margin-bottom: 2rem;
   }
 
   h1 {

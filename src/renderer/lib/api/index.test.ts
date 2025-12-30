@@ -5,11 +5,10 @@
  * - lifecycle.getState() returns "ready" | "setup"
  * - lifecycle.setup() runs setup and returns success/failure
  * - lifecycle.quit() quits the app
- * - on("setup:progress", handler) receives progress events
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { Api, Unsubscribe } from "@shared/electron-api";
+import type { Api } from "@shared/electron-api";
 import { createMockApi } from "../test-utils";
 
 describe("renderer API layer", () => {
@@ -155,16 +154,6 @@ describe("renderer API layer", () => {
       expect(api).toHaveProperty("ui");
       expect(api).toHaveProperty("lifecycle");
       expect(api).toHaveProperty("on");
-    });
-
-    it("on() for setup:progress returns Unsubscribe function", async () => {
-      const mockApi = createMockApi();
-      window.api = mockApi;
-
-      const api = await import("$lib/api");
-      const unsubscribe: Unsubscribe = api.on("setup:progress", () => {});
-
-      expect(typeof unsubscribe).toBe("function");
     });
   });
 });

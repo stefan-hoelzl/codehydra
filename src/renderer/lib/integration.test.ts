@@ -1478,7 +1478,7 @@ describe("Integration tests", () => {
 
       // Wait for setup screen to appear
       await waitFor(() => {
-        expect(screen.getByText("Setting up VSCode...")).toBeInTheDocument();
+        expect(screen.getByText("Setting up CodeHydra")).toBeInTheDocument();
       });
 
       // Verify v2.projects.list was NOT called (we're in setup mode)
@@ -1497,7 +1497,7 @@ describe("Integration tests", () => {
 
       // Wait for setup screen
       await waitFor(() => {
-        expect(screen.getByText("Setting up VSCode...")).toBeInTheDocument();
+        expect(screen.getByText("Setting up CodeHydra")).toBeInTheDocument();
       });
 
       // Verify no domain IPC calls during setup

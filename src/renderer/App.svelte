@@ -4,13 +4,13 @@
   Root application component that acts as a mode router between setup and normal app modes.
   
   Component Ownership Model:
-  - App.svelte: Mode routing, global keyboard events (shortcuts), setup event subscriptions
+  - App.svelte: Mode routing, global keyboard events (shortcuts), setup flow
   - MainView.svelte: Normal app state, IPC initialization, domain events (project/workspace/agent)
   
   App.svelte owns:
   - <main> element with dynamic aria-label based on mode
   - Shortcut event subscriptions (global - work in both modes)
-  - Setup event subscriptions (onSetupProgress, onSetupComplete, onSetupError)
+  - Setup flow (setup screens, retry/quit handling)
   - aria-live announcements for mode transitions
   
   MainView.svelte owns:
@@ -29,13 +29,7 @@
     handleWindowBlur,
     handleShortcutKey,
   } from "$lib/stores/shortcuts.svelte.js";
-  import {
-    setupState,
-    updateProgress,
-    completeSetup,
-    errorSetup,
-    resetSetup,
-  } from "$lib/stores/setup.svelte.js";
+  import { setupState, completeSetup, errorSetup, resetSetup } from "$lib/stores/setup.svelte.js";
   import { createLogger } from "$lib/logging";
   import MainView from "$lib/components/MainView.svelte";
   import SetupScreen from "$lib/components/SetupScreen.svelte";
@@ -90,18 +84,6 @@
     });
     return () => {
       unsubShortcut();
-    };
-  });
-
-  // Subscribe to setup progress events from main process
-  $effect(() => {
-    const unsubProgress = api.on<{ step: string; message: string }>("setup:progress", (event) => {
-      logger.debug("Received setup:progress event", { step: event.step, message: event.message });
-      updateProgress(event.message);
-    });
-
-    return () => {
-      unsubProgress();
     };
   });
 
@@ -166,17 +148,6 @@
     }, ARIA_ANNOUNCEMENT_CLEAR_MS);
   }
 
-  // Derive current step message for setup screen
-  function getCurrentStepMessage(): string {
-    if (appMode.type === "initializing") {
-      return "Loading...";
-    }
-    if (setupState.value.type === "progress") {
-      return setupState.value.message;
-    }
-    return "Initializing...";
-  }
-
   // Get aria-label for main element based on mode
   function getAriaLabel(): string {
     return appMode.type === "ready" ? "Application workspace" : "Setup wizard";
@@ -194,7 +165,7 @@
   {#if appMode.type === "initializing"}
     <!-- Loading state while checking setup status -->
     <div class="setup-container">
-      <SetupScreen currentStep="Loading..." />
+      <SetupScreen />
     </div>
   {:else if appMode.type === "setup"}
     <!-- Setup mode - show setup screens based on setup state -->
@@ -208,8 +179,8 @@
       {:else if setupState.value.type === "complete"}
         <SetupComplete oncomplete={handleSetupCompleteTransition} />
       {:else}
-        <!-- loading or progress state -->
-        <SetupScreen currentStep={getCurrentStepMessage()} />
+        <!-- loading state -->
+        <SetupScreen />
       {/if}
     </div>
   {:else}

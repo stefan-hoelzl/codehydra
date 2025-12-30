@@ -22,7 +22,6 @@ import type {
   WorkspaceStatus,
   BaseInfo,
   SetupResult,
-  SetupProgress,
   AppState,
 } from "./types";
 import type { UIMode, UIModeChangedEvent } from "../ipc";
@@ -247,13 +246,10 @@ describe("ApiEvents Interface", () => {
       "ui:mode-changed": (event: UIModeChangedEvent) => {
         void event;
       },
-      "setup:progress": (event: SetupProgress) => {
-        void event;
-      },
     };
 
     expect(handlers).toBeDefined();
-    expect(Object.keys(handlers)).toHaveLength(10);
+    expect(Object.keys(handlers)).toHaveLength(9);
   });
 });
 

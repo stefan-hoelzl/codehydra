@@ -228,13 +228,6 @@ describe("API → IPC → Renderer event flow", () => {
     expect(mockWebContents.send).toHaveBeenCalledWith("api:workspace:status-changed", event);
   });
 
-  it("should forward setup:progress event to renderer", () => {
-    const progress = { step: "extensions" as const, message: "Installing extensions..." };
-    emitEvent("setup:progress", progress);
-
-    expect(mockWebContents.send).toHaveBeenCalledWith("api:setup:progress", progress);
-  });
-
   it("should not forward events after cleanup", () => {
     cleanup();
 

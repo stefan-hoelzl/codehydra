@@ -151,13 +151,6 @@ export function wireApiEvents(
     })
   );
 
-  // Setup events
-  unsubscribers.push(
-    api.on("setup:progress", (event) => {
-      send(ApiIpcChannels.SETUP_PROGRESS, event);
-    })
-  );
-
   // Return cleanup function
   return () => {
     for (const unsubscribe of unsubscribers) {

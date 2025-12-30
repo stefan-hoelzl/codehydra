@@ -7,41 +7,35 @@ import { render, screen } from "@testing-library/svelte";
 import SetupScreen from "./SetupScreen.svelte";
 
 describe("SetupScreen component", () => {
-  it("renders heading with correct text", () => {
-    render(SetupScreen, { props: { currentStep: "Installing extensions..." } });
+  it("renders heading with 'Setting up CodeHydra' text", () => {
+    render(SetupScreen);
 
-    expect(screen.getByRole("heading", { name: /setting up vscode/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /setting up codehydra/i })).toBeInTheDocument();
   });
 
   it("renders Logo with animation", () => {
-    const { container } = render(SetupScreen, {
-      props: { currentStep: "Installing extensions..." },
-    });
+    const { container } = render(SetupScreen);
 
     const logo = container.querySelector("img");
     expect(logo).toBeInTheDocument();
     expect(logo).toHaveClass("animated");
   });
 
-  it("displays current step message", () => {
-    render(SetupScreen, { props: { currentStep: "Installing extensions..." } });
+  it("displays static first-startup message", () => {
+    render(SetupScreen);
 
-    expect(screen.getByText("Installing extensions...")).toBeInTheDocument();
+    expect(screen.getByText("This is only required on first startup.")).toBeInTheDocument();
   });
 
-  it("updates step message when prop changes", async () => {
-    const { rerender } = render(SetupScreen, { props: { currentStep: "Step 1" } });
-
-    expect(screen.getByText("Step 1")).toBeInTheDocument();
-
-    await rerender({ currentStep: "Step 2" });
-
-    expect(screen.getByText("Step 2")).toBeInTheDocument();
+  it("renders without props (no props required)", () => {
+    // Should render successfully without any props
+    const { container } = render(SetupScreen);
+    expect(container.querySelector(".setup-screen")).toBeInTheDocument();
   });
 
   describe("accessibility", () => {
     it("renders vscode-progress-bar component", () => {
-      const { container } = render(SetupScreen, { props: { currentStep: "Loading..." } });
+      const { container } = render(SetupScreen);
 
       // Web components are queried by tag name since shadow DOM isn't accessible in JSDOM
       const progressBar = container.querySelector("vscode-progress-bar");
@@ -49,7 +43,7 @@ describe("SetupScreen component", () => {
     });
 
     it("has indeterminate property set on progress bar", () => {
-      const { container } = render(SetupScreen, { props: { currentStep: "Loading..." } });
+      const { container } = render(SetupScreen);
 
       const progressBar = container.querySelector("vscode-progress-bar") as HTMLElement & {
         indeterminate?: boolean;
@@ -59,16 +53,16 @@ describe("SetupScreen component", () => {
     });
 
     it("has aria-label for screen readers", () => {
-      const { container } = render(SetupScreen, { props: { currentStep: "Loading..." } });
+      const { container } = render(SetupScreen);
 
       const progressBar = container.querySelector("vscode-progress-bar");
-      expect(progressBar).toHaveAttribute("aria-label", "Setting up VSCode");
+      expect(progressBar).toHaveAttribute("aria-label", "Setting up CodeHydra");
     });
 
-    it("has aria-live on step message for progress announcements", () => {
-      render(SetupScreen, { props: { currentStep: "Installing extensions..." } });
+    it("has aria-live on step message for screen reader announcements on mount", () => {
+      render(SetupScreen);
 
-      const stepMessage = screen.getByText("Installing extensions...");
+      const stepMessage = screen.getByText("This is only required on first startup.");
       expect(stepMessage).toHaveAttribute("aria-live", "polite");
     });
   });

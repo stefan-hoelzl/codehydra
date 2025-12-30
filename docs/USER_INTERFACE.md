@@ -158,9 +158,9 @@ On first application launch, a setup screen appears before the main interface:
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
 │                                                                 │
-│                    Setting up VSCode...                         │
+│                    Setting up CodeHydra                         │
 │                                                                 │
-│                    Installing extensions...                     │
+│              This is only required on first startup.            │
 │                                                                 │
 │              ┌─────────────────────────────────┐                │
 │              │▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│                │
@@ -187,7 +187,7 @@ On first application launch, a setup screen appears before the main interface:
 │                                                                 │
 │                      Setup Failed                               │
 │                                                                 │
-│     Failed to install VSCode extensions.                        │
+│     Setup could not be completed.                               │
 │     Please check your internet connection.                      │
 │                                                                 │
 │     Error: <error message>                                      │

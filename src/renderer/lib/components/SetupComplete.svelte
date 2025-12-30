@@ -34,16 +34,14 @@
 
 <style>
   .setup-complete {
-    display: contents;
-  }
-
-  .setup-complete :global(img) {
-    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
   }
 
   .checkmark {
     --vscode-icon-foreground: var(--ch-success);
-    margin-bottom: 1rem;
   }
 
   p {

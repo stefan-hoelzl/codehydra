@@ -1026,34 +1026,6 @@ describe("App component", () => {
       });
     });
 
-    it("subscribes to setup:progress events via on() on mount", async () => {
-      render(App);
-
-      await waitFor(() => {
-        expect(mockApi.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
-      });
-    });
-
-    it("unsubscribes from setup:progress on unmount", async () => {
-      // Track unsubscribe functions per event
-      const unsubFunctions = new Map<string, ReturnType<typeof vi.fn>>();
-      mockApi.on.mockImplementation((event: string) => {
-        const unsub = vi.fn();
-        unsubFunctions.set(event, unsub);
-        return unsub;
-      });
-
-      const { unmount } = render(App);
-
-      await waitFor(() => {
-        expect(mockApi.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
-      });
-
-      unmount();
-
-      expect(unsubFunctions.get("setup:progress")).toHaveBeenCalledTimes(1);
-    });
-
     it("shows SetupScreen when state is 'setup'", async () => {
       // Setup mode - lifecycle.getState returns "setup"
       mockApi.lifecycle.getState.mockResolvedValue("setup");
@@ -1062,32 +1034,10 @@ describe("App component", () => {
 
       render(App);
 
-      // Should show setup screen
+      // Should show setup screen with static message
       await waitFor(() => {
-        expect(screen.getByText("Setting up VSCode...")).toBeInTheDocument();
-      });
-    });
-
-    it("updates setup screen on progress event via on('setup:progress')", async () => {
-      // Setup mode - lifecycle.getState returns "setup"
-      mockApi.lifecycle.getState.mockResolvedValue("setup");
-      // Keep setup running indefinitely to see progress
-      mockApi.lifecycle.setup.mockReturnValue(new Promise(() => {}));
-
-      render(App);
-
-      await waitFor(() => {
-        expect(getEventCallback("setup:progress")).toBeDefined();
-      });
-
-      // Simulate progress event via api.on("setup:progress", ...)
-      fireEvent("setup:progress", {
-        step: "extensions",
-        message: "Installing OpenCode extension...",
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText("Installing OpenCode extension...")).toBeInTheDocument();
+        expect(screen.getByText("Setting up CodeHydra")).toBeInTheDocument();
+        expect(screen.getByText("This is only required on first startup.")).toBeInTheDocument();
       });
     });
 
@@ -1193,45 +1143,6 @@ describe("App component", () => {
 
       // Should NOT show setup screen
       expect(screen.queryByText("Setting up VSCode...")).not.toBeInTheDocument();
-    });
-
-    it("handles setup progress events during active setup", async () => {
-      // Setup mode - lifecycle.getState returns "setup"
-      mockApi.lifecycle.getState.mockResolvedValue("setup");
-      // Keep setup running to receive progress events
-      let resolveSetup: (value: { success: boolean }) => void;
-      mockApi.lifecycle.setup.mockReturnValue(
-        new Promise((resolve) => {
-          resolveSetup = resolve;
-        })
-      );
-
-      render(App);
-
-      // Wait for setup to start and progress subscription
-      await waitFor(() => {
-        expect(getEventCallback("setup:progress")).toBeDefined();
-      });
-
-      // Simulate multiple progress events
-      fireEvent("setup:progress", { step: "extensions", message: "Installing extensions..." });
-
-      await waitFor(() => {
-        expect(screen.getByText("Installing extensions...")).toBeInTheDocument();
-      });
-
-      fireEvent("setup:progress", { step: "settings", message: "Configuring settings..." });
-
-      await waitFor(() => {
-        expect(screen.getByText("Configuring settings...")).toBeInTheDocument();
-      });
-
-      // Complete setup
-      resolveSetup!({ success: true });
-
-      await waitFor(() => {
-        expect(screen.getByText("Setup complete!")).toBeInTheDocument();
-      });
     });
   });
 });

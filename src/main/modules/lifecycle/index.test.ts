@@ -267,35 +267,6 @@ describe("lifecycle.setup", () => {
     expect(result1).toEqual({ success: true });
   });
 
-  it("emits setup:progress events", async () => {
-    const vscodeSetup = createMockVscodeSetup({
-      preflight: vi.fn().mockResolvedValue({
-        success: true,
-        needsSetup: true,
-        missingBinaries: ["code-server"],
-        missingExtensions: [],
-        outdatedExtensions: [],
-      }),
-      setup: vi.fn().mockImplementation((_preflight, onProgress) => {
-        if (onProgress) {
-          onProgress({ step: "extensions", message: "Installing extensions..." });
-        }
-        return Promise.resolve({ success: true });
-      }),
-    });
-    deps = createMockDeps({ vscodeSetup });
-    new LifecycleModule(registry, deps);
-
-    const handler = registry.getHandler("lifecycle.setup");
-    await handler!({});
-
-    const emittedEvents = registry.getEmittedEvents();
-    expect(emittedEvents).toContainEqual({
-      event: "setup:progress",
-      payload: { step: "extensions", message: "Installing extensions..." },
-    });
-  });
-
   it("skips setup when preflight shows no setup needed", async () => {
     const onSetupComplete = vi.fn().mockResolvedValue(undefined);
     const vscodeSetup = createMockVscodeSetup({

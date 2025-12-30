@@ -11,12 +11,8 @@
  */
 
 import type { IApiRegistry, IApiModule, EmptyPayload } from "../../api/registry-types";
-import type { SetupResult, AppState, SetupStep as ApiSetupStep } from "../../../shared/api/types";
-import type {
-  IVscodeSetup,
-  SetupStep as ServiceSetupStep,
-  PreflightResult,
-} from "../../../services/vscode-setup/types";
+import type { SetupResult, AppState } from "../../../shared/api/types";
+import type { IVscodeSetup, PreflightResult } from "../../../services/vscode-setup/types";
 import type { Logger } from "../../../services/logging/index";
 import { ApiIpcChannels } from "../../../shared/ipc";
 import { SILENT_LOGGER } from "../../../services/logging";
@@ -58,9 +54,6 @@ export interface LifecycleModuleDeps {
  * - lifecycle.getState: Check if setup is needed
  * - lifecycle.setup: Run VS Code setup process
  * - lifecycle.quit: Quit the application
- *
- * Events emitted:
- * - setup:progress: Progress updates during setup
  */
 export class LifecycleModule implements IApiModule {
   private setupInProgress = false;
@@ -202,20 +195,13 @@ export class LifecycleModule implements IApiModule {
         return { success: true };
       }
 
-      // Run setup with progress callbacks
+      // Run setup with progress callbacks (logged only, no IPC emission)
       // Note: Pass preflight result directly - if preflight failed, setup will handle full install
       const result = await this.deps.vscodeSetup.setup(preflightResult, (serviceProgress) => {
         this.logger.debug("Setup progress", {
           step: serviceProgress.step,
           message: serviceProgress.message,
         });
-        const apiStep = this.mapSetupStep(serviceProgress.step);
-        if (apiStep) {
-          this.api.emit("setup:progress", {
-            step: apiStep,
-            message: serviceProgress.message,
-          });
-        }
       });
 
       if (result.success) {
@@ -260,30 +246,6 @@ export class LifecycleModule implements IApiModule {
   private async quit(payload: EmptyPayload): Promise<void> {
     void payload; // Required by MethodHandler interface but unused for no-arg methods
     this.deps.app.quit();
-  }
-
-  // ===========================================================================
-  // Helpers
-  // ===========================================================================
-
-  /**
-   * Map service setup step to API setup step.
-   * Returns undefined for steps that should be filtered out.
-   */
-  private mapSetupStep(serviceStep: ServiceSetupStep): ApiSetupStep | undefined {
-    switch (serviceStep) {
-      case "binary-download":
-        return "binary-download";
-      case "extensions":
-        return "extensions";
-      case "config":
-        return "settings";
-      case "finalize":
-        // Finalize step is not exposed in the API
-        return undefined;
-      default:
-        return undefined;
-    }
   }
 
   // ===========================================================================

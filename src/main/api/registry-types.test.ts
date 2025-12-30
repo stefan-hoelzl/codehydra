@@ -283,6 +283,5 @@ describe("registry-types.events", () => {
     expectTypeOf<ApiEvents>().toHaveProperty("project:opened");
     expectTypeOf<ApiEvents>().toHaveProperty("workspace:created");
     expectTypeOf<ApiEvents>().toHaveProperty("ui:mode-changed");
-    expectTypeOf<ApiEvents>().toHaveProperty("setup:progress");
   });
 });

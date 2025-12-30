@@ -126,6 +126,12 @@ describe("SetupError component", () => {
   });
 
   describe("user-friendly messages", () => {
+    it("shows generic error description", () => {
+      render(SetupError, { props: { errorMessage: "Test error" } });
+
+      expect(screen.getByText("Setup could not be completed.")).toBeInTheDocument();
+    });
+
     it("shows connection hint for network errors", () => {
       render(SetupError, { props: { errorMessage: "Test error" } });
 

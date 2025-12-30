@@ -6,7 +6,6 @@
  * - lifecycle.getState() returns "ready" | "setup"
  * - lifecycle.setup() runs setup and returns success/failure
  * - lifecycle.quit() quits the app
- * - on("setup:progress", handler) receives progress events
  */
 
 // Check that window.api is available
@@ -44,7 +43,6 @@ export type {
   AgentStatusCounts,
   BaseInfo,
   SetupResult,
-  SetupProgress,
   AppState,
   ProjectId,
   WorkspaceName,

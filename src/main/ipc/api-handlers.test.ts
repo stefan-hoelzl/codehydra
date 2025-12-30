@@ -154,7 +154,6 @@ describe("wireApiEvents", () => {
     expect(mockApi.on).toHaveBeenCalledWith("workspace:status-changed", expect.any(Function));
     expect(mockApi.on).toHaveBeenCalledWith("workspace:metadata-changed", expect.any(Function));
     expect(mockApi.on).toHaveBeenCalledWith("ui:mode-changed", expect.any(Function));
-    expect(mockApi.on).toHaveBeenCalledWith("setup:progress", expect.any(Function));
   });
 
   it("forwards project:opened events to webContents", () => {
