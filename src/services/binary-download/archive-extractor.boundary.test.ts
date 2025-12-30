@@ -8,7 +8,7 @@ import * as fs from "node:fs/promises";
 import * as fss from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { execSync } from "node:child_process";
+import * as tar from "tar";
 import yazl from "yazl";
 import { TarExtractor, ZipExtractor, DefaultArchiveExtractor } from "./archive-extractor";
 import { ArchiveError } from "./errors";
@@ -68,8 +68,8 @@ describe("TarExtractor (boundary)", () => {
     await fs.mkdir(path.join(sourceDir, "subdir"));
     await fs.writeFile(path.join(sourceDir, "subdir", "nested.txt"), "Nested content");
 
-    // Create archive (--force-local prevents tar from interpreting colons as remote hosts)
-    execSync(`tar --force-local -czf "${archivePath}" -C "${sourceDir}" .`);
+    // Create archive using tar package (cross-platform, no shell dependency)
+    await tar.create({ gzip: true, file: archivePath, cwd: sourceDir }, ["."]);
 
     // Extract using TarExtractor
     const extractor = new TarExtractor();
@@ -94,8 +94,8 @@ describe("TarExtractor (boundary)", () => {
     await fs.writeFile(path.join(sourceDir, "script.sh"), "#!/bin/sh\necho hello");
     await fs.chmod(path.join(sourceDir, "script.sh"), 0o755);
 
-    // Create archive (--force-local prevents tar from interpreting colons as remote hosts)
-    execSync(`tar --force-local -czf "${archivePath}" -C "${sourceDir}" .`);
+    // Create archive using tar package (cross-platform, no shell dependency)
+    await tar.create({ gzip: true, file: archivePath, cwd: sourceDir }, ["."]);
 
     // Extract
     const extractor = new TarExtractor();
@@ -197,7 +197,7 @@ describe("DefaultArchiveExtractor (boundary)", () => {
     await fs.mkdir(sourceDir, { recursive: true });
     await fs.writeFile(path.join(sourceDir, "file.txt"), "tar.gz content");
 
-    execSync(`tar --force-local -czf "${archivePath}" -C "${sourceDir}" .`);
+    await tar.create({ gzip: true, file: archivePath, cwd: sourceDir }, ["."]);
 
     const extractor = new DefaultArchiveExtractor();
     await extractor.extract(archivePath, destDir);
@@ -213,7 +213,7 @@ describe("DefaultArchiveExtractor (boundary)", () => {
     await fs.mkdir(sourceDir, { recursive: true });
     await fs.writeFile(path.join(sourceDir, "file.txt"), "tgz content");
 
-    execSync(`tar --force-local -czf "${archivePath}" -C "${sourceDir}" .`);
+    await tar.create({ gzip: true, file: archivePath, cwd: sourceDir }, ["."]);
 
     const extractor = new DefaultArchiveExtractor();
     await extractor.extract(archivePath, destDir);
