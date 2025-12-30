@@ -5,11 +5,45 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
+import * as fss from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { execSync } from "node:child_process";
+import yazl from "yazl";
 import { TarExtractor, ZipExtractor, DefaultArchiveExtractor } from "./archive-extractor";
 import { ArchiveError } from "./errors";
+
+/**
+ * Creates a zip archive from a source directory using yazl.
+ * Recursively adds all files and directories.
+ */
+async function createTestZip(sourceDir: string, archivePath: string): Promise<void> {
+  const zipfile = new yazl.ZipFile();
+
+  async function addDirectory(dirPath: string, zipPath: string): Promise<void> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      const entryZipPath = zipPath ? `${zipPath}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        await addDirectory(fullPath, entryZipPath);
+      } else {
+        zipfile.addFile(fullPath, entryZipPath);
+      }
+    }
+  }
+
+  await addDirectory(sourceDir, "");
+  zipfile.end();
+
+  await new Promise<void>((resolve, reject) => {
+    const writeStream = fss.createWriteStream(archivePath);
+    zipfile.outputStream.pipe(writeStream);
+    writeStream.on("close", resolve);
+    writeStream.on("error", reject);
+  });
+}
 
 describe("TarExtractor (boundary)", () => {
   let tempDir: string;
@@ -102,21 +136,14 @@ describe("ZipExtractor (boundary)", () => {
   });
 
   it("extracts a real zip archive", async () => {
-    // Create a simple zip archive using system zip (if available)
+    // Create a simple zip archive using yazl
     const sourceDir = path.join(tempDir, "source");
     await fs.mkdir(sourceDir, { recursive: true });
     await fs.writeFile(path.join(sourceDir, "test.txt"), "Hello from zip!");
     await fs.mkdir(path.join(sourceDir, "subdir"));
     await fs.writeFile(path.join(sourceDir, "subdir", "nested.txt"), "Nested zip content");
 
-    try {
-      // Try using zip command
-      execSync(`cd "${sourceDir}" && zip -r "${archivePath}" .`, { stdio: "pipe" });
-    } catch {
-      // zip not available, skip test
-      console.log("zip command not available, skipping ZipExtractor boundary test");
-      return;
-    }
+    await createTestZip(sourceDir, archivePath);
 
     // Extract using ZipExtractor
     const extractor = new ZipExtractor();
@@ -202,12 +229,7 @@ describe("DefaultArchiveExtractor (boundary)", () => {
     await fs.mkdir(sourceDir, { recursive: true });
     await fs.writeFile(path.join(sourceDir, "file.txt"), "zip content");
 
-    try {
-      execSync(`cd "${sourceDir}" && zip -r "${archivePath}" .`, { stdio: "pipe" });
-    } catch {
-      console.log("zip command not available, skipping zip boundary test");
-      return;
-    }
+    await createTestZip(sourceDir, archivePath);
 
     const extractor = new DefaultArchiveExtractor();
     await extractor.extract(archivePath, destDir);
