@@ -835,28 +835,35 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
 
       const client = createClient("/test/workspace");
 
-      // First connection
+      // First connection - wait for config event with Promise to avoid race condition
+      // (config may arrive before or after the connect event resolves)
       let configCount = 0;
-      client.on("config", () => {
-        configCount++;
+      const firstConfigPromise = new Promise<void>((resolve) => {
+        client.once("config", () => {
+          configCount++;
+          resolve();
+        });
       });
 
       await waitForConnect(client);
+      await firstConfigPromise;
       expect(configCount).toBe(1);
 
       // Disconnect and reconnect
       client.disconnect();
       await waitForDisconnect(client);
 
-      // Reconnect
-      const reconnectPromise = new Promise<void>((resolve) => {
-        client.once("connect", () => resolve());
+      // Reconnect - set up promise for second config event before connecting
+      const secondConfigPromise = new Promise<void>((resolve) => {
+        client.once("config", () => {
+          configCount++;
+          resolve();
+        });
       });
-      client.connect();
-      await reconnectPromise;
 
-      // Should receive config again
-      await delay(100);
+      client.connect();
+      await secondConfigPromise;
+
       expect(configCount).toBe(2);
     });
   });
