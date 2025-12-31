@@ -46,8 +46,9 @@ const mockApi = vi.hoisted(() => ({
     setMode: vi.fn().mockResolvedValue(undefined),
   },
   lifecycle: {
-    getState: vi.fn().mockResolvedValue("ready"),
+    getState: vi.fn().mockResolvedValue("loading"),
     setup: vi.fn().mockResolvedValue({ success: true }),
+    startServices: vi.fn().mockResolvedValue({ success: true }),
     quit: vi.fn().mockResolvedValue(undefined),
   },
   // on() captures callbacks by event name for tests to fire events
@@ -1452,8 +1453,9 @@ describe("Integration tests", () => {
   });
 
   describe("setup flow integration", () => {
-    it("routes-to-mainview-when-ready: lifecycle.getState returns 'ready', MainView mounts and calls listProjects", async () => {
-      mockApi.lifecycle.getState.mockResolvedValue("ready");
+    it("routes-to-mainview-when-loading: lifecycle.getState returns 'loading', startServices called, MainView mounts", async () => {
+      mockApi.lifecycle.getState.mockResolvedValue("loading");
+      mockApi.lifecycle.startServices.mockResolvedValue({ success: true });
       mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
@@ -1462,6 +1464,9 @@ describe("Integration tests", () => {
       await waitFor(() => {
         expect(mockApi.projects.list).toHaveBeenCalled();
       });
+
+      // Verify startServices was called
+      expect(mockApi.lifecycle.startServices).toHaveBeenCalled();
 
       // Verify we're in normal app mode (empty state shown)
       await waitFor(() => {
@@ -1504,12 +1509,14 @@ describe("Integration tests", () => {
       expect(mockApi.projects.list).not.toHaveBeenCalled();
     });
 
-    it("setup-success-triggers-mainview-mount: lifecycle.setup success triggers MainView mount", async () => {
+    it("setup-success-triggers-mainview-mount: lifecycle.setup success triggers startServices, then MainView mount", async () => {
       // Start in setup mode
       mockApi.lifecycle.getState.mockResolvedValue("setup");
       mockApi.projects.list.mockResolvedValue([]);
       // Setup completes successfully
       mockApi.lifecycle.setup.mockResolvedValue({ success: true });
+      // startServices completes successfully (called after setup succeeds)
+      mockApi.lifecycle.startServices.mockResolvedValue({ success: true });
 
       render(App);
 
@@ -1518,21 +1525,26 @@ describe("Integration tests", () => {
         expect(screen.getByText("Setup complete!")).toBeInTheDocument();
       });
 
-      // The SetupComplete timer will transition to MainView
-      // After transition, MainView should call v2.projects.list
+      // The SetupComplete timer will transition to loading state, then call startServices
+      // After startServices succeeds, MainView should mount and call v2.projects.list
       await waitFor(
         () => {
           expect(mockApi.projects.list).toHaveBeenCalled();
         },
         { timeout: 3000 }
-      ); // Allow time for the 1.5s success screen
+      ); // Allow time for the 1.5s success screen + startServices
+
+      // Verify the full flow: setup() → startServices()
+      expect(mockApi.lifecycle.setup).toHaveBeenCalled();
+      expect(mockApi.lifecycle.startServices).toHaveBeenCalled();
     });
 
-    it("handlers-registered-before-lifecycle-getState-returns: normal handlers available when setup is complete", async () => {
-      // This test verifies that when lifecycle.getState returns "ready",
+    it("handlers-registered-before-lifecycle-getState-returns: normal handlers available when startServices completes", async () => {
+      // This test verifies that when lifecycle.startServices completes,
       // the IPC handlers that MainView needs are already registered.
       // We can verify this by checking that v2.projects.list succeeds.
-      mockApi.lifecycle.getState.mockResolvedValue("ready");
+      mockApi.lifecycle.getState.mockResolvedValue("loading");
+      mockApi.lifecycle.startServices.mockResolvedValue({ success: true });
       const mockProjects = [createProject("my-project", [])];
       mockApi.projects.list.mockResolvedValue(mockProjects);
 

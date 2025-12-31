@@ -97,6 +97,11 @@ export interface Api {
   lifecycle: {
     getState(): Promise<AppStateType>;
     setup(): Promise<SetupResult>;
+    /**
+     * Start application services (code-server, OpenCode, etc.).
+     * Idempotent - second call returns success without side effects.
+     */
+    startServices(): Promise<SetupResult>;
     quit(): Promise<void>;
   };
   /**

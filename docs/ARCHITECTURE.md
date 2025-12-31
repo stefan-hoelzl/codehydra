@@ -790,24 +790,71 @@ The v2 API uses `api:` prefixed IPC channels:
 | `v2.ui.switchWorkspace()` | `api:workspace:switch` |
 | Event subscription        | `api:<event-name>`     |
 
+### Main Process Startup Architecture
+
+The main process uses a two-phase startup where services ONLY start when the renderer explicitly requests them:
+
+```
+bootstrap()                                    # Infrastructure only
+    │
+    ├── Create vscodeSetupService
+    ├── Create LifecycleApi (standalone)
+    ├── Register lifecycle handlers (api:lifecycle:*)
+    └── Load UI (services NOT started)
+              │
+              v
+    UI loads → lifecycle.getState() called
+                               │
+               ┌───────────────┴───────────────┐
+               │ "loading"                     │ "setup"
+               │ (no setup needed)             │ (setup needed)
+               v                               v
+        Show loading screen           Show SetupScreen
+        "Starting services..."              │
+               │                      lifecycle.setup()
+               │                             │
+               │                      (runs setup, emits progress)
+               │                             │
+               │                      setup success → appMode="loading"
+               │                             │
+               └──────────────┬──────────────┘
+                              │
+                              v
+                    lifecycle.startServices()
+                              │
+               ┌──────────────┴──────────────┐
+               │ success                     │ failure
+               v                             v
+        appMode = "ready"              SetupError
+        MainView loads                 (Retry/Quit)
+```
+
+**Key invariant**: The renderer ALWAYS goes through "loading" before "ready". Services ONLY start when the renderer calls `startServices()`. This allows the UI to display a loading screen during service startup.
+
 ### Renderer Startup Flow
 
-The renderer uses a two-phase initialization to handle the setup/normal app mode split:
+The renderer uses a three-state flow with explicit service startup:
 
 ```
 App.svelte (mode router)
 │
 ├── onMount: const state = await api.lifecycle.getState()
-│   └── Returns "ready" | "setup"
+│   └── Returns "setup" | "loading" (NEVER "ready")
 │
 ├── state === "setup" (setup needed)
 │   ├── Calls api.lifecycle.setup() → returns Promise<SetupResult>
 │   ├── Subscribes to api.on("setup:progress") for progress updates
 │   ├── SetupScreen.svelte (progress bar, shows progress messages)
-│   ├── SetupComplete.svelte (brief success, emits oncomplete after 1.5s)
+│   ├── On success: appMode = "loading" (falls through to loading state)
 │   └── SetupError.svelte (Retry calls lifecycle.setup(), Quit calls lifecycle.quit())
 │
-└── state === "ready" (setup complete)
+├── state === "loading" OR after setup success
+│   ├── Show SetupScreen with message="Starting services..."
+│   ├── Calls api.lifecycle.startServices() → returns Promise<SetupResult>
+│   ├── On success: appMode = "ready"
+│   └── On failure: SetupError (Retry calls startServices(), Quit calls quit())
+│
+└── appMode === "ready" (services started)
     └── MainView.svelte
         │
         └── onMount:
@@ -819,10 +866,12 @@ App.svelte (mode router)
 **Key Design Decisions:**
 
 1. **App.svelte owns global events**: Shortcut events and setup progress events work across modes
-2. **MainView.svelte owns domain events**: IPC calls only happen when setup is complete
+2. **MainView.svelte owns domain events**: IPC calls only happen when services are started
 3. **Two-phase handler registration**: Main process registers lifecycle handlers (`api:lifecycle:*`) in `bootstrap()`, normal handlers in `startServices()`
 4. **Promise-based setup**: `lifecycle.setup()` returns success/failure via Promise, no separate complete/error events
-5. **IPC initialization timing**: `listProjects()` and workspace status fetches are called in MainView.onMount, not App.onMount
+5. **Explicit service startup**: `lifecycle.startServices()` is idempotent - second call returns success immediately
+6. **IPC initialization timing**: `listProjects()` and workspace status fetches are called in MainView.onMount, not App.onMount
+7. **Loading screen UX**: Services start AFTER UI loads so the loading screen can be displayed during service startup
 
 See [VS Code Setup](#vs-code-setup) for the main process side of this flow.
 

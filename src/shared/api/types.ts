@@ -209,8 +209,11 @@ export type SetupResult =
 
 /**
  * Application state for lifecycle management.
+ * - "setup": Initial setup is required
+ * - "loading": Services are starting (shows loading screen)
+ * - "ready": Application is fully operational
  */
-export type AppState = "setup" | "ready";
+export type AppState = "setup" | "loading" | "ready";
 
 // =============================================================================
 // Blocking Process Types

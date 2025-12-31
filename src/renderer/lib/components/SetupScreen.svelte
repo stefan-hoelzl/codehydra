@@ -1,16 +1,30 @@
 <script lang="ts">
   /**
-   * Setup screen component displayed during first-run setup.
-   * Shows a static message with an indeterminate progress bar.
+   * Setup screen component displayed during first-run setup or service loading.
+   * Shows a customizable message with an indeterminate progress bar.
    */
   import Logo from "./Logo.svelte";
+
+  interface Props {
+    /** Main heading message (default: "Setting up CodeHydra") */
+    message?: string;
+    /** Subtitle message (default: "This is only required on first startup.") */
+    subtitle?: string;
+  }
+
+  let {
+    message = "Setting up CodeHydra",
+    subtitle = "This is only required on first startup.",
+  }: Props = $props();
 </script>
 
 <div class="setup-screen">
   <Logo animated={true} />
-  <h1>Setting up CodeHydra</h1>
-  <p class="step-message" aria-live="polite">This is only required on first startup.</p>
-  <vscode-progress-bar class="progress-bar" indeterminate={true} aria-label="Setting up CodeHydra"
+  <h1>{message}</h1>
+  {#if subtitle}
+    <p class="step-message" aria-live="polite">{subtitle}</p>
+  {/if}
+  <vscode-progress-bar class="progress-bar" indeterminate={true} aria-label={message}
   ></vscode-progress-bar>
 </div>
 

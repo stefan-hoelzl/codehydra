@@ -138,6 +138,15 @@ export interface IUiApi {
 export interface ILifecycleApi {
   getState(): Promise<AppState>;
   setup(): Promise<SetupResult>;
+  /**
+   * Start application services (code-server, OpenCode, etc.).
+   *
+   * Idempotent - second call returns success without side effects.
+   * Called by renderer after getState() returns "loading" or after setup() succeeds.
+   *
+   * @returns Success result, or failure with error message
+   */
+  startServices(): Promise<SetupResult>;
   quit(): Promise<void>;
 }
 

@@ -37,8 +37,8 @@ export interface LifecycleModuleDeps {
   readonly vscodeSetup: IVscodeSetup | undefined;
   /** Electron app instance for quit() */
   readonly app: MinimalApp;
-  /** Callback when setup completes successfully */
-  readonly onSetupComplete: () => Promise<void>;
+  /** Function to start application services (code-server, OpenCode, etc.) */
+  readonly doStartServices: () => Promise<void>;
   /** Optional logger */
   readonly logger?: Logger;
 }
@@ -59,6 +59,8 @@ export class LifecycleModule implements IApiModule {
   private setupInProgress = false;
   /** Cached preflight result from getState() for use in setup() */
   private cachedPreflightResult: PreflightResult | null = null;
+  /** Flag to track if services have been started (idempotent guard) */
+  private servicesStarted = false;
 
   private readonly logger: Logger;
 
@@ -86,6 +88,9 @@ export class LifecycleModule implements IApiModule {
     this.api.register("lifecycle.setup", this.setup.bind(this), {
       ipc: ApiIpcChannels.LIFECYCLE_SETUP,
     });
+    this.api.register("lifecycle.startServices", this.startServices.bind(this), {
+      ipc: ApiIpcChannels.LIFECYCLE_START_SERVICES,
+    });
     this.api.register("lifecycle.quit", this.quit.bind(this), {
       ipc: ApiIpcChannels.LIFECYCLE_QUIT,
     });
@@ -104,12 +109,17 @@ export class LifecycleModule implements IApiModule {
    * - Checks setup marker validity
    *
    * The preflight result is cached for use by setup().
+   *
+   * Returns:
+   * - "setup" if setup is needed
+   * - "loading" if setup is complete but services not yet started
+   * - Never returns "ready" (that state is only reached after startServices())
    */
   private async getState(payload: EmptyPayload): Promise<AppState> {
     void payload; // Required by MethodHandler interface but unused for no-arg methods
-    // If no setup service, assume ready
+    // If no setup service, return "loading" (skip setup, but still need to start services)
     if (!this.deps.vscodeSetup) {
-      return "ready";
+      return "loading";
     }
 
     const preflightResult = await this.deps.vscodeSetup.preflight();
@@ -125,10 +135,11 @@ export class LifecycleModule implements IApiModule {
           missingExtensions: preflightResult.missingExtensions.join(",") || "none",
           outdatedExtensions: preflightResult.outdatedExtensions.join(",") || "none",
         });
+        return "setup";
       } else {
         this.logger.debug("Preflight: no setup required", {});
+        return "loading";
       }
-      return preflightResult.needsSetup ? "setup" : "ready";
     } else {
       // Preflight failed - treat as needing setup
       this.logger.warn("Preflight failed", { error: preflightResult.error.message });
@@ -141,24 +152,18 @@ export class LifecycleModule implements IApiModule {
    *
    * Behavior:
    * - Uses cached preflight result (from getState()) or runs preflight if not cached
-   * - If no setup needed: calls onSetupComplete and returns success
+   * - If no setup needed: returns success immediately (no service start)
    * - If setup is already in progress: returns SETUP_IN_PROGRESS error
    * - Otherwise: runs selective setup based on preflight results
+   *
+   * Note: This method does NOT start services. The renderer must call
+   * startServices() after setup() completes successfully.
    */
   private async setup(payload: EmptyPayload): Promise<SetupResult> {
     void payload; // Required by MethodHandler interface but unused for no-arg methods
-    // If no setup service, just call onSetupComplete
+    // If no setup service, just return success (no setup to do)
     if (!this.deps.vscodeSetup) {
-      try {
-        await this.deps.onSetupComplete();
-        return { success: true };
-      } catch (error) {
-        return {
-          success: false,
-          message: getErrorMessage(error),
-          code: "SERVICE_START_ERROR",
-        };
-      }
+      return { success: true };
     }
 
     // Guard: prevent concurrent setup processes
@@ -182,16 +187,7 @@ export class LifecycleModule implements IApiModule {
 
       // Check if setup is actually needed
       if (preflightResult.success && !preflightResult.needsSetup) {
-        // No setup needed - just start services
-        try {
-          await this.deps.onSetupComplete();
-        } catch (error) {
-          return {
-            success: false,
-            message: getErrorMessage(error),
-            code: "SERVICE_START_ERROR",
-          };
-        }
+        // No setup needed - return success (renderer will call startServices)
         return { success: true };
       }
 
@@ -206,18 +202,7 @@ export class LifecycleModule implements IApiModule {
 
       if (result.success) {
         this.logger.info("Setup complete", {});
-        // Call onSetupComplete (starts services)
-        try {
-          await this.deps.onSetupComplete();
-        } catch (error) {
-          const errorMessage = getErrorMessage(error);
-          this.logger.warn("Service start failed", { error: errorMessage });
-          return {
-            success: false,
-            message: errorMessage,
-            code: "SERVICE_START_ERROR",
-          };
-        }
+        // Return success - renderer will call startServices
         return { success: true };
       } else {
         this.logger.warn("Setup failed", { error: result.error.message });
@@ -237,6 +222,38 @@ export class LifecycleModule implements IApiModule {
       };
     } finally {
       this.setupInProgress = false;
+    }
+  }
+
+  /**
+   * Start application services (code-server, OpenCode, etc.).
+   *
+   * Idempotent - second call returns success immediately without side effects.
+   * Called by renderer after getState() returns "loading" or after setup() succeeds.
+   */
+  private async startServices(payload: EmptyPayload): Promise<SetupResult> {
+    void payload; // Required by MethodHandler interface but unused for no-arg methods
+
+    // Idempotent guard - second call returns success immediately
+    if (this.servicesStarted) {
+      return { success: true };
+    }
+    this.servicesStarted = true;
+
+    try {
+      await this.deps.doStartServices();
+      this.logger.info("Services started", {});
+      return { success: true };
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.warn("Service start failed", { error: errorMessage });
+      // Reset flag to allow retry
+      this.servicesStarted = false;
+      return {
+        success: false,
+        message: errorMessage,
+        code: "SERVICE_START_ERROR",
+      };
     }
   }
 

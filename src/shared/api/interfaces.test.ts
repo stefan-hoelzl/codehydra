@@ -187,9 +187,12 @@ describe("ILifecycleApi Interface", () => {
   it("should have correct method signatures", () => {
     const api: ILifecycleApi = {
       async getState(): Promise<AppState> {
-        return "ready";
+        return "loading";
       },
       async setup(): Promise<SetupResult> {
+        return { success: true };
+      },
+      async startServices(): Promise<SetupResult> {
         return { success: true };
       },
       async quit(): Promise<void> {
@@ -200,6 +203,7 @@ describe("ILifecycleApi Interface", () => {
     expect(api).toBeDefined();
     expect(typeof api.getState).toBe("function");
     expect(typeof api.setup).toBe("function");
+    expect(typeof api.startServices).toBe("function");
     expect(typeof api.quit).toBe("function");
   });
 });

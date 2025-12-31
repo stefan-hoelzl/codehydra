@@ -585,11 +585,12 @@ const unsubscribe = on("workspace:switched", (event) => {
 
 #### `lifecycle` - Application Lifecycle
 
-| Method     | Signature                    | Description                        |
-| ---------- | ---------------------------- | ---------------------------------- |
-| `getState` | `() => Promise<AppState>`    | Get app state ("setup" or "ready") |
-| `setup`    | `() => Promise<SetupResult>` | Run first-time setup               |
-| `quit`     | `() => Promise<void>`        | Quit the application               |
+| Method          | Signature                    | Description                                           |
+| --------------- | ---------------------------- | ----------------------------------------------------- |
+| `getState`      | `() => Promise<AppState>`    | Get app state ("setup" or "loading", never "ready")   |
+| `setup`         | `() => Promise<SetupResult>` | Run first-time setup (does NOT start services)        |
+| `startServices` | `() => Promise<SetupResult>` | Start app services (idempotent, called after loading) |
+| `quit`          | `() => Promise<void>`        | Quit the application                                  |
 
 ### Events
 
@@ -709,8 +710,10 @@ type UIMode = "workspace" | "dialog" | "shortcut" | "hover";
 #### `AppState`
 
 ```typescript
-type AppState = "setup" | "ready";
+type AppState = "setup" | "loading" | "ready";
 ```
+
+**Note:** `getState()` returns "setup" or "loading" (never "ready"). The "ready" state is only reached after `startServices()` completes successfully.
 
 #### `SetupProgress` / `SetupResult`
 

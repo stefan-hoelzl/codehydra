@@ -36,8 +36,9 @@ const { mockApi, eventCallbacks } = vi.hoisted(() => {
         setMode: vi.fn().mockResolvedValue(undefined),
       },
       lifecycle: {
-        getState: vi.fn().mockResolvedValue("ready"),
+        getState: vi.fn().mockResolvedValue("loading"),
         setup: vi.fn().mockResolvedValue({ success: true }),
+        startServices: vi.fn().mockResolvedValue({ success: true }),
         quit: vi.fn().mockResolvedValue(undefined),
       },
       // on() captures callbacks by event name for tests to fire events
@@ -116,9 +117,10 @@ describe("App component", () => {
     });
     // Default to returning empty projects
     mockApi.projects.list.mockResolvedValue([]);
-    // Default to setup complete (ready mode)
-    mockApi.lifecycle.getState.mockResolvedValue("ready");
+    // Default to loading state (services need to be started)
+    mockApi.lifecycle.getState.mockResolvedValue("loading");
     mockApi.lifecycle.setup.mockResolvedValue({ success: true });
+    mockApi.lifecycle.startServices.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -1046,6 +1048,8 @@ describe("App component", () => {
       mockApi.lifecycle.getState.mockResolvedValue("setup");
       // Setup completes successfully
       mockApi.lifecycle.setup.mockResolvedValue({ success: true });
+      // Keep startServices running indefinitely so we stay at SetupComplete
+      mockApi.lifecycle.startServices.mockReturnValue(new Promise(() => {}));
 
       render(App);
 
@@ -1129,20 +1133,109 @@ describe("App component", () => {
       expect(mockApi.lifecycle.quit).toHaveBeenCalledTimes(1);
     });
 
-    it("transitions to normal app when state is 'ready'", async () => {
-      // Normal mode - lifecycle.getState returns "ready"
-      mockApi.lifecycle.getState.mockResolvedValue("ready");
+    it("shows loading screen when state is 'loading'", async () => {
+      // Loading mode - lifecycle.getState returns "loading"
+      mockApi.lifecycle.getState.mockResolvedValue("loading");
+      // Keep startServices running indefinitely
+      mockApi.lifecycle.startServices.mockReturnValue(new Promise(() => {}));
+
+      render(App);
+
+      // Should show loading screen with "CodeHydra is starting..." message
+      await waitFor(() => {
+        expect(screen.getByText("CodeHydra is starting...")).toBeInTheDocument();
+      });
+    });
+
+    it("transitions to ready after startServices() succeeds", async () => {
+      // Loading mode - lifecycle.getState returns "loading"
+      mockApi.lifecycle.getState.mockResolvedValue("loading");
+      // startServices completes successfully
+      mockApi.lifecycle.startServices.mockResolvedValue({ success: true });
       mockApi.projects.list.mockResolvedValue([]);
 
       render(App);
 
-      // Should show Sidebar (normal app)
+      // Should show Sidebar (normal app) after startServices succeeds
       await waitFor(() => {
         expect(screen.getByRole("navigation", { name: "Projects" })).toBeInTheDocument();
       });
+    });
 
-      // Should NOT show setup screen
-      expect(screen.queryByText("Setting up VSCode...")).not.toBeInTheDocument();
+    it("shows error with Retry/Quit when startServices() fails", async () => {
+      // Loading mode - lifecycle.getState returns "loading"
+      mockApi.lifecycle.getState.mockResolvedValue("loading");
+      // startServices fails
+      mockApi.lifecycle.startServices.mockResolvedValue({
+        success: false,
+        message: "Connection failed",
+        code: "SERVICE_START_ERROR",
+      });
+
+      render(App);
+
+      await waitFor(() => {
+        expect(screen.getByText("Setup Failed")).toBeInTheDocument();
+        expect(screen.getByText("Error: Connection failed")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Quit" })).toBeInTheDocument();
+      });
+    });
+
+    it("retries startServices when Retry clicked in loading mode", async () => {
+      // Loading mode - lifecycle.getState returns "loading"
+      mockApi.lifecycle.getState.mockResolvedValue("loading");
+      // First startServices fails, second succeeds
+      mockApi.lifecycle.startServices
+        .mockResolvedValueOnce({
+          success: false,
+          message: "Connection failed",
+          code: "SERVICE_START_ERROR",
+        })
+        .mockResolvedValueOnce({ success: true });
+
+      render(App);
+
+      // Wait for error screen
+      await waitFor(() => {
+        expect(screen.getByText("Setup Failed")).toBeInTheDocument();
+      });
+
+      // Click retry button
+      const retryButton = screen.getByRole("button", { name: "Retry" });
+      retryButton.click();
+
+      // Should call startServices again (not setup)
+      await waitFor(() => {
+        expect(mockApi.lifecycle.startServices).toHaveBeenCalledTimes(2);
+        expect(mockApi.lifecycle.setup).not.toHaveBeenCalled();
+      });
+    });
+
+    it("setup success transitions through loading to ready", async () => {
+      // Setup mode - lifecycle.getState returns "setup"
+      mockApi.lifecycle.getState.mockResolvedValue("setup");
+      // Setup completes successfully
+      mockApi.lifecycle.setup.mockResolvedValue({ success: true });
+      // startServices completes successfully
+      mockApi.lifecycle.startServices.mockResolvedValue({ success: true });
+      mockApi.projects.list.mockResolvedValue([]);
+
+      render(App);
+
+      // Wait for the full transition: setup → SetupComplete → loading → ready
+      // SetupComplete has a 1.5s timer, so we need a longer timeout
+      await waitFor(
+        () => {
+          // Should end up at ready mode with Sidebar visible
+          expect(screen.getByRole("navigation", { name: "Projects" })).toBeInTheDocument();
+        },
+        { timeout: 3000 }
+      );
+
+      // Verify the flow was: setup() → startServices()
+      expect(mockApi.lifecycle.setup).toHaveBeenCalled();
+      expect(mockApi.lifecycle.startServices).toHaveBeenCalled();
     });
   });
 });

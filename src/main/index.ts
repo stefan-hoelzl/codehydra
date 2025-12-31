@@ -645,8 +645,8 @@ async function bootstrap(): Promise<void> {
     lifecycleDeps: {
       vscodeSetup: vscodeSetupService ?? undefined,
       app,
-      onSetupComplete: async () => {
-        appLogger.info("Setup complete");
+      doStartServices: async () => {
+        appLogger.info("Starting services");
         await startServices();
         appLogger.info("Services started");
       },
@@ -723,11 +723,11 @@ async function bootstrap(): Promise<void> {
   // Note: IPC handlers for lifecycle.* are now registered by LifecycleModule
   // No need to call registerLifecycleHandlers() separately
 
-  // 10. If setup is complete, start services immediately
-  // This is done BEFORE loading UI so handlers are ready when MainView mounts
+  // 10. Services are NOT started here anymore
+  // The renderer will call lifecycle.startServices() after loading
+  // This allows the UI to display a loading screen during service startup
   if (setupComplete) {
-    await startServices();
-    appLogger.info("Services started");
+    appLogger.debug("Setup complete, renderer will start services");
   } else {
     appLogger.info("Setup required");
   }

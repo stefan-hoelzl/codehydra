@@ -3,8 +3,9 @@
  * Re-exports window.api for mockability in tests.
  *
  * Setup operations use lifecycle API:
- * - lifecycle.getState() returns "ready" | "setup"
- * - lifecycle.setup() runs setup and returns success/failure
+ * - lifecycle.getState() returns "setup" | "loading"
+ * - lifecycle.setup() runs setup and returns success/failure (does NOT start services)
+ * - lifecycle.startServices() starts services and returns success/failure
  * - lifecycle.quit() quits the app
  */
 

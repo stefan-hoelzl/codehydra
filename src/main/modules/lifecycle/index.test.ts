@@ -44,7 +44,7 @@ function createMockDeps(overrides: Partial<LifecycleModuleDeps> = {}): Lifecycle
   return {
     vscodeSetup: createMockVscodeSetup(),
     app: createMockApp(),
-    onSetupComplete: vi.fn().mockResolvedValue(undefined),
+    doStartServices: vi.fn().mockResolvedValue(undefined),
     logger: createMockLogger(),
     ...overrides,
   };
@@ -63,7 +63,7 @@ describe("lifecycle.getState", () => {
     deps = createMockDeps();
   });
 
-  it("returns 'ready' when no vscodeSetup provided", async () => {
+  it("returns 'loading' when no vscodeSetup provided", async () => {
     deps = createMockDeps({ vscodeSetup: undefined });
     new LifecycleModule(registry, deps);
 
@@ -71,10 +71,10 @@ describe("lifecycle.getState", () => {
     expect(handler).toBeDefined();
 
     const result = await handler!({});
-    expect(result).toBe("ready");
+    expect(result).toBe("loading");
   });
 
-  it("returns 'ready' when preflight shows no setup needed", async () => {
+  it("returns 'loading' when preflight shows no setup needed", async () => {
     const vscodeSetup = createMockVscodeSetup({
       preflight: vi.fn().mockResolvedValue({
         success: true,
@@ -90,7 +90,7 @@ describe("lifecycle.getState", () => {
     const handler = registry.getHandler("lifecycle.getState");
     const result = await handler!({});
 
-    expect(result).toBe("ready");
+    expect(result).toBe("loading");
     expect(vscodeSetup.preflight).toHaveBeenCalled();
   });
 
@@ -139,20 +139,19 @@ describe("lifecycle.setup", () => {
     deps = createMockDeps();
   });
 
-  it("calls onSetupComplete when no vscodeSetup provided", async () => {
-    const onSetupComplete = vi.fn().mockResolvedValue(undefined);
-    deps = createMockDeps({ vscodeSetup: undefined, onSetupComplete });
+  it("returns success when no vscodeSetup provided (no setup to do)", async () => {
+    deps = createMockDeps({ vscodeSetup: undefined });
     new LifecycleModule(registry, deps);
 
     const handler = registry.getHandler("lifecycle.setup");
     const result = await handler!({});
 
     expect(result).toEqual({ success: true });
-    expect(onSetupComplete).toHaveBeenCalled();
+    // doStartServices should NOT be called - renderer will call startServices() next
+    expect(deps.doStartServices).not.toHaveBeenCalled();
   });
 
-  it("runs setup and calls onSetupComplete on success", async () => {
-    const onSetupComplete = vi.fn().mockResolvedValue(undefined);
+  it("runs setup and returns success without starting services", async () => {
     const vscodeSetup = createMockVscodeSetup({
       preflight: vi.fn().mockResolvedValue({
         success: true,
@@ -163,7 +162,7 @@ describe("lifecycle.setup", () => {
       }),
       setup: vi.fn().mockResolvedValue({ success: true }),
     });
-    deps = createMockDeps({ vscodeSetup, onSetupComplete });
+    deps = createMockDeps({ vscodeSetup });
     new LifecycleModule(registry, deps);
 
     const handler = registry.getHandler("lifecycle.setup");
@@ -171,7 +170,8 @@ describe("lifecycle.setup", () => {
 
     expect(result).toEqual({ success: true });
     expect(vscodeSetup.setup).toHaveBeenCalled();
-    expect(onSetupComplete).toHaveBeenCalled();
+    // doStartServices should NOT be called - renderer will call startServices() next
+    expect(deps.doStartServices).not.toHaveBeenCalled();
   });
 
   it("returns error when setup fails", async () => {
@@ -268,7 +268,6 @@ describe("lifecycle.setup", () => {
   });
 
   it("skips setup when preflight shows no setup needed", async () => {
-    const onSetupComplete = vi.fn().mockResolvedValue(undefined);
     const vscodeSetup = createMockVscodeSetup({
       preflight: vi.fn().mockResolvedValue({
         success: true,
@@ -278,7 +277,7 @@ describe("lifecycle.setup", () => {
         outdatedExtensions: [],
       }),
     });
-    deps = createMockDeps({ vscodeSetup, onSetupComplete });
+    deps = createMockDeps({ vscodeSetup });
     new LifecycleModule(registry, deps);
 
     const handler = registry.getHandler("lifecycle.setup");
@@ -286,7 +285,115 @@ describe("lifecycle.setup", () => {
 
     expect(result).toEqual({ success: true });
     expect(vscodeSetup.setup).not.toHaveBeenCalled();
-    expect(onSetupComplete).toHaveBeenCalled();
+    // doStartServices should NOT be called - renderer will call startServices() next
+    expect(deps.doStartServices).not.toHaveBeenCalled();
+  });
+
+  it("after setup completes, getState still returns loading (not ready)", async () => {
+    const vscodeSetup = createMockVscodeSetup({
+      preflight: vi.fn().mockResolvedValue({
+        success: true,
+        needsSetup: true,
+        missingBinaries: ["code-server"],
+        missingExtensions: [],
+        outdatedExtensions: [],
+      }),
+      setup: vi.fn().mockResolvedValue({ success: true }),
+    });
+    deps = createMockDeps({ vscodeSetup });
+    new LifecycleModule(registry, deps);
+
+    // First call getState to populate cache
+    const getStateHandler = registry.getHandler("lifecycle.getState");
+    await getStateHandler!({});
+
+    // Then run setup
+    const setupHandler = registry.getHandler("lifecycle.setup");
+    await setupHandler!({});
+
+    // After setup, reset the preflight mock to return no setup needed
+    (vscodeSetup.preflight as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      needsSetup: false,
+      missingBinaries: [],
+      missingExtensions: [],
+      outdatedExtensions: [],
+    });
+
+    // getState should still return "loading" (not "ready")
+    const stateAfterSetup = await getStateHandler!({});
+    expect(stateAfterSetup).toBe("loading");
+  });
+});
+
+describe("lifecycle.startServices", () => {
+  let registry: MockApiRegistry;
+  let deps: LifecycleModuleDeps;
+
+  beforeEach(() => {
+    registry = createMockRegistry();
+    deps = createMockDeps();
+  });
+
+  it("starts services and returns success", async () => {
+    const doStartServices = vi.fn().mockResolvedValue(undefined);
+    deps = createMockDeps({ doStartServices });
+    new LifecycleModule(registry, deps);
+
+    const handler = registry.getHandler("lifecycle.startServices");
+    const result = await handler!({});
+
+    expect(result).toEqual({ success: true });
+    expect(doStartServices).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns success immediately on second call (idempotent)", async () => {
+    const doStartServices = vi.fn().mockImplementation(async () => {
+      // Simulate some work
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    deps = createMockDeps({ doStartServices });
+    new LifecycleModule(registry, deps);
+
+    const handler = registry.getHandler("lifecycle.startServices");
+
+    // First call
+    const startTime = Date.now();
+    const result1 = await handler!({});
+    const firstCallDuration = Date.now() - startTime;
+
+    // Second call should return immediately
+    const secondStartTime = Date.now();
+    const result2 = await handler!({});
+    const secondCallDuration = Date.now() - secondStartTime;
+
+    expect(result1).toEqual({ success: true });
+    expect(result2).toEqual({ success: true });
+    expect(doStartServices).toHaveBeenCalledTimes(1);
+    // Second call should be much faster (idempotent guard)
+    expect(secondCallDuration).toBeLessThan(firstCallDuration);
+  });
+
+  it("returns error and allows retry on failure", async () => {
+    const doStartServices = vi.fn().mockRejectedValue(new Error("Connection failed"));
+    deps = createMockDeps({ doStartServices });
+    new LifecycleModule(registry, deps);
+
+    const handler = registry.getHandler("lifecycle.startServices");
+    const result = await handler!({});
+
+    expect(result).toEqual({
+      success: false,
+      message: "Connection failed",
+      code: "SERVICE_START_ERROR",
+    });
+
+    // After failure, retry should work
+    doStartServices.mockResolvedValue(undefined);
+    const retryResult = await handler!({});
+
+    expect(retryResult).toEqual({ success: true });
+    expect(doStartServices).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -326,6 +433,7 @@ describe("lifecycle.registration", () => {
     const registeredPaths = registry.getRegisteredPaths();
     expect(registeredPaths).toContain("lifecycle.getState");
     expect(registeredPaths).toContain("lifecycle.setup");
+    expect(registeredPaths).toContain("lifecycle.startServices");
     expect(registeredPaths).toContain("lifecycle.quit");
 
     // Verify register was called with IPC options
@@ -335,6 +443,13 @@ describe("lifecycle.registration", () => {
     expect(registry.register).toHaveBeenCalledWith("lifecycle.setup", expect.any(Function), {
       ipc: "api:lifecycle:setup",
     });
+    expect(registry.register).toHaveBeenCalledWith(
+      "lifecycle.startServices",
+      expect.any(Function),
+      {
+        ipc: "api:lifecycle:start-services",
+      }
+    );
     expect(registry.register).toHaveBeenCalledWith("lifecycle.quit", expect.any(Function), {
       ipc: "api:lifecycle:quit",
     });

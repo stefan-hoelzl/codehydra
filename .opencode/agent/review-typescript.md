@@ -33,7 +33,7 @@ You are a TypeScript expert focused on code quality, type safety, maintainabilit
 - Electron security model
 - Main process vs renderer process architecture
 - IPC (Inter-Process Communication) patterns
-- Cross-platform considerations (defer deep review to @review-platform)
+- Cross-platform considerations (Linux, macOS, Windows)
 
 ## Context
 

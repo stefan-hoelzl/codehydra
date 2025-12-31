@@ -42,9 +42,14 @@
    * App mode discriminated union.
    * - initializing: Checking setup status (shows loading state)
    * - setup: Setup is needed (shows setup screens)
-   * - ready: Setup complete, normal app mode (shows MainView)
+   * - loading: Services are starting (shows loading screen)
+   * - ready: Services started, normal app mode (shows MainView)
    */
-  type AppMode = { type: "initializing" } | { type: "setup" } | { type: "ready" };
+  type AppMode =
+    | { type: "initializing" }
+    | { type: "setup" }
+    | { type: "loading" }
+    | { type: "ready" };
 
   /** Time in ms before clearing ARIA announcement to prevent repetition */
   const ARIA_ANNOUNCEMENT_CLEAR_MS = 1000;
@@ -91,25 +96,31 @@
   onMount(async () => {
     try {
       const state = await api.lifecycle.getState();
-      if (state === "ready") {
-        appMode = { type: "ready" };
-      } else {
+      if (state === "loading") {
+        // No setup needed, but services not started yet
+        appMode = { type: "loading" };
+        void runStartServices();
+      } else if (state === "setup") {
         // Setup needed - start setup automatically
         appMode = { type: "setup" };
         void runSetup();
+      } else {
+        // Unexpected "ready" state (should not happen with new flow)
+        appMode = { type: "ready" };
       }
     } catch (error) {
-      // If lifecycle.getState() fails, fall back to ready mode
+      // If lifecycle.getState() fails, try to start services anyway
       const message = getErrorMessage(error);
       logger.warn("UI error", { component: "App", error: message });
       console.error("Setup state check failed:", error);
-      appMode = { type: "ready" };
+      appMode = { type: "loading" };
+      void runStartServices();
     }
   });
 
   /**
    * Run the setup process via lifecycle API.
-   * Handles success/error states and transitions.
+   * On success, transitions to loading state to start services.
    */
   async function runSetup(): Promise<void> {
     try {
@@ -126,10 +137,40 @@
     }
   }
 
-  // Handle setup retry
+  /**
+   * Start application services via lifecycle API.
+   * Called after setup completes or when getState returns "loading".
+   */
+  async function runStartServices(): Promise<void> {
+    try {
+      const result = await api.lifecycle.startServices();
+      if (result.success) {
+        appMode = { type: "ready" };
+        // Announce mode transition for screen readers
+        announceMessage = "Application ready.";
+        setTimeout(() => {
+          announceMessage = "";
+        }, ARIA_ANNOUNCEMENT_CLEAR_MS);
+      } else {
+        // Show error with retry option
+        errorSetup(result.message);
+      }
+    } catch (error) {
+      const message = getErrorMessage(error);
+      logger.warn("UI error", { component: "App", error: message });
+      errorSetup(message);
+    }
+  }
+
+  // Handle setup/service retry
   function handleSetupRetry(): void {
     resetSetup();
-    void runSetup();
+    // If we're in loading mode, retry startServices, otherwise retry setup
+    if (appMode.type === "loading") {
+      void runStartServices();
+    } else {
+      void runSetup();
+    }
   }
 
   // Handle setup quit
@@ -138,19 +179,18 @@
   }
 
   // Handle setup complete transition (after success screen timer)
+  // Transitions to loading state to start services
   function handleSetupCompleteTransition(): void {
-    appMode = { type: "ready" };
-    // Announce mode transition for screen readers
-    announceMessage = "Setup complete. Application ready.";
-    // Clear after timeout so it doesn't repeat
-    setTimeout(() => {
-      announceMessage = "";
-    }, ARIA_ANNOUNCEMENT_CLEAR_MS);
+    appMode = { type: "loading" };
+    // Start services after setup completes
+    void runStartServices();
   }
 
   // Get aria-label for main element based on mode
   function getAriaLabel(): string {
-    return appMode.type === "ready" ? "Application workspace" : "Setup wizard";
+    if (appMode.type === "ready") return "Application workspace";
+    if (appMode.type === "loading") return "Loading services";
+    return "Setup wizard";
   }
 </script>
 
@@ -181,6 +221,19 @@
       {:else}
         <!-- loading state -->
         <SetupScreen />
+      {/if}
+    </div>
+  {:else if appMode.type === "loading"}
+    <!-- Loading mode - starting services -->
+    <div class="setup-container">
+      {#if setupState.value.type === "error"}
+        <SetupError
+          errorMessage={setupState.value.errorMessage}
+          onretry={handleSetupRetry}
+          onquit={handleSetupQuit}
+        />
+      {:else}
+        <SetupScreen message="CodeHydra is starting..." subtitle="" />
       {/if}
     </div>
   {:else}

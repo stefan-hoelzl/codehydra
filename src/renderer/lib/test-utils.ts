@@ -11,8 +11,9 @@ import { MOCK_WORKSPACE_API_DEFAULTS } from "@shared/test-fixtures";
  * Creates a mock API object with all functions mocked.
  *
  * Setup operations use lifecycle API:
- * - lifecycle.getState() returns "ready" | "setup"
- * - lifecycle.setup() runs setup and returns success/failure
+ * - lifecycle.getState() returns "setup" | "loading"
+ * - lifecycle.setup() runs setup and returns success/failure (does NOT start services)
+ * - lifecycle.startServices() starts services and returns success/failure
  * - lifecycle.quit() quits the app
  */
 export function createMockApi(): Api {
@@ -47,8 +48,9 @@ export function createMockApi(): Api {
       setMode: vi.fn().mockResolvedValue(undefined),
     },
     lifecycle: {
-      getState: vi.fn().mockResolvedValue("ready"),
+      getState: vi.fn().mockResolvedValue("loading"),
       setup: vi.fn().mockResolvedValue({ success: true }),
+      startServices: vi.fn().mockResolvedValue({ success: true }),
       quit: vi.fn().mockResolvedValue(undefined),
     },
     log: {

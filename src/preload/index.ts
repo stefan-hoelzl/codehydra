@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld("api", {
   lifecycle: {
     getState: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_GET_STATE),
     setup: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_SETUP),
+    startServices: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_START_SERVICES),
     quit: () => ipcRenderer.invoke(ApiIpcChannels.LIFECYCLE_QUIT),
   },
   // Log API (renderer → main, fire-and-forget)

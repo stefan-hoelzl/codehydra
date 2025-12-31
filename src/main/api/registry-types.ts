@@ -103,6 +103,7 @@ export interface MethodRegistry {
   // Lifecycle (no payload)
   "lifecycle.getState": (payload: EmptyPayload) => Promise<AppState>;
   "lifecycle.setup": (payload: EmptyPayload) => Promise<SetupResult>;
+  "lifecycle.startServices": (payload: EmptyPayload) => Promise<SetupResult>;
   "lifecycle.quit": (payload: EmptyPayload) => Promise<void>;
 
   // Projects
@@ -148,7 +149,11 @@ export type MethodPath = keyof MethodRegistry;
  * Grouped method paths for better organization.
  * @internal Exported for testing only - used for type-level verification
  */
-export type LifecyclePath = "lifecycle.getState" | "lifecycle.setup" | "lifecycle.quit";
+export type LifecyclePath =
+  | "lifecycle.getState"
+  | "lifecycle.setup"
+  | "lifecycle.startServices"
+  | "lifecycle.quit";
 /** @internal Exported for testing only */
 export type ProjectPath =
   | "projects.open"
@@ -196,6 +201,7 @@ export type MethodResult<P extends MethodPath> = Awaited<ReturnType<MethodRegist
 export const ALL_METHOD_PATHS = [
   "lifecycle.getState",
   "lifecycle.setup",
+  "lifecycle.startServices",
   "lifecycle.quit",
   "projects.open",
   "projects.close",
