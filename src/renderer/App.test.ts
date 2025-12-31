@@ -220,11 +220,11 @@ describe("App component", () => {
   });
 
   describe("event subscriptions", () => {
-    it("subscribes to all domain events via v2.on() on mount", async () => {
+    it("subscribes to all domain events via api.on() on mount", async () => {
       render(App);
 
       await waitFor(() => {
-        // Now uses v2 API events via api.v2.on() for domain events
+        // Uses api.on() for domain events
         expect(mockApi.on).toHaveBeenCalledWith("project:opened", expect.any(Function));
         expect(mockApi.on).toHaveBeenCalledWith("project:closed", expect.any(Function));
         expect(mockApi.on).toHaveBeenCalledWith("workspace:created", expect.any(Function));

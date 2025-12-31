@@ -137,23 +137,23 @@ function resolveProject(projectId: ProjectId): string | undefined {
 - Iteration over 10 items is ~microseconds
 - Map would require keeping ID↔path in sync (complexity not worth it)
 
-### v2 API Usage
+### API Usage
 
-The renderer uses `api.v2.*` for all operations after setup:
+The renderer uses `api.*` for all operations after setup:
 
 ```typescript
 // Open project
-const project = await api.v2.projects.open("/path/to/repo");
+const project = await api.projects.open("/path/to/repo");
 console.log(project.id); // "my-repo-a1b2c3d4"
 
 // Create workspace
-const workspace = await api.v2.workspaces.create(project.id, "feature-x", "main");
+const workspace = await api.workspaces.create(project.id, "feature-x", "main");
 
 // Switch workspace
-await api.v2.ui.switchWorkspace(project.id, workspace.name);
+await api.ui.switchWorkspace(project.id, workspace.name);
 
 // Subscribe to events
-const unsubscribe = api.v2.on("workspace:switched", (event) => {
+const unsubscribe = api.on("workspace:switched", (event) => {
   console.log(`Switched to ${event.workspaceName} in ${event.projectId}`);
 });
 ```

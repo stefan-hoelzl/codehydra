@@ -7,21 +7,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/svelte";
 import type { Project, Workspace, ProjectId, WorkspaceName } from "@shared/api/types";
 
-// v2 API event callbacks - MainView uses api.v2.on() which stores callbacks here
-type V2EventCallback = (...args: unknown[]) => void;
-const v2EventCallbacks = new Map<string, V2EventCallback>();
+// API event callbacks - MainView uses api.on() which stores callbacks here
+type EventCallback = (...args: unknown[]) => void;
+const eventCallbacks = new Map<string, EventCallback>();
 
-// Helper to fire a v2 event
-function fireV2Event(event: string, payload?: unknown): void {
-  const callback = v2EventCallbacks.get(event);
+// Helper to fire an API event
+function fireApiEvent(event: string, payload?: unknown): void {
+  const callback = eventCallbacks.get(event);
   if (callback) {
     callback(payload);
   }
 }
 
-// Helper to clear v2 event callbacks between tests
-function clearV2EventCallbacks(): void {
-  v2EventCallbacks.clear();
+// Helper to clear event callbacks between tests
+function clearEventCallbacks(): void {
+  eventCallbacks.clear();
 }
 
 const mockApi = vi.hoisted(() => ({
@@ -51,18 +51,18 @@ const mockApi = vi.hoisted(() => ({
     quit: vi.fn().mockResolvedValue(undefined),
   },
   // on() captures callbacks by event name for tests to fire events
-  on: vi.fn((event: string, callback: V2EventCallback) => {
-    v2EventCallbacks.set(event, callback);
+  on: vi.fn((event: string, callback: EventCallback) => {
+    eventCallbacks.set(event, callback);
     return vi.fn(); // unsubscribe
   }),
   // onModeChange captures callback for ui:mode-changed events
-  onModeChange: vi.fn((callback: V2EventCallback) => {
-    v2EventCallbacks.set("ui:mode-changed", callback);
+  onModeChange: vi.fn((callback: EventCallback) => {
+    eventCallbacks.set("ui:mode-changed", callback);
     return vi.fn(); // unsubscribe
   }),
   // onShortcut captures callback for shortcut key events from main process
-  onShortcut: vi.fn((callback: V2EventCallback) => {
-    v2EventCallbacks.set("shortcut:key", callback);
+  onShortcut: vi.fn((callback: EventCallback) => {
+    eventCallbacks.set("shortcut:key", callback);
     return vi.fn(); // unsubscribe
   }),
   // Legacy APIs (kept for backwards compatibility with some old tests)
@@ -206,7 +206,7 @@ describe("Integration tests", () => {
     mockUiModeStore.reset();
 
     // Reset v2 event callbacks
-    clearV2EventCallbacks();
+    clearEventCallbacks();
 
     // Default mocks for v2 API
     mockApi.projects.list.mockResolvedValue([]);
@@ -267,7 +267,7 @@ describe("Integration tests", () => {
 
       // Simulate project:opened event (v2 format includes id)
       const newProject = createProject("my-project", [createWorkspace("main", projectPath)]);
-      fireV2Event("project:opened", { project: newProject });
+      fireApiEvent("project:opened", { project: newProject });
 
       // Verify new project appears in sidebar
       await waitFor(() => {
@@ -316,7 +316,7 @@ describe("Integration tests", () => {
       });
 
       // Simulate project:closed event (v2 format uses projectId not path)
-      fireV2Event("project:closed", { projectId: actualProjectId });
+      fireApiEvent("project:closed", { projectId: actualProjectId });
 
       // Verify project is removed from sidebar
       await waitFor(() => {
@@ -358,7 +358,7 @@ describe("Integration tests", () => {
       // Get actual projectId from store (ID is regenerated from path)
       const actualProjectId = projectsStore.projects.value[0]!.id;
       const newWorkspace = createWorkspace("feature-x", "/test/my-project", actualProjectId);
-      fireV2Event("workspace:created", {
+      fireApiEvent("workspace:created", {
         projectId: actualProjectId,
         workspace: newWorkspace,
       });
@@ -413,7 +413,7 @@ describe("Integration tests", () => {
       });
 
       // Simulate workspace:removed event (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:removed", {
+      fireApiEvent("workspace:removed", {
         projectId: actualProjectId,
         workspaceName: workspace.name,
         path: workspace.path,
@@ -454,7 +454,7 @@ describe("Integration tests", () => {
       });
 
       // Simulate workspace:switched event (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:switched", {
+      fireApiEvent("workspace:switched", {
         projectId: actualProjectId,
         workspaceName: ws2.name,
         path: ws2.path,
@@ -776,7 +776,7 @@ describe("Integration tests", () => {
       const newProject = createProject("new-project", [
         createWorkspace("develop", "/test/new-project"),
       ]);
-      fireV2Event("project:opened", { project: newProject });
+      fireApiEvent("project:opened", { project: newProject });
 
       await waitFor(() => {
         expect(projectsStore.projects.value).toHaveLength(2);
@@ -806,7 +806,7 @@ describe("Integration tests", () => {
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Set active workspace via event (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:switched", {
+      fireApiEvent("workspace:switched", {
         projectId: actualProjectId,
         workspaceName: ws1.name,
         path: ws1.path,
@@ -820,7 +820,7 @@ describe("Integration tests", () => {
       expect(mainItem).toHaveAttribute("aria-current", "true");
 
       // Switch to another workspace (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:switched", {
+      fireApiEvent("workspace:switched", {
         projectId: actualProjectId,
         workspaceName: ws2.name,
         path: ws2.path,
@@ -855,7 +855,7 @@ describe("Integration tests", () => {
       mockUiModeStore.setModeFromMain.mockClear();
 
       // Step 1: Simulate shortcut enable event (Alt+X pressed)
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
 
       // Step 2: Verify setModeFromMain was called with "shortcut"
       expect(mockUiModeStore.setModeFromMain).toHaveBeenCalledWith("shortcut");
@@ -866,7 +866,7 @@ describe("Integration tests", () => {
 
       // Step 4: Main process sends mode-changed when Alt is released
       mockUiModeStore.setModeFromMain.mockClear();
-      fireV2Event("ui:mode-changed", { mode: "workspace", previousMode: "shortcut" });
+      fireApiEvent("ui:mode-changed", { mode: "workspace", previousMode: "shortcut" });
 
       // Step 5: Verify setModeFromMain was called with "workspace"
       expect(mockUiModeStore.setModeFromMain).toHaveBeenCalledWith("workspace");
@@ -895,7 +895,7 @@ describe("Integration tests", () => {
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Set active workspace (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:switched", {
+      fireApiEvent("workspace:switched", {
         projectId: actualProjectId,
         workspaceName: ws1.name,
         path: ws1.path,
@@ -908,13 +908,13 @@ describe("Integration tests", () => {
       mockApi.ui.switchWorkspace.mockClear();
 
       // Step 1: Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
         expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Step 2: Fire shortcut key event (keys now come from main process via onShortcut)
-      fireV2Event("shortcut:key", "down");
+      fireApiEvent("shortcut:key", "down");
 
       // Step 3: Verify workspace switch was called (v2 API: projectId, workspaceName, focus)
       await waitFor(() => {
@@ -930,7 +930,7 @@ describe("Integration tests", () => {
 
       // Step 5: Main process sends mode-changed when Alt is released
       // (Alt release handling moved from renderer to main process in Stage 2)
-      fireV2Event("ui:mode-changed", { mode: "workspace", previousMode: "shortcut" });
+      fireApiEvent("ui:mode-changed", { mode: "workspace", previousMode: "shortcut" });
 
       // Step 6: Verify overlay hides
       await waitFor(() => {
@@ -956,13 +956,13 @@ describe("Integration tests", () => {
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
         expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Fire shortcut key events (keys now come from main process via onShortcut)
-      fireV2Event("shortcut:key", "1");
+      fireApiEvent("shortcut:key", "1");
       await waitFor(() => {
         expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
           actualProjectId,
@@ -973,7 +973,7 @@ describe("Integration tests", () => {
 
       // Clear and fire key "2"
       mockApi.ui.switchWorkspace.mockClear();
-      fireV2Event("shortcut:key", "2");
+      fireApiEvent("shortcut:key", "2");
 
       await waitFor(() => {
         expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(
@@ -1003,7 +1003,7 @@ describe("Integration tests", () => {
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Set active workspace so activeProject is available (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:switched", {
+      fireApiEvent("workspace:switched", {
         projectId: actualProjectId,
         workspaceName: ws.name,
         path: ws.path,
@@ -1013,13 +1013,13 @@ describe("Integration tests", () => {
       });
 
       // Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
         expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Fire Enter shortcut key to open create dialog
-      fireV2Event("shortcut:key", "enter");
+      fireApiEvent("shortcut:key", "enter");
 
       // Verify dialog opens
       await waitFor(() => {
@@ -1047,7 +1047,7 @@ describe("Integration tests", () => {
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Set active to last workspace (v2 format uses WorkspaceRef)
-      fireV2Event("workspace:switched", {
+      fireApiEvent("workspace:switched", {
         projectId: actualProjectId,
         workspaceName: ws2.name,
         path: ws2.path,
@@ -1059,10 +1059,10 @@ describe("Integration tests", () => {
       mockApi.ui.switchWorkspace.mockClear();
 
       // Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
 
       // Fire ArrowDown shortcut key (should wrap to first)
-      fireV2Event("shortcut:key", "down");
+      fireApiEvent("shortcut:key", "down");
 
       await waitFor(() => {
         expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(actualProjectId, ws1.name, false);
@@ -1079,13 +1079,13 @@ describe("Integration tests", () => {
       mockApi.ui.selectFolder.mockClear();
 
       // Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
         expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
 
       // Fire O shortcut key
-      fireV2Event("shortcut:key", "o");
+      fireApiEvent("shortcut:key", "o");
 
       // Verify shortcut mode deactivated
       expect(uiModeStore.shortcutModeActive.value).toBe(false);
@@ -1106,7 +1106,7 @@ describe("Integration tests", () => {
       });
 
       // Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
         expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
@@ -1124,7 +1124,7 @@ describe("Integration tests", () => {
 
       // Pressing arrow should be no-op (fires via shortcut:key event)
       mockApi.ui.switchWorkspace.mockClear();
-      fireV2Event("shortcut:key", "down");
+      fireApiEvent("shortcut:key", "down");
       // Even with event fired, no workspaces means no switch
       expect(mockApi.ui.switchWorkspace).not.toHaveBeenCalled();
     });
@@ -1144,7 +1144,7 @@ describe("Integration tests", () => {
       const actualProjectId = projectsStore.projects.value[0]!.id;
 
       // Activate shortcut mode
-      fireV2Event("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
+      fireApiEvent("ui:mode-changed", { mode: "shortcut", previousMode: "workspace" });
       await waitFor(() => {
         expect(uiModeStore.shortcutModeActive.value).toBe(true);
       });
@@ -1154,7 +1154,7 @@ describe("Integration tests", () => {
       expect(navigateHint).toHaveClass("shortcut-hint--hidden");
 
       // Jump should still work for index 1 (v2 API: projectId, workspaceName, focus)
-      fireV2Event("shortcut:key", "1");
+      fireApiEvent("shortcut:key", "1");
 
       await waitFor(() => {
         expect(mockApi.ui.switchWorkspace).toHaveBeenCalledWith(actualProjectId, ws.name, false);
@@ -1198,7 +1198,7 @@ describe("Integration tests", () => {
 
       // Simulate project:opened event with a project that has NO workspaces (v2 format)
       const emptyProject = createProject("new-project", []);
-      fireV2Event("project:opened", { project: emptyProject });
+      fireApiEvent("project:opened", { project: emptyProject });
 
       // Verify create workspace dialog auto-opens because project has 0 workspaces
       await waitFor(() => {
@@ -1263,7 +1263,7 @@ describe("Integration tests", () => {
       const newProject = createProject("another-project", [
         createWorkspace("develop", "/test/another-project"),
       ]);
-      fireV2Event("project:opened", { project: newProject });
+      fireApiEvent("project:opened", { project: newProject });
 
       // Verify project is added
       await waitFor(() => {

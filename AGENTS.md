@@ -558,7 +558,7 @@ IPC handlers are auto-registered by the `ApiRegistry` when modules register thei
 - **Module Registration**: Modules call `api.register(path, handler, { ipc: channel })` to register IPC handlers
 - **Fire-and-forget**: Use `void api.call()` for non-blocking UI state changes
 - **ID Generation**: Deterministic `<name>-<hash8>` format for projects and workspaces
-- **v2 API Usage**: Renderer uses `api.v2.*` for all operations after setup
+- **API Usage**: Renderer uses `api.*` for all operations after setup
 
 **Full details**: See [Module Registration Pattern](docs/PATTERNS.md#module-registration-pattern) for code examples.
 
