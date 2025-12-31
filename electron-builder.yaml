@@ -33,13 +33,9 @@ asar: true
 # Windows configuration
 win:
   target:
-    - target: portable
+    - target: dir
       arch: [x64]
   icon: resources/icon.ico
-  artifactName: ${productName}-${version}.${ext}
-
-# Note: portable.useAppDirWhenRunning is NOT set because PathProvider
-# doesn't support portable mode yet. Data goes to %APPDATA%\Codehydra\
 
 # Linux configuration
 linux:

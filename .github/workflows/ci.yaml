@@ -40,6 +40,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: CodeHydra-${{ runner.os == 'Windows' && 'win' || 'linux' }}
-          path: dist/CodeHydra-*
+          path: dist/${{ runner.os == 'Windows' && 'win-unpacked/' || 'CodeHydra-*' }}
           retention-days: 7
           if-no-files-found: error
