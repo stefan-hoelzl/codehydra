@@ -811,9 +811,11 @@ export class ViewManager implements IViewManager {
     // Notify listeners
     this.notifyLoadingChange(workspacePath, false);
 
-    // If this workspace is active, attach the view
+    // If this workspace is active, attach the view and focus it
     if (this.activeWorkspacePath === workspacePath) {
       this.attachView(workspacePath);
+      const view = this.workspaceViews.get(workspacePath);
+      view?.webContents.focus();
     }
 
     const workspaceName = basename(workspacePath);

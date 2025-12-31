@@ -3167,6 +3167,37 @@ describe("ViewManager", () => {
       );
     });
 
+    it("loading-workspace-focuses-when-loaded: view focuses when setWorkspaceLoaded called", () => {
+      const manager = ViewManager.create(
+        mockWindowManager as unknown as WindowManager,
+        {
+          uiPreloadPath: "/path/to/preload.js",
+          codeServerPort: 8080,
+        },
+        SILENT_LOGGER
+      );
+
+      manager.createWorkspaceView(
+        "/path/to/workspace",
+        "http://localhost:8080/?folder=/path",
+        "/path/to/project",
+        true // isNew
+      );
+
+      // Activate workspace while loading (focus=true by default)
+      manager.setActiveWorkspace("/path/to/workspace");
+
+      // Clear focus calls from setActiveWorkspace (which couldn't focus the loading view)
+      const workspaceView = MockWebContentsViewClass.mock.results[1]?.value;
+      workspaceView?.webContents.focus.mockClear();
+
+      // Mark as loaded
+      manager.setWorkspaceLoaded("/path/to/workspace");
+
+      // View should now be focused (since it was activated with focus=true)
+      expect(workspaceView?.webContents.focus).toHaveBeenCalled();
+    });
+
     it("loading-timeout: view attaches after timeout", async () => {
       vi.useFakeTimers();
 
