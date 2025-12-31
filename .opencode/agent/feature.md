@@ -469,7 +469,9 @@ Reply:
 
 #### CI_FAILED Handling
 
-When @general reports CI_FAILED:
+When @general reports CI_FAILED, use a two-step approval flow:
+
+**Step 1: Present error analysis**
 
 ```
 CI failed!
@@ -479,15 +481,47 @@ CI failed!
 
 **Error analysis**: [explain what went wrong]
 
-**Proposed fix**: [specific fix]
-
 Reply:
-- "fix" - implement the fix
-- Describe a different approach
+- "propose fix" - I'll analyze and propose a detailed fix plan
+- Describe a different approach you want me to investigate
 - "abort" - stop workflow
 ```
 
-- **Fix accepted**: Invoke @implement → returns to **USER_TESTING** (user tests the fix before re-accepting)
+**Step 2: Present detailed fix plan for approval**
+
+When user says "propose fix" (or after analyzing their suggested approach):
+
+```
+## Proposed Fix
+
+**Root Cause**: [detailed explanation of why CI failed]
+
+**Changes Required**:
+
+1. **File**: `path/to/file.ts`
+   - **Current**: [what the code currently does]
+   - **Change**: [specific change to make]
+   - **Reason**: [why this fixes the issue]
+
+2. **File**: `path/to/other-file.ts`
+   - **Current**: [...]
+   - **Change**: [...]
+   - **Reason**: [...]
+
+**Test Updates** (if any):
+- [describe any test changes needed]
+
+---
+
+Reply:
+- "approve" - implement this fix
+- Suggest modifications to the fix plan
+- "abort" - stop workflow
+```
+
+**Step 3: Implement approved fix**
+
+- **Only after user says "approve"**: Invoke @implement with the approved fix plan → returns to **USER_TESTING** (user tests the fix before re-accepting)
 - **"abort"**: End workflow (changes are committed and pushed, but not merged)
 
 #### COMPLETED Handling
@@ -845,4 +879,5 @@ Feature <FEATURE_NAME> is complete!
 - **SKIP CODE REVIEW ON RE-IMPLEMENTATION**: After code review issues are fixed, skip code review on subsequent @implement completions
 - **CI_CYCLE RUNS TO COMPLETION**: CI_CYCLE only bails on TIMEOUT or FAILED - otherwise it runs through commit, push, CI, merge, and cleanup
 - **CI_FAILED RETURNS TO USER_TESTING**: After fixing a CI failure, return to USER_TESTING for user to test before re-accepting (not directly to CI_CYCLE)
+- **CI_FAILED REQUIRES FIX APPROVAL**: When CI fails, present error analysis first, then propose a detailed fix plan showing exact file changes. Only invoke @implement after user explicitly approves the fix plan.
 - **REPORT COMPLETED BEFORE DELETION**: Always report feature completion before offering workspace deletion option

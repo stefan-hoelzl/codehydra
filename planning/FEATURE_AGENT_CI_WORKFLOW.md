@@ -232,6 +232,10 @@ Reply:
 
 ### CI_FAILED Handling
 
+Two-step approval flow to ensure user approves fix details before implementation:
+
+**Step 1: Present error analysis**
+
 ```
 CI failed!
 
@@ -240,15 +244,36 @@ CI failed!
 
 **Error analysis**: [explain what went wrong]
 
-**Proposed fix**: [specific fix]
-
 Reply:
-- "fix" - implement the fix
-- Describe a different approach
+- "propose fix" - I'll analyze and propose a detailed fix plan
+- Describe a different approach you want me to investigate
 - "abort" - stop workflow
 ```
 
-- Fix accepted: Invoke @implement → returns to **USER_TESTING** (user tests the fix before re-accepting)
+**Step 2: Present detailed fix plan for approval**
+
+```
+## Proposed Fix
+
+**Root Cause**: [detailed explanation]
+
+**Changes Required**:
+
+1. **File**: `path/to/file.ts`
+   - **Current**: [what the code currently does]
+   - **Change**: [specific change to make]
+   - **Reason**: [why this fixes the issue]
+
+**Test Updates** (if any):
+- [describe any test changes needed]
+
+Reply:
+- "approve" - implement this fix
+- Suggest modifications to the fix plan
+- "abort" - stop workflow
+```
+
+- Only after "approve": Invoke @implement → returns to **USER_TESTING** (user tests the fix before re-accepting)
 - "abort": End workflow
 
 ### COMPLETED Handling
