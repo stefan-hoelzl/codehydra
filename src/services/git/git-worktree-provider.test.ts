@@ -860,54 +860,52 @@ describe("GitWorktreeProvider", () => {
       expect(mockClient.deleteBranch).not.toHaveBeenCalled();
     });
 
-    it("deletes orphaned directory when worktree unregistered after error", async () => {
+    it("deletes branch even when worktree removal fails", async () => {
       const worktreePath = new Path("/data/workspaces/feature-x");
-      const worktreesBefore: WorktreeInfo[] = [
+      const worktrees: WorktreeInfo[] = [
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         { name: "feature-x", path: worktreePath, branch: "feature-x", isMain: false },
       ];
-      // After failed removal, worktree is no longer registered (unregistered but directory remains)
-      const worktreesAfter: WorktreeInfo[] = [
-        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "feature-x", isRemote: false },
       ];
       const mockClient = createMockGitClient({
-        listWorktrees: vi
-          .fn()
-          .mockResolvedValueOnce(worktreesBefore) // First call: before removal
-          .mockResolvedValueOnce(worktreesAfter), // Second call: after error, check if unregistered
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        listBranches: vi.fn().mockResolvedValue(branches),
         removeWorktree: vi.fn().mockRejectedValue(new Error("Permission denied: files locked")),
-      });
-
-      // Mock fs that simulates directory exists (readdir returns entries) and rm succeeds
-      const rmFn = vi.fn();
-      const mockFsWithDir = createMockFileSystemLayer({
-        readdir: { entries: [createDirEntry("some-file.txt", { isFile: true })] },
-        rm: { implementation: rmFn },
       });
 
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithDir,
+        mockFs,
         mockLogger
       );
 
-      const result = await provider.removeWorkspace(worktreePath, false);
+      // Should throw because worktree removal failed
+      await expect(provider.removeWorkspace(worktreePath, true)).rejects.toThrow(
+        "Permission denied: files locked"
+      );
 
-      expect(result.workspaceRemoved).toBe(true);
-      // Should have attempted to delete the orphaned directory
-      expect(rmFn).toHaveBeenCalledWith(worktreePath, { recursive: true, force: true });
+      // But branch should still be deleted before the error is thrown
+      expect(mockClient.deleteBranch).toHaveBeenCalledWith(PROJECT_ROOT, "feature-x");
     });
 
-    it("throws when still registered after error", async () => {
+    it("throws worktree error even when branch deletion succeeds", async () => {
       const worktreePath = new Path("/data/workspaces/feature-x");
       const worktrees: WorktreeInfo[] = [
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         { name: "feature-x", path: worktreePath, branch: "feature-x", isMain: false },
       ];
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "feature-x", isRemote: false },
+      ];
       const mockClient = createMockGitClient({
-        listWorktrees: vi.fn().mockResolvedValue(worktrees), // Still registered
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        listBranches: vi.fn().mockResolvedValue(branches),
         removeWorktree: vi.fn().mockRejectedValue(new Error("Removal failed")),
       });
       const provider = await GitWorktreeProvider.create(
@@ -918,80 +916,69 @@ describe("GitWorktreeProvider", () => {
         mockLogger
       );
 
-      // Should throw - worktree still registered after error
-      await expect(provider.removeWorkspace(worktreePath, false)).rejects.toThrow("Removal failed");
+      // Should throw worktree error after branch is deleted
+      await expect(provider.removeWorkspace(worktreePath, true)).rejects.toThrow("Removal failed");
+      // Branch should still be deleted
+      expect(mockClient.deleteBranch).toHaveBeenCalledWith(PROJECT_ROOT, "feature-x");
     });
 
-    it("throws when orphaned directory deletion fails", async () => {
+    it("throws branch error when worktree succeeds but branch deletion fails", async () => {
       const worktreePath = new Path("/data/workspaces/feature-x");
-      const worktreesBefore: WorktreeInfo[] = [
+      const worktrees: WorktreeInfo[] = [
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         { name: "feature-x", path: worktreePath, branch: "feature-x", isMain: false },
       ];
-      const worktreesAfter: WorktreeInfo[] = [
-        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "feature-x", isRemote: false },
       ];
       const mockClient = createMockGitClient({
-        listWorktrees: vi
-          .fn()
-          .mockResolvedValueOnce(worktreesBefore)
-          .mockResolvedValueOnce(worktreesAfter),
-        removeWorktree: vi.fn().mockRejectedValue(new Error("Permission denied")),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        listBranches: vi.fn().mockResolvedValue(branches),
+        deleteBranch: vi.fn().mockRejectedValue(new Error("Branch deletion failed")),
       });
-
-      // Mock fs where directory exists but rm fails (e.g., files still locked)
-      const mockFsWithRmError = createMockFileSystemLayer({
-        readdir: { entries: [createDirEntry("locked-file.txt", { isFile: true })] },
-        rm: { error: new FileSystemError("EACCES", worktreePath.toNative(), "Permission denied") },
-      });
-
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithRmError,
+        mockFs,
         mockLogger
       );
 
-      // Should throw because directory deletion failed
-      await expect(provider.removeWorkspace(worktreePath, false)).rejects.toThrow(
-        /Failed to delete workspace directory/
+      // Should throw branch error since worktree succeeded
+      await expect(provider.removeWorkspace(worktreePath, true)).rejects.toThrow(
+        "Branch deletion failed"
       );
     });
 
-    it("succeeds when orphaned directory already deleted", async () => {
+    it("throws worktree error when both worktree and branch deletion fail", async () => {
       const worktreePath = new Path("/data/workspaces/feature-x");
-      const worktreesBefore: WorktreeInfo[] = [
+      const worktrees: WorktreeInfo[] = [
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
         { name: "feature-x", path: worktreePath, branch: "feature-x", isMain: false },
       ];
-      const worktreesAfter: WorktreeInfo[] = [
-        { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "feature-x", isRemote: false },
       ];
       const mockClient = createMockGitClient({
-        listWorktrees: vi
-          .fn()
-          .mockResolvedValueOnce(worktreesBefore)
-          .mockResolvedValueOnce(worktreesAfter),
-        removeWorktree: vi.fn().mockRejectedValue(new Error("Permission denied")),
+        listWorktrees: vi.fn().mockResolvedValue(worktrees),
+        listBranches: vi.fn().mockResolvedValue(branches),
+        removeWorktree: vi.fn().mockRejectedValue(new Error("Worktree error")),
+        deleteBranch: vi.fn().mockRejectedValue(new Error("Branch error")),
       });
-
-      // Mock fs where directory doesn't exist (ENOENT on readdir)
-      const mockFsNoDir = createMockFileSystemLayer({
-        readdir: { error: new FileSystemError("ENOENT", worktreePath.toNative(), "Not found") },
-      });
-
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsNoDir,
+        mockFs,
         mockLogger
       );
 
-      // Should succeed - directory already gone (idempotent)
-      const result = await provider.removeWorkspace(worktreePath, false);
-      expect(result.workspaceRemoved).toBe(true);
+      // Should throw worktree error (takes precedence)
+      await expect(provider.removeWorkspace(worktreePath, true)).rejects.toThrow("Worktree error");
+      // Branch deletion should still be attempted
+      expect(mockClient.deleteBranch).toHaveBeenCalledWith(PROJECT_ROOT, "feature-x");
     });
 
     it("removes workspace and deletes branch when requested", async () => {
@@ -1060,7 +1047,7 @@ describe("GitWorktreeProvider", () => {
       expect(mockClient.deleteBranch).not.toHaveBeenCalled();
     });
 
-    it("returns success when worktree already removed and directory gone (idempotent)", async () => {
+    it("returns success when worktree already removed (idempotent)", async () => {
       const worktreePath = new Path("/data/workspaces/feature-x");
       // Worktree is NOT in the list - already removed
       const worktrees: WorktreeInfo[] = [
@@ -1070,57 +1057,51 @@ describe("GitWorktreeProvider", () => {
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
 
-      // Mock fs where directory doesn't exist
-      const mockFsNoDir = createMockFileSystemLayer({
-        readdir: { error: new FileSystemError("ENOENT", worktreePath.toNative(), "Not found") },
-      });
-
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsNoDir,
+        mockFs,
         mockLogger
       );
 
-      // Should NOT throw - returns success (directory already gone)
+      // Should NOT throw - returns success (worktree already gone)
       const result = await provider.removeWorkspace(worktreePath, false);
 
       expect(result.workspaceRemoved).toBe(true);
       expect(mockClient.removeWorktree).not.toHaveBeenCalled();
     });
 
-    it("deletes orphaned directory when worktree already unregistered (retry scenario)", async () => {
+    it("deletes branch on retry when worktree already unregistered", async () => {
       const worktreePath = new Path("/data/workspaces/feature-x");
       // Worktree is NOT in the list - already unregistered from previous attempt
       const worktrees: WorktreeInfo[] = [
         { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
       ];
+      const branches: BranchInfo[] = [
+        { name: "main", isRemote: false },
+        { name: "feature-x", isRemote: false },
+      ];
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
-      });
-
-      // Mock fs where directory still exists (from failed previous deletion)
-      const rmFn = vi.fn();
-      const mockFsWithDir = createMockFileSystemLayer({
-        readdir: { entries: [createDirEntry("some-file.txt", { isFile: true })] },
-        rm: { implementation: rmFn },
+        listBranches: vi.fn().mockResolvedValue(branches),
       });
 
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithDir,
+        mockFs,
         mockLogger
       );
 
-      const result = await provider.removeWorkspace(worktreePath, false);
+      const result = await provider.removeWorkspace(worktreePath, true);
 
       expect(result.workspaceRemoved).toBe(true);
+      expect(result.baseDeleted).toBe(true);
       expect(mockClient.removeWorktree).not.toHaveBeenCalled();
-      // Should have deleted the orphaned directory
-      expect(rmFn).toHaveBeenCalledWith(worktreePath, { recursive: true, force: true });
+      // Branch name extracted from path basename
+      expect(mockClient.deleteBranch).toHaveBeenCalledWith(PROJECT_ROOT, "feature-x");
     });
 
     it("returns success when branch already deleted (idempotent)", async () => {

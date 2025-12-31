@@ -5,7 +5,7 @@
 import type { IGitClient } from "./git-client";
 import type { IWorkspaceProvider } from "./workspace-provider";
 import type { BaseInfo, CleanupResult, RemovalResult, UpdateBasesResult, Workspace } from "./types";
-import { FileSystemError, WorkspaceError, getErrorMessage } from "../errors";
+import { WorkspaceError, getErrorMessage } from "../errors";
 import { sanitizeWorkspaceName } from "../platform/paths";
 import { isValidMetadataKey } from "../../shared/api/types";
 import type { FileSystemLayer } from "../platform/filesystem";
@@ -87,50 +87,6 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
       checkedOut: !!worktree,
       worktreePath: worktree?.path ?? null,
     };
-  }
-
-  /**
-   * Delete an orphaned workspace directory.
-   * Called when the worktree is unregistered but the directory still exists
-   * (e.g., due to Windows file locking during git worktree remove).
-   *
-   * This method is idempotent - succeeds if directory doesn't exist.
-   * Throws WorkspaceError if deletion fails (e.g., permission denied, files still locked).
-   *
-   * @param workspacePath Path to the workspace directory to delete
-   * @throws WorkspaceError if directory exists but cannot be deleted
-   */
-  private async deleteOrphanedDirectory(workspacePath: Path): Promise<void> {
-    try {
-      // Try to read directory to check if it exists
-      await this.fileSystemLayer.readdir(workspacePath);
-    } catch (error) {
-      // If ENOENT, directory doesn't exist - that's fine (idempotent)
-      if (error instanceof FileSystemError && error.fsCode === "ENOENT") {
-        this.logger.debug("Workspace directory already deleted", {
-          path: workspacePath.toString(),
-        });
-        return;
-      }
-      // Other errors reading directory (e.g., permission denied) - propagate
-      const message =
-        error instanceof Error ? error.message : "Failed to access workspace directory";
-      throw new WorkspaceError(`Failed to access workspace directory: ${message}`);
-    }
-
-    // Directory exists - try to delete it
-    this.logger.info("Deleting orphaned workspace directory", { path: workspacePath.toString() });
-    try {
-      await this.fileSystemLayer.rm(workspacePath, { recursive: true, force: true });
-    } catch (error) {
-      // Deletion failed (e.g., files still locked on Windows, permission denied)
-      // Preserve the error code for file lock detection (EBUSY, EACCES, EPERM)
-      const message =
-        error instanceof Error ? error.message : "Failed to delete workspace directory";
-      const errorCode =
-        error instanceof FileSystemError ? error.fsCode : (error as NodeJS.ErrnoException).code;
-      throw new WorkspaceError(`Failed to delete workspace directory: ${message}`, errorCode);
-    }
   }
 
   /**
@@ -352,34 +308,20 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
     // Note: Use ternary (not ??) to preserve null for detached HEAD workspaces
     const branchName = worktree ? worktree.branch : workspacePath.basename;
 
-    // Idempotent: skip worktree removal if not registered
+    // Step 1: Try to remove worktree, save error if it fails
+    // We save the error to throw later, after attempting branch deletion
+    let worktreeError: Error | null = null;
     if (worktree) {
-      // Remove the worktree - handle partial failures
       try {
         await this.gitClient.removeWorktree(this.projectRoot, workspacePath);
       } catch (error) {
-        // Check if worktree was unregistered despite error
-        const currentWorktrees = await this.gitClient.listWorktrees(this.projectRoot);
-        const stillRegistered = currentWorktrees.some((wt) => wt.path.equals(workspacePath));
-
-        if (stillRegistered) {
-          throw error; // Truly failed - still registered
-        }
-
-        // Worktree unregistered but directory may remain (e.g., Windows file locking)
-        // Try to delete the orphaned directory - throws if deletion fails
-        await this.deleteOrphanedDirectory(workspacePath);
+        worktreeError = error as Error;
       }
-
-      // Prune stale worktree entries
-      await this.gitClient.pruneWorktrees(this.projectRoot);
-    } else {
-      // Worktree already unregistered (e.g., retry after partial failure)
-      // Try to delete the orphaned directory if it still exists
-      await this.deleteOrphanedDirectory(workspacePath);
     }
 
-    // Optionally delete the branch (idempotent - check if exists first)
+    // Step 2: Delete the branch (always attempt if requested)
+    // This ensures branch is deleted even if worktree removal failed
+    // (e.g., due to Windows file locks - directory cleanup happens at startup)
     let baseDeleted = false;
     if (deleteBase && branchName) {
       // Check if branch exists before attempting deletion
@@ -390,9 +332,12 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
         try {
           await this.gitClient.deleteBranch(this.projectRoot, branchName);
           baseDeleted = true;
-        } catch {
-          // Branch deletion can fail (e.g., if branch is checked out elsewhere)
-          // This is not a critical error
+        } catch (error) {
+          // Only throw branch error if there was no worktree error
+          // (worktree error takes precedence)
+          if (!worktreeError) {
+            throw error;
+          }
           baseDeleted = false;
         }
       } else {
@@ -401,6 +346,14 @@ export class GitWorktreeProvider implements IWorkspaceProvider {
         baseDeleted = true;
       }
     }
+
+    // Step 3: Throw saved worktree error (after branch deletion attempted)
+    if (worktreeError) {
+      throw worktreeError;
+    }
+
+    // Prune stale worktree entries
+    await this.gitClient.pruneWorktrees(this.projectRoot);
 
     return {
       workspaceRemoved: true,

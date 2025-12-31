@@ -428,8 +428,8 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
     });
   });
 
-  describe("removeWorkspace retry scenario", () => {
-    it("deletes branch on retry when worktree already unregistered", async () => {
+  describe("removeWorkspace idempotent scenario", () => {
+    it("deletes branch when worktree already unregistered", async () => {
       // Create workspace normally
       const gitClient = new SimpleGitClient(SILENT_LOGGER);
       const provider = await GitWorktreeProvider.create(
@@ -446,24 +446,18 @@ describe("GitWorktreeProvider with KeepFilesService (integration)", () => {
       const branchesBeforeUnregister = await git.branchLocal();
       expect(branchesBeforeUnregister.all).toContain("feature-retry");
 
-      // Simulate partial failure: unregister worktree but keep directory
-      // This is what happens when `git worktree remove` succeeds in unregistering
-      // but directory deletion fails (e.g., due to file locks on Windows)
+      // Simulate worktree already being removed externally (e.g., manual git command)
       await git.raw(["worktree", "remove", "--force", workspace.path.toNative()]);
-
-      // Re-create the directory to simulate leftover directory after partial failure
-      await nodeMkdir(workspace.path.toNative());
 
       // Verify worktree is no longer registered
       const worktrees = await git.raw(["worktree", "list", "--porcelain"]);
       expect(worktrees).not.toContain(workspace.path.toNative());
 
-      // Verify branch still exists (wasn't deleted yet)
+      // Verify branch still exists
       const branchesAfterUnregister = await git.branchLocal();
       expect(branchesAfterUnregister.all).toContain("feature-retry");
 
-      // Now call removeWorkspace (retry scenario)
-      // The worktree is unregistered, but we should still delete the branch
+      // Call removeWorkspace - should still delete the branch even though worktree is gone
       const result = await provider.removeWorkspace(workspace.path, true);
 
       expect(result.workspaceRemoved).toBe(true);
