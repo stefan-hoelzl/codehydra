@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: CLEANUP
 last_updated: 2026-01-01
 reviewers: [review-ui, review-arch, review-docs]
 ---
@@ -331,7 +331,7 @@ html {
 
 ### Phase 2: Polish & Deploy (after user approval)
 
-- [ ] **Step 5: Add copy button interactivity**
+- [x] **Step 5: Add copy button interactivity**
   - Add copy button with `aria-label="Copy installation code"`
   - Use Svelte 5 `$state` rune for copied status
   - Use try/catch for `navigator.clipboard.writeText()` errors
@@ -340,25 +340,25 @@ html {
   - Files affected: `site/src/components/QuickStart.svelte`
   - Test criteria: Copy works, shows feedback, errors handled gracefully, screen reader announces
 
-- [ ] **Step 6: Add Open Graph meta tags**
+- [x] **Step 6: Add Open Graph meta tags**
   - Add `<meta name="description">` for SEO
   - Add Open Graph tags: `og:title`, `og:description`, `og:image`, `og:url`
   - Add `<meta name="theme-color" content="#0d1117">`
   - Files affected: `site/index.html`
   - Test criteria: Social preview shows correctly (test with opengraph.xyz)
 
-- [ ] **Step 7: Create README.md**
+- [x] **Step 7: Create README.md**
   - Create README.md at repository root using content from **Appendix A** below
   - Files affected: `README.md` (new)
   - Test criteria: Headers render as headers, code blocks have syntax highlighting, badges display (no broken images), tables formatted correctly, all links work (docs/ARCHITECTURE.md, docs/PATTERNS.md, LICENSE), emoji icons render correctly
 
-- [ ] **Step 8: Update AGENTS.md**
+- [x] **Step 8: Update AGENTS.md**
   - Add `site:*` scripts to Essential Commands table
   - Add new "Public Documentation" section after "Project Overview"
   - Files affected: `AGENTS.md`
   - Test criteria: New section is clear and follows existing document style
 
-- [ ] **Step 9: Add pages job to ci.yaml**
+- [x] **Step 9: Add pages job to ci.yaml**
   - Add independent `pages` job to `.github/workflows/ci.yaml`
   - Runs on ubuntu-latest, only on main branch
   - Builds site and deploys to GitHub Pages

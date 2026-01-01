@@ -151,6 +151,10 @@ This also applies to other situations where you're uncertain - ask rather than g
 | `npm run dist`         | Create distributable for current OS |
 | `npm run dist:linux`   | Create Linux AppImage               |
 | `npm run dist:win`     | Create Windows portable exe         |
+| `npm run site:dev`     | Start landing page dev server       |
+| `npm run site:build`   | Build landing page for production   |
+| `npm run site:preview` | Preview built landing page          |
+| `npm run site:check`   | Type-check landing page             |
 
 ### Key Documents
 
@@ -172,6 +176,38 @@ This also applies to other situations where you're uncertain - ask rather than g
 - Multi-workspace IDE for parallel AI agent development
 - Each workspace = git worktree in isolated WebContentsView with VS Code (code-server)
 - Real-time OpenCode agent status monitoring
+
+## Public Documentation
+
+### README.md
+
+The repository README (`README.md`) is the primary entry point for GitHub visitors. It includes:
+
+- Project description and features
+- Quick start instructions
+- Development commands
+- Contributing guidelines
+
+### Landing Page
+
+The landing page at [codehydra.dev](https://codehydra.dev) is built with Vite + Svelte and deployed via GitHub Pages.
+
+| Path                       | Purpose                                          |
+| -------------------------- | ------------------------------------------------ |
+| `site/`                    | Landing page source                              |
+| `site/src/components/`     | Svelte components (Header, Hero, Features, etc.) |
+| `site/src/styles/site.css` | Self-contained CSS (no main app imports)         |
+| `site/public/`             | Static assets (logo, CNAME)                      |
+
+**Development:**
+
+```bash
+npm run site:dev      # Start dev server at localhost:5173
+npm run site:build    # Build to site/dist/
+npm run site:check    # Type-check
+```
+
+The landing page is self-contained and does not import from the main app's source code.
 
 ## Key Concepts
 
