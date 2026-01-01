@@ -26,6 +26,7 @@ import { DefaultAppLayer } from "../services/platform/app";
 import { DefaultImageLayer } from "../services/platform/image";
 import { DefaultDialogLayer, type DialogLayer } from "../services/platform/dialog";
 import { DefaultMenuLayer, type MenuLayer } from "../services/platform/menu";
+import { DefaultWindowLayer, type WindowLayerInternal } from "../services/shell/window";
 import {
   DefaultBinaryDownloadService,
   DefaultArchiveExtractor,
@@ -227,6 +228,12 @@ let dialogLayer: DialogLayer | null = null;
  * Created in bootstrap() before setting application menu.
  */
 let menuLayer: MenuLayer | null = null;
+
+/**
+ * WindowLayer for managing windows.
+ * Created in bootstrap() for WindowManager.
+ */
+let windowLayer: WindowLayerInternal | null = null;
 
 /**
  * Starts all application services after setup completes.
@@ -634,9 +641,19 @@ async function bootstrap(): Promise<void> {
     buildInfo.isDevelopment && buildInfo.gitBranch
       ? `CodeHydra (${buildInfo.gitBranch})`
       : "CodeHydra";
+
+  // Create WindowLayer and ImageLayer for WindowManager
+  const windowLogger = loggingService.createLogger("window");
+  const windowImageLayer = new DefaultImageLayer(windowLogger);
+  windowLayer = new DefaultWindowLayer(windowImageLayer, platformInfo, windowLogger);
+
   windowManager = WindowManager.create(
-    loggingService.createLogger("window"),
-    platformInfo,
+    {
+      windowLayer,
+      imageLayer: windowImageLayer,
+      logger: windowLogger,
+      platformInfo,
+    },
     windowTitle,
     pathProvider.appIconPath.toNative()
   );

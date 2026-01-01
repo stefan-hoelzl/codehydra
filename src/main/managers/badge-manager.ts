@@ -123,10 +123,9 @@ export class BadgeManager {
     }
 
     const handle = this.getOrCreateBadgeImage(state);
-    const image = this.imageLayer.getNativeImage(handle);
     const description =
       state === "all-working" ? "All workspaces working" : "Some workspaces ready";
-    this.windowManager.setOverlayIcon(image, description);
+    this.windowManager.setOverlayIcon(handle, description);
     this.logger.debug("Updated Windows overlay icon", { state, description });
   }
 

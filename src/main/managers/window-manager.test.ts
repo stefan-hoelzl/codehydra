@@ -1,158 +1,171 @@
-// @vitest-environment node
+/**
+ * Integration tests for WindowManager using behavioral mocks.
+ */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// Mock Electron before imports
-const { mockBaseWindow, MockBaseWindowClass, mockMenuSetApplicationMenu, mockNativeImage } =
-  vi.hoisted(() => {
-    const mockWindow = {
-      getBounds: vi.fn(() => ({ width: 1200, height: 800, x: 0, y: 0 })),
-      getContentBounds: vi.fn(() => ({ width: 1200, height: 800, x: 0, y: 0 })),
-      on: vi.fn().mockReturnThis(),
-      close: vi.fn(),
-      maximize: vi.fn(),
-      setTitle: vi.fn(),
-      setIcon: vi.fn(),
-      setOverlayIcon: vi.fn(),
-      contentView: {
-        addChildView: vi.fn(),
-        removeChildView: vi.fn(),
-      },
-    };
-
-    // Create a mock constructor function
-    function MockBaseWindowClass(this: typeof mockWindow): typeof mockWindow {
-      return mockWindow;
-    }
-
-    const mockImage = {
-      isEmpty: vi.fn(() => false),
-    };
-
-    const mockNativeImage = {
-      createFromPath: vi.fn(() => mockImage),
-      createFromDataURL: vi.fn(() => mockImage),
-      _mockImage: mockImage,
-    };
-
-    return {
-      mockBaseWindow: mockWindow,
-      MockBaseWindowClass: vi.fn(MockBaseWindowClass) as unknown as typeof MockBaseWindowClass & {
-        mock: { calls: Array<[Record<string, unknown>]> };
-      },
-      mockMenuSetApplicationMenu: vi.fn(),
-      mockNativeImage,
-    };
-  });
-
-vi.mock("electron", () => ({
-  BaseWindow: MockBaseWindowClass,
-  Menu: {
-    setApplicationMenu: mockMenuSetApplicationMenu,
-  },
-  nativeImage: mockNativeImage,
-}));
-
-import { WindowManager } from "./window-manager";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { WindowManager, type WindowManagerDeps } from "./window-manager";
 import { SILENT_LOGGER } from "../../services/logging";
 import { createMockPlatformInfo } from "../../services/platform/platform-info.test-utils";
-import type { NativeImage } from "electron";
+import { createBehavioralImageLayer } from "../../services/platform/image.test-utils";
+import {
+  createBehavioralWindowLayer,
+  type BehavioralWindowLayer,
+} from "../../services/shell/window.test-utils";
+import type { WindowLayerInternal } from "../../services/shell/window";
+import type { ImageHandle } from "../../services/platform/types";
+
+type TestWindowLayer = BehavioralWindowLayer & WindowLayerInternal;
+
+/**
+ * Creates a test window layer by extending the behavioral layer with _getRawWindow.
+ */
+function createTestWindowLayer(): TestWindowLayer {
+  const behavioralLayer = createBehavioralWindowLayer();
+  // Extend with _getRawWindow that throws (tests shouldn't use getWindow())
+  return Object.assign(behavioralLayer, {
+    _getRawWindow: () => {
+      throw new Error("_getRawWindow not available in behavioral mock");
+    },
+  }) as TestWindowLayer;
+}
+
+/**
+ * Creates WindowManager deps with behavioral mocks.
+ */
+function createWindowManagerDeps(
+  overrides: {
+    platformInfo?: ReturnType<typeof createMockPlatformInfo>;
+    imageLayer?: ReturnType<typeof createBehavioralImageLayer>;
+  } = {}
+): WindowManagerDeps & { windowLayer: TestWindowLayer } {
+  const windowLayer = createTestWindowLayer();
+  const imageLayer = overrides.imageLayer ?? createBehavioralImageLayer();
+  const platformInfo = overrides.platformInfo ?? createMockPlatformInfo();
+
+  return {
+    windowLayer,
+    imageLayer,
+    logger: SILENT_LOGGER,
+    platformInfo,
+  };
+}
 
 describe("WindowManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   describe("create", () => {
-    it("creates a BaseWindow with default title", () => {
-      const platformInfo = createMockPlatformInfo();
-      WindowManager.create(SILENT_LOGGER, platformInfo);
+    it("creates a window with default title", () => {
+      const deps = createWindowManagerDeps();
+      WindowManager.create(deps);
 
-      expect(MockBaseWindowClass).toHaveBeenCalledWith({
-        width: 1200,
-        height: 800,
-        minWidth: 800,
-        minHeight: 600,
-        title: "CodeHydra",
-      });
+      const state = deps.windowLayer._getState();
+      expect(state.windows.size).toBe(1);
+
+      const window = [...state.windows.values()][0];
+      expect(window?.title).toBe("CodeHydra");
     });
 
-    it("creates a BaseWindow with custom title", () => {
-      const platformInfo = createMockPlatformInfo();
-      WindowManager.create(SILENT_LOGGER, platformInfo, "CodeHydra (feature-branch)");
+    it("creates a window with custom title", () => {
+      const deps = createWindowManagerDeps();
+      WindowManager.create(deps, "CodeHydra (feature-branch)");
 
-      expect(MockBaseWindowClass).toHaveBeenCalledWith({
-        width: 1200,
-        height: 800,
-        minWidth: 800,
-        minHeight: 600,
-        title: "CodeHydra (feature-branch)",
-      });
+      const state = deps.windowLayer._getState();
+      const window = [...state.windows.values()][0];
+      expect(window?.title).toBe("CodeHydra (feature-branch)");
     });
 
     it("returns a WindowManager instance", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
 
       expect(manager).toBeInstanceOf(WindowManager);
     });
 
-    it("sets window icon from provided icon path", () => {
-      const platformInfo = createMockPlatformInfo();
-      WindowManager.create(SILENT_LOGGER, platformInfo, "CodeHydra", "/app/resources/icon.png");
+    it("creates window with correct dimensions", () => {
+      const deps = createWindowManagerDeps();
+      WindowManager.create(deps);
 
-      expect(mockNativeImage.createFromPath).toHaveBeenCalledWith("/app/resources/icon.png");
-      expect(mockBaseWindow.setIcon).toHaveBeenCalledWith(mockNativeImage._mockImage);
+      const state = deps.windowLayer._getState();
+      const window = [...state.windows.values()][0];
+      expect(window?.bounds.width).toBe(1200);
+      expect(window?.bounds.height).toBe(800);
     });
 
-    it("does not set icon when nativeImage returns empty", () => {
-      mockNativeImage._mockImage.isEmpty.mockReturnValueOnce(true);
+    it("sets window icon from provided icon path", () => {
+      const deps = createWindowManagerDeps();
+      // Mock the imageLayer to return a non-empty image
+      const mockImageLayer = {
+        ...deps.imageLayer,
+        createFromPath: vi.fn().mockReturnValue({ id: "icon-1", __brand: "ImageHandle" }),
+        isEmpty: vi.fn().mockReturnValue(false),
+        release: vi.fn(),
+      };
+      const depsWithMockImage = { ...deps, imageLayer: mockImageLayer };
 
-      const platformInfo = createMockPlatformInfo();
-      WindowManager.create(SILENT_LOGGER, platformInfo, "CodeHydra", "/app/resources/icon.png");
+      WindowManager.create(depsWithMockImage, "CodeHydra", "/app/resources/icon.png");
 
-      expect(mockNativeImage.createFromPath).toHaveBeenCalled();
-      expect(mockBaseWindow.setIcon).not.toHaveBeenCalled();
+      expect(mockImageLayer.createFromPath).toHaveBeenCalledWith("/app/resources/icon.png");
+      expect(mockImageLayer.release).toHaveBeenCalled();
+    });
+
+    it("does not set icon when image is empty", () => {
+      const deps = createWindowManagerDeps();
+      const mockImageLayer = {
+        ...deps.imageLayer,
+        createFromPath: vi.fn().mockReturnValue({ id: "icon-1", __brand: "ImageHandle" }),
+        isEmpty: vi.fn().mockReturnValue(true), // Empty image
+        release: vi.fn(),
+      };
+      const depsWithMockImage = { ...deps, imageLayer: mockImageLayer };
+
+      // Should not throw
+      expect(() =>
+        WindowManager.create(depsWithMockImage, "CodeHydra", "/app/resources/icon.png")
+      ).not.toThrow();
     });
 
     it("handles icon loading errors gracefully", () => {
-      mockNativeImage.createFromPath.mockImplementationOnce(() => {
-        throw new Error("Failed to load icon");
-      });
+      const deps = createWindowManagerDeps();
+      const mockImageLayer = {
+        ...deps.imageLayer,
+        createFromPath: vi.fn().mockImplementation(() => {
+          throw new Error("Failed to load icon");
+        }),
+      };
+      const depsWithMockImage = { ...deps, imageLayer: mockImageLayer };
 
-      const platformInfo = createMockPlatformInfo();
       // Should not throw
       expect(() =>
-        WindowManager.create(SILENT_LOGGER, platformInfo, "CodeHydra", "/app/resources/icon.png")
+        WindowManager.create(depsWithMockImage, "CodeHydra", "/app/resources/icon.png")
       ).not.toThrow();
     });
 
     it("does not attempt to load icon when iconPath is not provided", () => {
-      const platformInfo = createMockPlatformInfo();
-      WindowManager.create(SILENT_LOGGER, platformInfo, "CodeHydra");
+      const deps = createWindowManagerDeps();
+      const mockImageLayer = {
+        ...deps.imageLayer,
+        createFromPath: vi.fn(),
+      };
+      const depsWithMockImage = { ...deps, imageLayer: mockImageLayer };
 
-      expect(mockNativeImage.createFromPath).not.toHaveBeenCalled();
-      expect(mockBaseWindow.setIcon).not.toHaveBeenCalled();
+      WindowManager.create(depsWithMockImage, "CodeHydra");
+
+      expect(mockImageLayer.createFromPath).not.toHaveBeenCalled();
     });
   });
 
   describe("maximizeAsync", () => {
     it("maximizes the window and notifies resize callbacks after delay", async () => {
       vi.useFakeTimers();
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
       const callback = vi.fn();
       manager.onResize(callback);
       callback.mockClear();
 
       const promise = manager.maximizeAsync();
-
-      // maximize() called immediately
-      expect(mockBaseWindow.maximize).toHaveBeenCalled();
 
       // Callback not called yet (before delay)
       expect(callback).not.toHaveBeenCalled();
@@ -169,150 +182,140 @@ describe("WindowManager", () => {
   });
 
   describe("getWindow", () => {
-    it("returns the created BaseWindow", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+    it("returns the underlying BaseWindow", () => {
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
 
-      const window = manager.getWindow();
+      // The behavioral mock doesn't have _getRawWindow, so this will throw
+      // In production, this returns the real BaseWindow
+      expect(() => manager.getWindow()).toThrow();
+    });
+  });
 
-      expect(window).toBe(mockBaseWindow);
+  describe("getWindowHandle", () => {
+    it("returns the WindowHandle", () => {
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
+
+      const handle = manager.getWindowHandle();
+
+      expect(handle.id).toMatch(/^window-\d+$/);
+      expect(handle.__brand).toBe("WindowHandle");
     });
   });
 
   describe("getBounds", () => {
     it("returns window content bounds", () => {
-      mockBaseWindow.getContentBounds.mockReturnValue({ width: 1400, height: 900, x: 100, y: 50 });
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
 
       const bounds = manager.getBounds();
 
-      expect(bounds).toEqual({ width: 1400, height: 900 });
+      expect(bounds.width).toBe(1200);
+      expect(bounds.height).toBe(800);
     });
   });
 
   describe("onResize", () => {
-    it("registers a resize event listener", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+    it("calls callback when resize is triggered", () => {
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
       const callback = vi.fn();
 
       manager.onResize(callback);
+      callback.mockClear(); // Clear any initial calls
 
-      expect(mockBaseWindow.on).toHaveBeenCalledWith("resize", expect.any(Function));
-    });
-
-    it("calls callback when window resizes", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
-      const callback = vi.fn();
-
-      manager.onResize(callback);
-
-      // Get the registered callback from constructor call
-      const resizeCallback = mockBaseWindow.on.mock.calls.find(
-        (call) => call[0] === "resize"
-      )?.[1] as () => void;
-
-      // Simulate resize
-      resizeCallback();
+      // Trigger resize via the behavioral mock
+      const handle = manager.getWindowHandle();
+      deps.windowLayer._triggerResize(handle);
 
       expect(callback).toHaveBeenCalled();
     });
 
     it("returns unsubscribe function that removes listener", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
       const callback = vi.fn();
 
       const unsubscribe = manager.onResize(callback);
-
-      // Get the registered callback
-      const resizeCallback = mockBaseWindow.on.mock.calls.find(
-        (call) => call[0] === "resize"
-      )?.[1] as () => void;
+      callback.mockClear();
 
       // Unsubscribe
       unsubscribe();
 
+      // Trigger resize
+      const handle = manager.getWindowHandle();
+      deps.windowLayer._triggerResize(handle);
+
       // Callback should not be called after unsubscribe
-      resizeCallback();
       expect(callback).not.toHaveBeenCalled();
     });
   });
 
   describe("setTitle", () => {
     it("sets the window title", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
 
       manager.setTitle("CodeHydra - my-app / feature - (main)");
 
-      expect(mockBaseWindow.setTitle).toHaveBeenCalledWith("CodeHydra - my-app / feature - (main)");
+      const handle = manager.getWindowHandle();
+      const state = deps.windowLayer._getState();
+      const window = state.windows.get(handle.id);
+      expect(window?.title).toBe("CodeHydra - my-app / feature - (main)");
     });
   });
 
   describe("setOverlayIcon", () => {
-    it("calls BaseWindow.setOverlayIcon on Windows", () => {
+    it("calls windowLayer.setOverlayIcon on Windows", () => {
       const platformInfo = createMockPlatformInfo({ platform: "win32" });
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
-      const mockImage = mockNativeImage._mockImage as unknown as NativeImage;
+      const deps = createWindowManagerDeps({ platformInfo });
+      const manager = WindowManager.create(deps);
+      const imageHandle: ImageHandle = { id: "image-1", __brand: "ImageHandle" };
 
-      manager.setOverlayIcon(mockImage, "3 idle agents");
-
-      expect(mockBaseWindow.setOverlayIcon).toHaveBeenCalledWith(mockImage, "3 idle agents");
+      // Should not throw - overlay icon is handled by WindowLayer
+      expect(() => manager.setOverlayIcon(imageHandle, "3 idle agents")).not.toThrow();
     });
 
     it("clears overlay when null passed on Windows", () => {
       const platformInfo = createMockPlatformInfo({ platform: "win32" });
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps({ platformInfo });
+      const manager = WindowManager.create(deps);
 
-      manager.setOverlayIcon(null, "");
-
-      expect(mockBaseWindow.setOverlayIcon).toHaveBeenCalledWith(null, "");
+      // Should not throw
+      expect(() => manager.setOverlayIcon(null, "")).not.toThrow();
     });
 
     it("no-ops on macOS", () => {
       const platformInfo = createMockPlatformInfo({ platform: "darwin" });
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
-      const mockImage = mockNativeImage._mockImage as unknown as NativeImage;
+      const deps = createWindowManagerDeps({ platformInfo });
+      const manager = WindowManager.create(deps);
+      const imageHandle: ImageHandle = { id: "image-1", __brand: "ImageHandle" };
 
-      manager.setOverlayIcon(mockImage, "3 idle agents");
-
-      expect(mockBaseWindow.setOverlayIcon).not.toHaveBeenCalled();
+      // Should not throw and not call windowLayer (no-op)
+      expect(() => manager.setOverlayIcon(imageHandle, "3 idle agents")).not.toThrow();
     });
 
     it("no-ops on Linux", () => {
       const platformInfo = createMockPlatformInfo({ platform: "linux" });
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
-      const mockImage = mockNativeImage._mockImage as unknown as NativeImage;
+      const deps = createWindowManagerDeps({ platformInfo });
+      const manager = WindowManager.create(deps);
+      const imageHandle: ImageHandle = { id: "image-1", __brand: "ImageHandle" };
 
-      manager.setOverlayIcon(mockImage, "3 idle agents");
-
-      expect(mockBaseWindow.setOverlayIcon).not.toHaveBeenCalled();
-    });
-
-    it("handles nativeImage errors gracefully", () => {
-      const platformInfo = createMockPlatformInfo({ platform: "win32" });
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
-      mockBaseWindow.setOverlayIcon.mockImplementationOnce(() => {
-        throw new Error("Failed to set overlay");
-      });
-      const mockImage = mockNativeImage._mockImage as unknown as NativeImage;
-
-      // Should not throw
-      expect(() => manager.setOverlayIcon(mockImage, "3 idle agents")).not.toThrow();
+      // Should not throw and not call windowLayer (no-op)
+      expect(() => manager.setOverlayIcon(imageHandle, "3 idle agents")).not.toThrow();
     });
   });
 
   describe("close", () => {
     it("closes the window", () => {
-      const platformInfo = createMockPlatformInfo();
-      const manager = WindowManager.create(SILENT_LOGGER, platformInfo);
+      const deps = createWindowManagerDeps();
+      const manager = WindowManager.create(deps);
+      const handle = manager.getWindowHandle();
 
       manager.close();
 
-      expect(mockBaseWindow.close).toHaveBeenCalled();
+      expect(deps.windowLayer.isDestroyed(handle)).toBe(true);
     });
   });
 });

@@ -63,5 +63,15 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
+  },
+  // Test utilities - allow underscore-prefixed unused vars (mock interface implementations)
+  {
+    files: ["**/*.test-utils.ts"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
   }
 );

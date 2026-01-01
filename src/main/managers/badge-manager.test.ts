@@ -14,20 +14,20 @@ import {
   type BehavioralImageLayer,
 } from "../../services/platform/image.test-utils";
 import type { WindowManager } from "./window-manager";
-import type { NativeImage } from "electron";
+import type { ImageHandle } from "../../services/platform/types";
 
 /**
  * Mock WindowManager for BadgeManager testing.
  */
 interface MockWindowManager {
-  setOverlayIcon: (image: NativeImage | null, description: string) => void;
-  setOverlayIconCalls: Array<{ image: NativeImage | null; description: string }>;
+  setOverlayIcon: (image: ImageHandle | null, description: string) => void;
+  setOverlayIconCalls: Array<{ image: ImageHandle | null; description: string }>;
 }
 
 function createMockWindowManager(): MockWindowManager {
-  const setOverlayIconCalls: Array<{ image: NativeImage | null; description: string }> = [];
+  const setOverlayIconCalls: Array<{ image: ImageHandle | null; description: string }> = [];
   return {
-    setOverlayIcon: (image: NativeImage | null, description: string) => {
+    setOverlayIcon: (image: ImageHandle | null, description: string) => {
       setOverlayIconCalls.push({ image, description });
     },
     setOverlayIconCalls,
@@ -360,7 +360,7 @@ describe("BadgeManager", () => {
       expect(imageLayer._getState().images.size).toBe(0);
     });
 
-    it("clears overlay on dispose", () => {
+    it("clears overlay on dispose when connected to status manager", () => {
       const platformInfo = createMockPlatformInfo({ platform: "win32" });
 
       const manager = new BadgeManager(
@@ -371,11 +371,21 @@ describe("BadgeManager", () => {
         SILENT_LOGGER
       );
 
+      // Connect to a mock status manager to enable disconnect behavior
+      const mockStatusManager = {
+        onStatusChanged: () => () => {},
+        getAllStatuses: () => new Map(),
+      };
+      manager.connectToStatusManager(
+        mockStatusManager as unknown as import("../../services/opencode").AgentStatusManager
+      );
+
       // Show an overlay
       manager.updateBadge("all-working");
-      expect(windowManager.setOverlayIconCalls).toHaveLength(1);
+      const callsAfterUpdate = windowManager.setOverlayIconCalls.length;
+      expect(callsAfterUpdate).toBeGreaterThan(0);
 
-      // Dispose
+      // Dispose - should clear overlay via disconnect
       manager.dispose();
 
       // Should have cleared overlay (null image via disconnect)

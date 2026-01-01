@@ -14,7 +14,7 @@ import {
   type BehavioralImageLayer,
 } from "../../services/platform/image.test-utils";
 import type { WindowManager } from "./window-manager";
-import type { NativeImage } from "electron";
+import type { ImageHandle } from "../../services/platform/types";
 import type { AgentStatusManager, StatusChangedCallback } from "../../services/opencode";
 import type { AggregatedAgentStatus, WorkspacePath } from "../../shared/ipc";
 
@@ -22,14 +22,14 @@ import type { AggregatedAgentStatus, WorkspacePath } from "../../shared/ipc";
  * Mock WindowManager for BadgeManager testing.
  */
 interface MockWindowManager {
-  setOverlayIcon: (image: NativeImage | null, description: string) => void;
-  setOverlayIconCalls: Array<{ image: NativeImage | null; description: string }>;
+  setOverlayIcon: (image: ImageHandle | null, description: string) => void;
+  setOverlayIconCalls: Array<{ image: ImageHandle | null; description: string }>;
 }
 
 function createMockWindowManager(): MockWindowManager {
-  const setOverlayIconCalls: Array<{ image: NativeImage | null; description: string }> = [];
+  const setOverlayIconCalls: Array<{ image: ImageHandle | null; description: string }> = [];
   return {
-    setOverlayIcon: (image: NativeImage | null, description: string) => {
+    setOverlayIcon: (image: ImageHandle | null, description: string) => {
       setOverlayIconCalls.push({ image, description });
     },
     setOverlayIconCalls,

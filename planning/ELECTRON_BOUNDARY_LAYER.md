@@ -646,21 +646,21 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
 
 **Goal**: Abstract window management, migrate WindowManager.
 
-- [ ] **Step 4.1: Shell error types**
+- [x] **Step 4.1: Shell error types**
   - Create `src/services/shell/errors.ts` with `ShellError` class extending `Error`
   - Error codes: `WINDOW_NOT_FOUND`, `WINDOW_DESTROYED`, `VIEW_NOT_FOUND`, `VIEW_DESTROYED`, `SESSION_NOT_FOUND`, `NAVIGATION_FAILED`, `WINDOW_HAS_ATTACHED_VIEWS`
   - Include `handle` property for error context
   - Files: `src/services/shell/errors.ts`, `src/services/shell/errors.test.ts`
   - Test: Error class instantiation, properties preserved, instanceof works
 
-- [ ] **Step 4.2: Shell types**
+- [x] **Step 4.2: Shell types**
   - Create `src/services/shell/types.ts` with handle types and common interfaces
   - Types: `WindowHandle`, `ViewHandle`, `SessionHandle` (branded), `Rectangle`, `WebPreferences`
   - Add helper functions: `createWindowHandle()`, `createViewHandle()`, `createSessionHandle()`
   - Files: `src/services/shell/types.ts`, `src/services/shell/types.test.ts`
   - Test: Types compile correctly, branded types prevent mixing
 
-- [ ] **Step 4.3: WindowLayer**
+- [x] **Step 4.3: WindowLayer**
   - Interface: `createWindow(options)`, `destroy(handle)`, `destroyAll()`, `getBounds(handle)`, `setBounds(handle, bounds)`, `setOverlayIcon(handle, image, description)`, `maximize(handle)`, `isMaximized(handle)`, `isDestroyed(handle)`, `onResize(handle, callback)`, `onClose(handle, callback)`, `getContentView(handle)`
   - `setOverlayIcon`: No-op on non-Windows (returns without error)
   - `destroyAll`: Throws `WINDOW_HAS_ATTACHED_VIEWS` if views still attached (caller must detach first)
@@ -672,7 +672,7 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
   - Files: `src/services/shell/window.ts`, `src/services/shell/window.test-utils.ts`, `src/services/shell/window.boundary.test.ts`, `src/services/shell/window.integration.test.ts`
   - Test: Create window, set bounds, overlay icon (Windows), resize callback, destroy non-existent throws
 
-- [ ] **Step 4.4: Migrate WindowManager to WindowLayer + ImageLayer**
+- [x] **Step 4.4: Migrate WindowManager to WindowLayer + ImageLayer**
   - Update `WindowManager` constructor to accept `WindowLayer`, `ImageLayer`
   - Replace `BaseWindow` usage with `WindowLayer` handle pattern
   - Replace `nativeImage` usage with `ImageLayer`
@@ -683,7 +683,7 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
   - Files: `src/main/managers/window-manager.ts`, `src/main/managers/window-manager.test.ts`
   - Test: All window manager tests pass with behavioral mocks
 
-- [ ] **Step 4.5: Wire WindowLayer in bootstrap**
+- [x] **Step 4.5: Wire WindowLayer in bootstrap**
   - Update `bootstrap.ts` to instantiate `WindowLayer` and pass to `WindowManager`
   - Files: `src/main/bootstrap.ts`
   - Test: Application starts correctly

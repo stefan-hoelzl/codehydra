@@ -1,11 +1,18 @@
 /**
  * Window manager for the main application window.
  * Handles BaseWindow creation, resize events, and lifecycle management.
+ *
+ * This is a facade over WindowLayer that provides a higher-level API
+ * for the main application window.
  */
 
-import { BaseWindow, nativeImage, type NativeImage } from "electron";
+import type { BaseWindow } from "electron";
 import type { Logger } from "../../services/logging";
 import type { PlatformInfo } from "../../services/platform/platform-info";
+import type { ImageLayer } from "../../services/platform/image";
+import type { ImageHandle } from "../../services/platform/types";
+import type { WindowLayerInternal } from "../../services/shell/window";
+import type { WindowHandle } from "../../services/shell/types";
 import { getErrorMessage } from "../../shared/error-utils";
 
 /**
@@ -22,39 +29,51 @@ export interface ContentBounds {
 }
 
 /**
+ * Dependencies for creating a WindowManager.
+ */
+export interface WindowManagerDeps {
+  readonly windowLayer: WindowLayerInternal;
+  readonly imageLayer: ImageLayer;
+  readonly logger: Logger;
+  readonly platformInfo: PlatformInfo;
+}
+
+/**
  * Manages the main application window.
  */
 export class WindowManager {
-  private readonly window: BaseWindow;
+  private readonly windowLayer: WindowLayerInternal;
+  private readonly windowHandle: WindowHandle;
   private readonly logger: Logger;
   private readonly platformInfo: PlatformInfo;
   private readonly resizeCallbacks: Set<() => void> = new Set();
 
-  private constructor(window: BaseWindow, logger: Logger, platformInfo: PlatformInfo) {
-    this.window = window;
-    this.logger = logger;
-    this.platformInfo = platformInfo;
+  private constructor(deps: WindowManagerDeps, windowHandle: WindowHandle) {
+    this.windowLayer = deps.windowLayer;
+    this.windowHandle = windowHandle;
+    this.logger = deps.logger;
+    this.platformInfo = deps.platformInfo;
 
     // Set up resize event handler
-    this.window.on("resize", () => {
-      const bounds = this.window.getContentBounds();
+    this.windowLayer.onResize(this.windowHandle, () => {
+      const bounds = this.windowLayer.getContentBounds(this.windowHandle);
       this.logger.debug("Window resized", { width: bounds.width, height: bounds.height });
       this.notifyResizeCallbacks();
     });
 
     // On Linux, maximize/unmaximize may not trigger resize event,
     // so we need to listen for these separately
-    this.window.on("maximize", () => {
+    this.windowLayer.onMaximize(this.windowHandle, () => {
       this.logger.debug("Window maximized");
       this.notifyResizeCallbacks();
     });
 
-    this.window.on("unmaximize", () => {
+    this.windowLayer.onUnmaximize(this.windowHandle, () => {
       this.notifyResizeCallbacks();
     });
 
     // Listen for close event
-    this.window.on("close", () => {
+    this.windowLayer.onClose(this.windowHandle, () => {
       this.logger.info("Window closed");
     });
   }
@@ -66,7 +85,7 @@ export class WindowManager {
   }
 
   /**
-   * Creates a new WindowManager with a configured BaseWindow.
+   * Creates a new WindowManager with a configured window.
    *
    * Configuration:
    * - Size: 1200x800 (default), minimum 800x600
@@ -74,18 +93,16 @@ export class WindowManager {
    * - Icon: Loaded from iconPath if provided
    * - No application menu
    *
-   * @param logger - Logger for [window] scope
-   * @param platformInfo - Platform information for OS-specific behavior
+   * @param deps - Dependencies including WindowLayer, ImageLayer, Logger, PlatformInfo
    * @param title - Window title (defaults to "CodeHydra")
    * @param iconPath - Absolute path to the window icon (e.g., from PathProvider.appIconPath)
    */
   static create(
-    logger: Logger,
-    platformInfo: PlatformInfo,
+    deps: WindowManagerDeps,
     title: string = "CodeHydra",
     iconPath?: string
   ): WindowManager {
-    const window = new BaseWindow({
+    const windowHandle = deps.windowLayer.createWindow({
       width: 1200,
       height: 800,
       minWidth: 800,
@@ -96,25 +113,36 @@ export class WindowManager {
     // Set the window icon for taskbar/dock display
     if (iconPath) {
       try {
-        const icon = nativeImage.createFromPath(iconPath);
-        if (!icon.isEmpty()) {
-          window.setIcon(icon);
+        const iconHandle = deps.imageLayer.createFromPath(iconPath);
+        if (!deps.imageLayer.isEmpty(iconHandle)) {
+          deps.windowLayer.setIcon(windowHandle, iconHandle);
         }
+        deps.imageLayer.release(iconHandle);
       } catch {
         // Icon loading failed, continue without icon
         // This is non-critical - the window will use the default icon
       }
     }
 
-    logger.info("Window created");
-    return new WindowManager(window, logger, platformInfo);
+    deps.logger.info("Window created");
+    return new WindowManager(deps, windowHandle);
   }
 
   /**
    * Returns the underlying BaseWindow instance.
+   *
+   * @deprecated This method is for backward compatibility during migration.
+   * Use WindowLayer methods instead when possible.
    */
   getWindow(): BaseWindow {
-    return this.window;
+    return this.windowLayer._getRawWindow(this.windowHandle);
+  }
+
+  /**
+   * Returns the WindowHandle for this window.
+   */
+  getWindowHandle(): WindowHandle {
+    return this.windowHandle;
   }
 
   /**
@@ -122,7 +150,7 @@ export class WindowManager {
    * Uses getContentBounds() to get the actual client area (excluding title bar).
    */
   getBounds(): ContentBounds {
-    const bounds = this.window.getContentBounds();
+    const bounds = this.windowLayer.getContentBounds(this.windowHandle);
     return {
       width: bounds.width,
       height: bounds.height,
@@ -153,7 +181,7 @@ export class WindowManager {
    * programmatic maximize at startup.
    */
   async maximizeAsync(): Promise<void> {
-    this.window.maximize();
+    this.windowLayer.maximize(this.windowHandle);
     await new Promise((resolve) => setTimeout(resolve, 50));
     this.notifyResizeCallbacks();
   }
@@ -164,24 +192,24 @@ export class WindowManager {
    * @param title - The new window title
    */
   setTitle(title: string): void {
-    this.window.setTitle(title);
+    this.windowLayer.setTitle(this.windowHandle, title);
   }
 
   /**
    * Sets the overlay icon on the taskbar (Windows only).
    * This method is a no-op on non-Windows platforms.
    *
-   * @param image - The overlay image, or null to clear
+   * @param image - The overlay image handle, or null to clear
    * @param description - Accessibility description for the overlay
    */
-  setOverlayIcon(image: NativeImage | null, description: string): void {
+  setOverlayIcon(image: ImageHandle | null, description: string): void {
     // Only Windows supports overlay icons on the taskbar
     if (this.platformInfo.platform !== "win32") {
       return;
     }
 
     try {
-      this.window.setOverlayIcon(image, description);
+      this.windowLayer.setOverlayIcon(this.windowHandle, image, description);
     } catch (error) {
       // Log but don't throw - overlay icon is non-critical
       this.logger.warn("Failed to set overlay icon", {
@@ -195,6 +223,6 @@ export class WindowManager {
    * Closes the window.
    */
   close(): void {
-    this.window.close();
+    this.windowLayer.close(this.windowHandle);
   }
 }
