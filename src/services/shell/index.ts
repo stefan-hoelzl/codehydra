@@ -3,8 +3,8 @@
  *
  * Provides abstractions over Electron's visual container APIs:
  * - WindowLayer: BaseWindow abstraction
- * - ViewLayer: WebContentsView abstraction (Slice 5)
- * - SessionLayer: Session abstraction (Slice 5)
+ * - ViewLayer: WebContentsView abstraction
+ * - SessionLayer: Session abstraction
  */
 
 // Errors
@@ -31,3 +31,22 @@ export {
   type Unsubscribe,
   DefaultWindowLayer,
 } from "./window";
+
+// Session layer
+export {
+  type SessionLayer,
+  type Permission,
+  type PermissionRequestHandler,
+  type PermissionCheckHandler,
+  DefaultSessionLayer,
+} from "./session";
+
+// View layer
+export {
+  type ViewLayer,
+  type ViewOptions,
+  type WindowOpenDetails,
+  type WindowOpenAction,
+  type WindowOpenHandler,
+  DefaultViewLayer,
+} from "./view";

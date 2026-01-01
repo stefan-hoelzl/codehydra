@@ -705,7 +705,7 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
 
 **Goal**: Abstract view and session management, migrate ViewManager (includes IViewManager interface change).
 
-- [ ] **Step 5.1: SessionLayer**
+- [x] **Step 5.1: SessionLayer**
   - Interface: `fromPartition(partition)` returns `SessionHandle`, `clearStorageData(handle)`, `setPermissionRequestHandler(handle, handler)`, `setPermissionCheckHandler(handle, handler)`
   - Implementation: `DefaultSessionLayer` wraps `session`
   - Behavioral mock: `createBehavioralSessionLayer()` with partition map, storage state, `_getState()`
@@ -714,7 +714,7 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
   - Files: `src/services/shell/session.ts`, `src/services/shell/session.test-utils.ts`, `src/services/shell/session.boundary.test.ts`, `src/services/shell/session.integration.test.ts`
   - Test: Create session, set permissions, clear storage, clear already-cleared is no-op
 
-- [ ] **Step 5.2: ViewLayer**
+- [x] **Step 5.2: ViewLayer**
   - Interface: See Pattern Example above for full interface
   - Implementation: `DefaultViewLayer` wraps `WebContentsView`
   - Dependencies: `SessionLayer` for partition (via options.webPreferences.partition), `WindowLayer` for attachment (via `attachToWindow`)
@@ -725,12 +725,12 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
   - Files: `src/services/shell/view.ts`, `src/services/shell/view.test-utils.ts`, `src/services/shell/view.boundary.test.ts`, `src/services/shell/view.integration.test.ts`
   - Test: Create view, load URL, attach/detach, navigation events, error scenarios
 
-- [ ] **Step 5.3: Shell index and exports**
+- [x] **Step 5.3: Shell index and exports**
   - Create `src/services/shell/index.ts` re-exporting all layers, types, errors
   - Files: `src/services/shell/index.ts`
   - Test: Import from index works
 
-- [ ] **Step 5.4: Migrate ViewManager to ViewLayer + SessionLayer + WindowLayer**
+- [x] **Step 5.4: Migrate ViewManager to ViewLayer + SessionLayer + WindowLayer**
   - Update `ViewManager` constructor to accept `ViewLayer`, `SessionLayer`, `WindowLayer`
   - Replace `WebContentsView` usage with `ViewLayer` handle pattern
   - Replace `session.fromPartition()` with `SessionLayer`
@@ -742,7 +742,7 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
   - Files: `src/main/managers/view-manager.ts`, `src/main/managers/view-manager.interface.ts`, `src/main/managers/view-manager.test.ts`
   - Test: All view manager tests pass with behavioral mocks
 
-- [ ] **Step 5.5: Wire ViewLayer + SessionLayer in bootstrap**
+- [x] **Step 5.5: Wire ViewLayer + SessionLayer in bootstrap**
   - Update `bootstrap.ts` to wire layers to `ViewManager`
   - Initialization order: IpcLayer → AppLayer → ImageLayer → MenuLayer → DialogLayer → SessionLayer → WindowLayer → ViewLayer
   - Add `dispose()` calls during app shutdown (reverse order)

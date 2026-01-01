@@ -27,6 +27,8 @@ import { DefaultImageLayer } from "../services/platform/image";
 import { DefaultDialogLayer, type DialogLayer } from "../services/platform/dialog";
 import { DefaultMenuLayer, type MenuLayer } from "../services/platform/menu";
 import { DefaultWindowLayer, type WindowLayerInternal } from "../services/shell/window";
+import { DefaultViewLayer, type ViewLayer } from "../services/shell/view";
+import { DefaultSessionLayer, type SessionLayer } from "../services/shell/session";
 import {
   DefaultBinaryDownloadService,
   DefaultArchiveExtractor,
@@ -236,6 +238,18 @@ let menuLayer: MenuLayer | null = null;
 let windowLayer: WindowLayerInternal | null = null;
 
 /**
+ * ViewLayer for managing views.
+ * Created in bootstrap() for ViewManager.
+ */
+let viewLayer: ViewLayer | null = null;
+
+/**
+ * SessionLayer for managing sessions.
+ * Created in bootstrap() for ViewManager.
+ */
+let sessionLayer: SessionLayer | null = null;
+
+/**
  * Starts all application services after setup completes.
  * This is the second phase of the two-phase startup:
  * bootstrap() → startServices()
@@ -394,19 +408,15 @@ async function startServices(): Promise<void> {
   const viewManagerRef = viewManager;
 
   // Wire API events to IPC emission (with window title updates)
-  apiEventCleanup = wireApiEvents(
-    codeHydraApi,
-    () => viewManager?.getUIView().webContents ?? null,
-    {
-      setTitle: (title) => windowManagerRef?.setTitle(title),
-      defaultTitle,
-      ...(buildInfo.gitBranch && { devBranch: buildInfo.gitBranch }),
-      getProjectName: (workspacePath) => {
-        const project = appStateRef?.findProjectForWorkspace(workspacePath);
-        return project?.name;
-      },
-    }
-  );
+  apiEventCleanup = wireApiEvents(codeHydraApi, () => viewManager?.getUIWebContents() ?? null, {
+    setTitle: (title) => windowManagerRef?.setTitle(title),
+    defaultTitle,
+    ...(buildInfo.gitBranch && { devBranch: buildInfo.gitBranch }),
+    getProjectName: (workspacePath) => {
+      const project = appStateRef?.findProjectForWorkspace(workspacePath);
+      return project?.name;
+    },
+  });
 
   // Wire agent status changes to API events
   // This bridges the AgentStatusManager callback to the registry event system
@@ -520,8 +530,8 @@ async function startServices(): Promise<void> {
   // This emits loading changed events to the renderer for UI overlay display
   loadingChangeCleanup = viewManager.onLoadingChange((path, loading) => {
     try {
-      const webContents = viewManagerRef.getUIView().webContents;
-      if (!webContents.isDestroyed()) {
+      const webContents = viewManagerRef.getUIWebContents();
+      if (webContents && !webContents.isDestroyed()) {
         const payload: WorkspaceLoadingChangedPayload = {
           path: path as import("../shared/ipc").WorkspacePath,
           loading,
@@ -658,16 +668,24 @@ async function bootstrap(): Promise<void> {
     pathProvider.appIconPath.toNative()
   );
 
-  // 6. Create ViewManager with port=0 initially
+  // 6. Create ViewLayer and SessionLayer for ViewManager
+  const viewLogger = loggingService.createLogger("view");
+  sessionLayer = new DefaultSessionLayer(viewLogger);
+  viewLayer = new DefaultViewLayer(windowLayer, viewLogger);
+
+  // 7. Create ViewManager with port=0 initially
   // Port will be updated when startServices() runs
-  viewManager = ViewManager.create(
+  viewManager = ViewManager.create({
     windowManager,
-    {
+    windowLayer,
+    viewLayer,
+    sessionLayer,
+    config: {
       uiPreloadPath: nodePath.join(__dirname, "../preload/index.cjs"),
       codeServerPort: 0,
     },
-    loggingService.createLogger("view")
-  );
+    logger: viewLogger,
+  });
 
   // 7. Maximize window after ViewManager subscription is active
   // On Linux, maximize() is async - wait for it to complete before loading UI
@@ -785,23 +803,27 @@ async function bootstrap(): Promise<void> {
 
   // 11. Load UI layer HTML
   // Renderer will call lifecycle.getState() in onMount and route based on response
-  const uiView = viewManager.getUIView();
-  await uiView.webContents.loadFile(nodePath.join(__dirname, "../renderer/index.html"));
+  // Use file:// URL to load local HTML file
+  const uiHtmlPath = `file://${nodePath.join(__dirname, "../renderer/index.html")}`;
+  await viewLayer.loadURL(viewManager.getUIViewHandle(), uiHtmlPath);
 
   // 12. Open DevTools in development only
   // Note: DevTools not auto-opened to avoid z-order issues on Linux.
   // Use Ctrl+Shift+I to open manually when needed (opens detached).
   if (buildInfo.isDevelopment) {
-    uiView.webContents.on("before-input-event", (event, input) => {
-      if (input.control && input.shift && input.key === "I") {
-        if (uiView.webContents.isDevToolsOpened()) {
-          uiView.webContents.closeDevTools();
-        } else {
-          uiView.webContents.openDevTools({ mode: "detach" });
+    const uiWebContents = viewManager.getUIWebContents();
+    if (uiWebContents) {
+      uiWebContents.on("before-input-event", (event: Electron.Event, input: Electron.Input) => {
+        if (input.control && input.shift && input.key === "I") {
+          if (uiWebContents.isDevToolsOpened()) {
+            uiWebContents.closeDevTools();
+          } else {
+            uiWebContents.openDevTools({ mode: "detach" });
+          }
+          event.preventDefault();
         }
-        event.preventDefault();
-      }
-    });
+      });
+    }
   }
 }
 
@@ -887,6 +909,31 @@ async function cleanup(): Promise<void> {
 
   windowManager = null;
   appState = null;
+
+  // Dispose layers in reverse initialization order:
+  // Initialization: IpcLayer → AppLayer → ImageLayer → MenuLayer → DialogLayer → SessionLayer → WindowLayer → ViewLayer
+  // Dispose: ViewLayer → WindowLayer → SessionLayer → ...
+  // Note: ViewLayer already disposed via viewManager.destroy() above
+  // Note: Some layers don't have dispose() or are not stored
+
+  if (viewLayer) {
+    await viewLayer.dispose();
+    viewLayer = null;
+  }
+
+  if (windowLayer) {
+    await windowLayer.dispose();
+    windowLayer = null;
+  }
+
+  if (sessionLayer) {
+    await sessionLayer.dispose();
+    sessionLayer = null;
+  }
+
+  // DialogLayer, MenuLayer don't have dispose() methods
+  dialogLayer = null;
+  menuLayer = null;
 
   appLogger.info("Cleanup complete");
 }

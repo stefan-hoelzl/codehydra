@@ -3,7 +3,7 @@
  * Handles UI layer, workspace views, bounds, and focus management.
  */
 
-import { WebContentsView, session, type WebContents } from "electron";
+import type { WebContents } from "electron";
 import { basename } from "node:path";
 import type { IViewManager, Unsubscribe, LoadingChangeCallback } from "./view-manager.interface";
 import { WORKSPACE_LOADING_TIMEOUT_MS } from "./view-manager.interface";
@@ -16,6 +16,10 @@ import { projectDirName } from "../../services/platform/paths";
 import type { WorkspaceName } from "../../shared/api/types";
 import type { Logger } from "../../services/logging";
 import { getErrorMessage } from "../../shared/error-utils";
+import type { ViewLayer, WindowOpenDetails } from "../../services/shell/view";
+import type { SessionLayer } from "../../services/shell/session";
+import type { WindowLayerInternal } from "../../services/shell/window";
+import type { ViewHandle, SessionHandle, WindowHandle } from "../../services/shell/types";
 
 /**
  * Sidebar minimized width in pixels.
@@ -53,28 +57,56 @@ export interface ViewManagerConfig {
 }
 
 /**
+ * Dependencies for ViewManager.
+ */
+export interface ViewManagerDeps {
+  /** Window manager for the main window */
+  readonly windowManager: WindowManager;
+  /** Window layer for accessing raw window */
+  readonly windowLayer: WindowLayerInternal;
+  /** View layer for view operations */
+  readonly viewLayer: ViewLayer;
+  /** Session layer for session operations */
+  readonly sessionLayer: SessionLayer;
+  /** Configuration */
+  readonly config: ViewManagerConfig;
+  /** Logger */
+  readonly logger: Logger;
+}
+
+/**
+ * Workspace state tracking.
+ */
+interface WorkspaceState {
+  /** Handle to the view */
+  handle: ViewHandle;
+  /** Handle to the session */
+  sessionHandle: SessionHandle;
+  /** URL to load (stored for lazy loading) */
+  url: string;
+  /** Whether URL has been loaded */
+  urlLoaded: boolean;
+  /** Partition name for cleanup */
+  partitionName: string;
+}
+
+/**
  * Manages WebContentsViews for the application.
  * Implements the IViewManager interface.
  */
 export class ViewManager implements IViewManager {
   private readonly windowManager: WindowManager;
-  private readonly uiView: WebContentsView;
+  private readonly windowLayer: WindowLayerInternal;
+  private readonly viewLayer: ViewLayer;
+  private readonly sessionLayer: SessionLayer;
+  private readonly uiViewHandle: ViewHandle;
   private readonly shortcutController: ShortcutController;
   private codeServerPort: number;
+  private readonly windowHandle: WindowHandle;
   /**
-   * Map of workspace paths to their WebContentsViews.
-   *
-   * Note: Uses `string` instead of branded `WorkspacePath` type because:
-   * 1. Paths come from various sources (IPC payloads, providers, app state)
-   * 2. Using WorkspacePath would require type guards at every entry point
-   * 3. The validation happens at the IPC boundary, so paths here are already validated
+   * Map of workspace paths to their state.
    */
-  private readonly workspaceViews: Map<string, WebContentsView> = new Map();
-  /**
-   * Map of workspace paths to their code-server URLs.
-   * URLs are stored during createWorkspaceView and loaded during first activation.
-   */
-  private readonly workspaceUrls: Map<string, string> = new Map();
+  private readonly workspaceStates: Map<string, WorkspaceState> = new Map();
   private activeWorkspacePath: string | null = null;
   /**
    * Tracks which workspace view is currently attached to the contentView.
@@ -94,16 +126,6 @@ export class ViewManager implements IViewManager {
    */
   private readonly workspaceChangeCallbacks: Set<(path: string | null) => void> = new Set();
   /**
-   * Tracks which workspaces have had their URL loaded.
-   * Used to ensure URL is only loaded on first activation (lazy loading).
-   */
-  private readonly loadedWorkspaces: Set<string> = new Set();
-  /**
-   * Map of workspace paths to their Electron partition names.
-   * Used for session isolation cleanup on workspace removal.
-   */
-  private readonly workspacePartitions: Map<string, string> = new Map();
-  /**
    * Reentrant guard to prevent concurrent workspace changes.
    */
   private isChangingWorkspace = false;
@@ -120,17 +142,20 @@ export class ViewManager implements IViewManager {
   private readonly loadingChangeCallbacks: Set<LoadingChangeCallback> = new Set();
 
   private constructor(
-    windowManager: WindowManager,
-    codeServerPort: number,
-    uiView: WebContentsView,
-    shortcutController: ShortcutController,
-    logger: Logger
+    deps: ViewManagerDeps,
+    uiViewHandle: ViewHandle,
+    windowHandle: WindowHandle,
+    shortcutController: ShortcutController
   ) {
-    this.windowManager = windowManager;
-    this.uiView = uiView;
+    this.windowManager = deps.windowManager;
+    this.windowLayer = deps.windowLayer;
+    this.viewLayer = deps.viewLayer;
+    this.sessionLayer = deps.sessionLayer;
+    this.uiViewHandle = uiViewHandle;
+    this.windowHandle = windowHandle;
     this.shortcutController = shortcutController;
-    this.codeServerPort = codeServerPort;
-    this.logger = logger;
+    this.codeServerPort = deps.config.codeServerPort;
+    this.logger = deps.logger;
 
     // Subscribe to resize events
     this.unsubscribeResize = this.windowManager.onResize(() => {
@@ -141,18 +166,14 @@ export class ViewManager implements IViewManager {
   /**
    * Creates a new ViewManager with a UI layer view.
    *
-   * @param windowManager - The WindowManager instance
-   * @param config - Configuration options
-   * @param logger - Logger for [view] scope
+   * @param deps - Dependencies
    * @returns A new ViewManager instance
    */
-  static create(
-    windowManager: WindowManager,
-    config: ViewManagerConfig,
-    logger: Logger
-  ): ViewManager {
+  static create(deps: ViewManagerDeps): ViewManager {
+    const { windowManager, windowLayer, viewLayer, config } = deps;
+
     // Create UI layer with security settings
-    const uiView = new WebContentsView({
+    const uiViewHandle = viewLayer.createView({
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -162,42 +183,42 @@ export class ViewManager implements IViewManager {
     });
 
     // Set transparent background for UI layer
-    uiView.setBackgroundColor("#00000000");
+    viewLayer.setBackgroundColor(uiViewHandle, "#00000000");
+
+    // Get window handle
+    const windowHandle = windowManager.getWindowHandle();
 
     // Add UI layer to window
-    windowManager.getWindow().contentView.addChildView(uiView);
+    viewLayer.attachToWindow(uiViewHandle, windowHandle);
 
     // Use a holder object to break the circular dependency:
     // ShortcutController needs ViewManager methods, ViewManager needs ShortcutController
     const viewManagerHolder: { instance: ViewManager | null } = { instance: null };
 
+    // Get raw window for ShortcutController (internal API)
+    const rawWindow = windowLayer._getRawWindow(windowHandle);
+
     // Create ShortcutController with deps that reference the holder
-    const shortcutController = new ShortcutController(windowManager.getWindow(), {
+    const shortcutController = new ShortcutController(rawWindow, {
       focusUI: () => viewManagerHolder.instance?.focusUI(),
       getUIWebContents: () => viewManagerHolder.instance?.getUIWebContents() ?? null,
       setMode: (mode) => viewManagerHolder.instance?.setMode(mode),
       getMode: () => viewManagerHolder.instance?.getMode() ?? "workspace",
       // Shortcut key callback - sends IPC event to renderer
       onShortcut: (key) => {
-        const webContents = viewManagerHolder.instance?.getUIWebContents();
-        if (webContents && !webContents.isDestroyed()) {
-          webContents.send(ApiIpcChannels.SHORTCUT_KEY, key);
-        }
+        viewManagerHolder.instance?.sendToUI(ApiIpcChannels.SHORTCUT_KEY, key);
       },
+      logger: deps.logger,
     });
 
-    const viewManager = new ViewManager(
-      windowManager,
-      config.codeServerPort,
-      uiView,
-      shortcutController,
-      logger
-    );
+    const viewManager = new ViewManager(deps, uiViewHandle, windowHandle, shortcutController);
     viewManagerHolder.instance = viewManager;
 
-    // Register UI view with shortcut controller for keyboard shortcuts
-    // (Alt+X activation and action keys in shortcut mode)
-    shortcutController.registerView(uiView.webContents);
+    // Register UI view's webContents with shortcut controller for keyboard shortcuts
+    const uiWebContents = viewManager.getUIWebContents();
+    if (uiWebContents) {
+      shortcutController.registerView(uiWebContents);
+    }
 
     // Don't call updateBounds() here - let the resize event from maximize() trigger it.
     // On Linux, maximize() is async and bounds aren't available immediately.
@@ -206,21 +227,34 @@ export class ViewManager implements IViewManager {
   }
 
   /**
-   * Returns the UI layer WebContentsView.
+   * Returns the UI layer view handle.
    */
-  getUIView(): WebContentsView {
-    return this.uiView;
+  getUIViewHandle(): ViewHandle {
+    return this.uiViewHandle;
   }
 
   /**
    * Returns the UI layer WebContents for IPC communication.
-   * Used by ShortcutController to send events to the UI.
+   * Returns null if the view is destroyed.
+   *
+   * @deprecated Use sendToUI() for IPC communication when possible.
    */
   getUIWebContents(): WebContents | null {
-    if (this.uiView.webContents.isDestroyed()) {
-      return null;
+    return this.viewLayer.getWebContents(this.uiViewHandle);
+  }
+
+  /**
+   * Sends an IPC message to the UI layer.
+   *
+   * @param channel - IPC channel name
+   * @param args - Arguments to send
+   */
+  sendToUI(channel: string, ...args: unknown[]): void {
+    try {
+      this.viewLayer.send(this.uiViewHandle, channel, ...args);
+    } catch {
+      // Ignore errors - view may be destroyed
     }
-    return this.uiView.webContents;
   }
 
   /**
@@ -231,26 +265,37 @@ export class ViewManager implements IViewManager {
    * @param projectPath - Absolute path to the project directory (for partition naming)
    * @param isNew - If true, marks workspace as loading until OpenCode client attaches.
    *                Defaults to false (existing workspaces loaded on startup skip loading state).
-   * @returns The created WebContentsView
+   * @returns Handle to the created view
    */
   createWorkspaceView(
     workspacePath: string,
     url: string,
     projectPath: string,
     isNew = false
-  ): WebContentsView {
+  ): ViewHandle {
     // Generate partition name for session isolation
     // Format: persist:<projectDirName>/<workspaceName>
     // Using persist: prefix to enable persistent storage across app restarts
     const workspaceName = basename(workspacePath) as WorkspaceName;
     const partitionName = `persist:${projectDirName(projectPath)}/${workspaceName}`;
 
-    // Store partition name for later cleanup
-    this.workspacePartitions.set(workspacePath, partitionName);
+    // Get or create session for this partition
+    const sessionHandle = this.sessionLayer.fromPartition(partitionName);
+
+    // Configure permission handler for this session
+    this.sessionLayer.setPermissionRequestHandler(sessionHandle, (permission) => {
+      // Allow clipboard and microphone access, deny everything else
+      // Note: "media" permission covers both microphone and camera via getUserMedia()
+      return (
+        permission === "clipboard-read" ||
+        permission === "clipboard-sanitized-write" ||
+        permission === "media"
+      );
+    });
 
     // Create workspace view with security settings and partition for session isolation
     // Note: No preload script - keyboard capture is handled via main-process before-input-event
-    const view = new WebContentsView({
+    const viewHandle = this.viewLayer.createView({
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -260,13 +305,13 @@ export class ViewManager implements IViewManager {
     });
 
     // Set dark background to prevent white flash while VS Code loads
-    view.setBackgroundColor(VIEW_BACKGROUND_COLOR);
+    this.viewLayer.setBackgroundColor(viewHandle, VIEW_BACKGROUND_COLOR);
 
     // Configure window open handler to open external URLs
-    view.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
-      openExternal(targetUrl).catch((error: unknown) => {
+    this.viewLayer.setWindowOpenHandler(viewHandle, (details: WindowOpenDetails) => {
+      openExternal(details.url).catch((error: unknown) => {
         this.logger.warn("Failed to open external URL", {
-          url: targetUrl,
+          url: details.url,
           error: getErrorMessage(error),
         });
       });
@@ -274,42 +319,39 @@ export class ViewManager implements IViewManager {
     });
 
     // Configure navigation handler to prevent navigation away from code-server
-    view.webContents.on("will-navigate", (event, navigationUrl) => {
+    this.viewLayer.onWillNavigate(viewHandle, (navigationUrl) => {
       const codeServerOrigin = `http://localhost:${this.codeServerPort}`;
       if (!navigationUrl.startsWith(codeServerOrigin)) {
-        event.preventDefault();
         openExternal(navigationUrl).catch((error: unknown) => {
           this.logger.warn("Failed to open external URL", {
             url: navigationUrl,
             error: getErrorMessage(error),
           });
         });
+        return false; // Prevent navigation to external URLs
       }
+      return true; // Allow navigation within code-server
     });
 
-    // Configure permission handler
-    view.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
-      // Allow clipboard and microphone access, deny everything else
-      // Note: "media" permission covers both microphone and camera via getUserMedia()
-      if (
-        permission === "clipboard-read" ||
-        permission === "clipboard-sanitized-write" ||
-        permission === "media"
-      ) {
-        callback(true);
-      } else {
-        callback(false);
-      }
+    // Store workspace state
+    this.workspaceStates.set(workspacePath, {
+      handle: viewHandle,
+      sessionHandle,
+      url,
+      urlLoaded: false,
+      partitionName,
     });
 
-    // Store URL for lazy loading during first activation (NOT loaded now)
-    this.workspaceUrls.set(workspacePath, url);
-
-    // Store in map (view is NOT attached to contentView yet - detached by default)
-    this.workspaceViews.set(workspacePath, view);
-
-    // Register with shortcut controller for Alt+X detection (will work when view becomes active)
-    this.shortcutController.registerView(view.webContents);
+    // Register with shortcut controller for Alt+X detection
+    const webContents = this.getWorkspaceWebContents(viewHandle);
+    if (webContents) {
+      this.shortcutController.registerView(webContents);
+    } else {
+      this.logger.warn("Failed to register workspace view with ShortcutController", {
+        workspace: workspaceName,
+        viewId: viewHandle.id,
+      });
+    }
 
     // Only mark as loading for newly created workspaces (not existing ones loaded on startup)
     if (isNew) {
@@ -321,12 +363,12 @@ export class ViewManager implements IViewManager {
       this.notifyLoadingChange(workspacePath, true);
     }
 
-    // Note: No addChildView() - view starts detached
+    // Note: No attachToWindow() - view starts detached
     // Note: No loadURL() - URL is loaded on first activation
-    // Note: No updateBounds() - detached views don't need bounds
+    // Note: No setBounds() - detached views don't need bounds
 
     this.logger.debug("View created", { workspace: workspaceName });
-    return view;
+    return viewHandle;
   }
 
   /**
@@ -340,22 +382,16 @@ export class ViewManager implements IViewManager {
    */
   async destroyWorkspaceView(workspacePath: string): Promise<void> {
     // Idempotent: early return if workspace not in maps
-    if (!this.workspaceViews.has(workspacePath)) {
+    const state = this.workspaceStates.get(workspacePath);
+    if (!state) {
       return;
     }
 
-    const view = this.workspaceViews.get(workspacePath)!;
     const workspaceName = basename(workspacePath);
-
-    // Save partition name before removing from map (needed for storage clearing)
-    const partitionName = this.workspacePartitions.get(workspacePath);
 
     // Remove from maps FIRST to prevent re-entry during async operations
     // This makes the operation idempotent even if called concurrently
-    this.workspaceViews.delete(workspacePath);
-    this.workspaceUrls.delete(workspacePath);
-    this.loadedWorkspaces.delete(workspacePath);
-    this.workspacePartitions.delete(workspacePath);
+    this.workspaceStates.delete(workspacePath);
 
     // Clean up loading state
     const timeout = this.loadingWorkspaces.get(workspacePath);
@@ -367,8 +403,9 @@ export class ViewManager implements IViewManager {
 
     // Unregister from shortcut controller (safe even if view is destroyed)
     try {
-      if (!view.webContents.isDestroyed()) {
-        this.shortcutController.unregisterView(view.webContents);
+      const webContents = this.getWorkspaceWebContents(state.handle);
+      if (webContents) {
+        this.shortcutController.unregisterView(webContents);
       }
     } catch {
       // Ignore errors - view may be in inconsistent state
@@ -379,67 +416,61 @@ export class ViewManager implements IViewManager {
       this.setActiveWorkspace(null, false);
     }
 
-    // If this was the attached workspace, clear it and detach from window
+    // If this was the attached workspace, clear it
     if (this.attachedWorkspacePath === workspacePath) {
       this.attachedWorkspacePath = null;
     }
 
     try {
-      // Remove from window only if window is not destroyed
-      // Wrap in try-catch - view might already be removed
-      const window = this.windowManager.getWindow();
-      if (!window.isDestroyed()) {
-        try {
-          window.contentView.removeChildView(view);
-        } catch {
-          // View might already be removed - ignore
-        }
+      // Detach from window if attached
+      try {
+        this.viewLayer.detachFromWindow(state.handle);
+      } catch {
+        // View might already be detached - ignore
       }
 
       // Navigate to about:blank before closing (to release resources)
-      // Only if webContents is not already destroyed
-      if (!view.webContents.isDestroyed()) {
+      try {
         // Create a timeout promise that resolves (not rejects) after NAVIGATION_TIMEOUT_MS
         const timeoutPromise = new Promise<void>((resolve) => {
           setTimeout(resolve, NAVIGATION_TIMEOUT_MS);
         });
 
         // Race navigation against timeout - both resolve, so no unhandled rejections
-        await Promise.race([view.webContents.loadURL("about:blank"), timeoutPromise]);
+        await Promise.race([this.viewLayer.loadURL(state.handle, "about:blank"), timeoutPromise]);
+      } catch {
+        // Navigation failed - continue with cleanup
+      }
 
-        // Close webContents after navigation (or timeout)
-        // Re-check isDestroyed() since navigation might have completed or view might have been destroyed
-        if (!view.webContents.isDestroyed()) {
-          view.webContents.close();
-        }
+      // Destroy the view
+      try {
+        this.viewLayer.destroy(state.handle);
+      } catch {
+        // View might already be destroyed - ignore
       }
 
       // Clear partition storage (best-effort - log errors and continue)
-      if (partitionName) {
-        try {
-          const sess = session.fromPartition(partitionName);
-          await sess.clearStorageData();
-        } catch {
-          // Intentional empty catch: Best-effort cleanup - storage clearing may fail
-          // if session is in use or already cleared. We continue regardless.
-        }
+      try {
+        await this.sessionLayer.clearStorageData(state.sessionHandle);
+      } catch {
+        // Intentional empty catch: Best-effort cleanup - storage clearing may fail
+        // if session is in use or already cleared. We continue regardless.
       }
     } catch {
       // Ignore errors during cleanup - view may be in an inconsistent state
-      // This can happen when the view or its webContents is already destroyed
     }
 
     this.logger.debug("View destroyed", { workspace: workspaceName });
   }
 
   /**
-   * Gets a workspace view by path.
+   * Gets a workspace view handle by path.
    *
    * @param workspacePath - Absolute path to the workspace directory
-   * @returns The WebContentsView or undefined if not found
+   * @returns The ViewHandle or undefined if not found
    */
-  getWorkspaceView(workspacePath: string): WebContentsView | undefined {
-    return this.workspaceViews.get(workspacePath);
+  getWorkspaceView(workspacePath: string): ViewHandle | undefined {
+    return this.workspaceStates.get(workspacePath)?.handle;
   }
 
   /**
@@ -451,7 +482,7 @@ export class ViewManager implements IViewManager {
    */
   updateBounds(): void {
     // Guard: skip if window is destroyed (happens during app shutdown)
-    if (this.windowManager.getWindow().isDestroyed()) {
+    if (this.windowLayer.isDestroyed(this.windowHandle)) {
       return;
     }
 
@@ -462,7 +493,7 @@ export class ViewManager implements IViewManager {
     const height = Math.max(bounds.height, MIN_HEIGHT);
 
     // UI layer: full window (so dialogs can overlay everything)
-    this.uiView.setBounds({
+    this.viewLayer.setBounds(this.uiViewHandle, {
       x: 0,
       y: 0,
       width,
@@ -471,9 +502,9 @@ export class ViewManager implements IViewManager {
 
     // Only update active workspace bounds (O(1) - inactive views are detached)
     if (this.activeWorkspacePath !== null) {
-      const activeView = this.workspaceViews.get(this.activeWorkspacePath);
-      if (activeView) {
-        activeView.setBounds({
+      const state = this.workspaceStates.get(this.activeWorkspacePath);
+      if (state) {
+        this.viewLayer.setBounds(state.handle, {
           x: SIDEBAR_MINIMIZED_WIDTH,
           y: 0,
           width: width - SIDEBAR_MINIMIZED_WIDTH,
@@ -490,22 +521,20 @@ export class ViewManager implements IViewManager {
    * @param workspacePath - Path to the workspace
    */
   private loadViewUrl(workspacePath: string): void {
+    const state = this.workspaceStates.get(workspacePath);
+    if (!state) return;
+
     // Skip if already loaded (ensures URL is only loaded on first activation)
-    if (this.loadedWorkspaces.has(workspacePath)) return;
-
-    const view = this.workspaceViews.get(workspacePath);
-    const url = this.workspaceUrls.get(workspacePath);
-
-    if (!view || !url) return;
+    if (state.urlLoaded) return;
 
     // Mark as loaded first to prevent re-entry
-    this.loadedWorkspaces.add(workspacePath);
+    state.urlLoaded = true;
 
     const workspaceName = basename(workspacePath);
     this.logger.debug("Loading URL", { workspace: workspaceName });
 
-    // Load the URL
-    void view.webContents.loadURL(url);
+    // Load the URL (fire-and-forget)
+    void this.viewLayer.loadURL(state.handle, state.url);
   }
 
   /**
@@ -515,13 +544,12 @@ export class ViewManager implements IViewManager {
    * @param workspacePath - Path to the workspace
    */
   private attachView(workspacePath: string): void {
-    const view = this.workspaceViews.get(workspacePath);
-    if (!view) return;
+    const state = this.workspaceStates.get(workspacePath);
+    if (!state) return;
 
     try {
-      const window = this.windowManager.getWindow();
-      if (!window.isDestroyed()) {
-        window.contentView.addChildView(view);
+      if (!this.windowLayer.isDestroyed(this.windowHandle)) {
+        this.viewLayer.attachToWindow(state.handle, this.windowHandle);
         this.attachedWorkspacePath = workspacePath;
         const workspaceName = basename(workspacePath);
         this.logger.debug("View attached", { workspace: workspaceName });
@@ -538,17 +566,14 @@ export class ViewManager implements IViewManager {
    * @param workspacePath - Path to the workspace
    */
   private detachView(workspacePath: string): void {
-    const view = this.workspaceViews.get(workspacePath);
-    if (!view) return;
+    const state = this.workspaceStates.get(workspacePath);
+    if (!state) return;
 
     const workspaceName = basename(workspacePath);
 
     try {
-      const window = this.windowManager.getWindow();
-      if (!window.isDestroyed()) {
-        window.contentView.removeChildView(view);
-        this.logger.debug("View detached", { workspace: workspaceName });
-      }
+      this.viewLayer.detachFromWindow(state.handle);
+      this.logger.debug("View detached", { workspace: workspaceName });
     } catch {
       // Ignore errors during detach - window may be closing
     }
@@ -606,9 +631,13 @@ export class ViewManager implements IViewManager {
       // since setMode is idempotent and won't re-apply if mode hasn't changed.
       if (this.mode === "dialog" || this.mode === "shortcut" || this.mode === "hover") {
         try {
-          const window = this.windowManager.getWindow();
-          if (!window.isDestroyed()) {
-            window.contentView.addChildView(this.uiView);
+          if (!this.windowLayer.isDestroyed(this.windowHandle)) {
+            // Re-attach UI view to move it to top
+            this.viewLayer.attachToWindow(this.uiViewHandle, this.windowHandle);
+            // In shortcut mode, restore focus to UI layer (lost during re-attach)
+            if (this.mode === "shortcut") {
+              this.focusUI();
+            }
           }
         } catch {
           // Ignore errors during z-order change - window may be closing
@@ -618,9 +647,19 @@ export class ViewManager implements IViewManager {
       this.updateBounds();
 
       // Focus after everything is set up
-      if (focus && workspacePath) {
-        const view = this.workspaceViews.get(workspacePath);
-        view?.webContents.focus();
+      // But NOT in shortcut mode - UI layer needs to keep focus for Alt key detection
+      const willFocus = focus && workspacePath !== null && this.mode !== "shortcut";
+      this.logger.debug("Focus decision", {
+        focus,
+        workspacePath: workspacePath ? basename(workspacePath) : null,
+        mode: this.mode,
+        willFocus,
+      });
+      if (willFocus) {
+        const state = this.workspaceStates.get(workspacePath);
+        if (state) {
+          this.viewLayer.focus(state.handle);
+        }
       }
 
       // Notify subscribers of workspace change
@@ -658,9 +697,9 @@ export class ViewManager implements IViewManager {
       return;
     }
 
-    const view = this.workspaceViews.get(this.activeWorkspacePath);
-    if (view) {
-      view.webContents.focus();
+    const state = this.workspaceStates.get(this.activeWorkspacePath);
+    if (state) {
+      this.viewLayer.focus(state.handle);
     }
   }
 
@@ -668,7 +707,7 @@ export class ViewManager implements IViewManager {
    * Focuses the UI layer view.
    */
   focusUI(): void {
-    this.uiView.webContents.focus();
+    this.viewLayer.focus(this.uiViewHandle);
   }
 
   /**
@@ -692,31 +731,27 @@ export class ViewManager implements IViewManager {
     this.mode = newMode;
 
     try {
-      const window = this.windowManager.getWindow();
-      if (window.isDestroyed()) return;
-
-      const contentView = window.contentView;
+      if (this.windowLayer.isDestroyed(this.windowHandle)) return;
 
       switch (newMode) {
         case "workspace":
-          // Move UI to bottom (index 0 = behind workspaces)
-          contentView.addChildView(this.uiView, 0);
+          // Move UI to bottom (index 0) - workspace on top
+          this.viewLayer.attachToWindow(this.uiViewHandle, this.windowHandle, 0);
           // Focus the active workspace
           this.focusActiveWorkspace();
           break;
 
         case "shortcut":
-          // Move UI to top so overlay is visible above workspace views
-          contentView.addChildView(this.uiView);
-          // Focus UI layer so it receives keyboard events (including Alt release)
-          // UI layer is always attached (never detached), so it reliably receives before-input-event
+          // Move UI to top (no index = append to top)
+          this.viewLayer.attachToWindow(this.uiViewHandle, this.windowHandle);
+          // Focus UI layer so it receives keyboard events
           this.focusUI();
           break;
 
         case "hover":
         case "dialog":
-          // Move UI to top (adding existing child moves it to end = top)
-          contentView.addChildView(this.uiView);
+          // Move UI to top (no index = append to top)
+          this.viewLayer.attachToWindow(this.uiViewHandle, this.windowHandle);
           // Do NOT change focus - hover/dialog component will manage focus
           break;
 
@@ -819,10 +854,28 @@ export class ViewManager implements IViewManager {
     // If this workspace is active, attach the view and focus it
     if (this.activeWorkspacePath === workspacePath) {
       this.attachView(workspacePath);
+
+      // Maintain z-order if in dialog, shortcut, or hover mode
+      // (UI must stay on top of workspace views)
+      if (this.mode === "dialog" || this.mode === "shortcut" || this.mode === "hover") {
+        try {
+          if (!this.windowLayer.isDestroyed(this.windowHandle)) {
+            this.viewLayer.attachToWindow(this.uiViewHandle, this.windowHandle);
+            // Restore focus to UI layer (may have been lost during re-attach)
+            // Dialog's focus trap will restore focus to the correct element
+            this.focusUI();
+          }
+        } catch {
+          // Ignore errors - window may be closing
+        }
+      }
+
       // Only focus if not in dialog mode (native dialog may be open)
       if (this.mode !== "dialog") {
-        const view = this.workspaceViews.get(workspacePath);
-        view?.webContents.focus();
+        const state = this.workspaceStates.get(workspacePath);
+        if (state) {
+          this.viewLayer.focus(state.handle);
+        }
       }
     }
 
@@ -869,7 +922,7 @@ export class ViewManager implements IViewManager {
    * when the user navigates to it. The view remains detached (no GPU usage)
    * until setActiveWorkspace() is called.
    *
-   * Idempotent: delegates to loadViewUrl() which checks loadedWorkspaces Set.
+   * Idempotent: delegates to loadViewUrl() which checks urlLoaded flag.
    *
    * @param workspacePath - Absolute path to the workspace directory
    */
@@ -901,17 +954,23 @@ export class ViewManager implements IViewManager {
     this.shortcutController.dispose();
 
     // Destroy all workspace views (fire-and-forget - app is shutting down)
-    for (const path of this.workspaceViews.keys()) {
+    for (const path of this.workspaceStates.keys()) {
       void this.destroyWorkspaceView(path);
     }
 
-    // Close UI view only if not already destroyed (can happen during window close)
+    // Destroy UI view
     try {
-      if (!this.uiView.webContents.isDestroyed()) {
-        this.uiView.webContents.close();
-      }
+      this.viewLayer.destroy(this.uiViewHandle);
     } catch {
       // Ignore errors during cleanup - view may be in an inconsistent state
     }
+  }
+
+  /**
+   * Gets the WebContents for a workspace view handle.
+   * This is a helper for ShortcutController registration.
+   */
+  private getWorkspaceWebContents(handle: ViewHandle): WebContents | null {
+    return this.viewLayer.getWebContents(handle);
   }
 }

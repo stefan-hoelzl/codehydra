@@ -93,8 +93,16 @@ export function createBehavioralWindowLayer(): BehavioralWindowLayer {
   function createContentView(): ContentView {
     const children: unknown[] = [];
     return {
-      addChildView(view: unknown): void {
-        if (!children.includes(view)) {
+      addChildView(view: unknown, index?: number): void {
+        // Remove if already present (for re-ordering)
+        const existingIndex = children.indexOf(view);
+        if (existingIndex !== -1) {
+          children.splice(existingIndex, 1);
+        }
+        // Add at specified index or append to end
+        if (index !== undefined && index >= 0 && index <= children.length) {
+          children.splice(index, 0, view);
+        } else {
           children.push(view);
         }
       },
@@ -298,6 +306,19 @@ export function createBehavioralWindowLayer(): BehavioralWindowLayer {
     untrackAttachedView(handle: WindowHandle, viewHandle: ViewHandle): void {
       const window = getWindow(handle);
       window.attachedViews.delete(viewHandle.id);
+    },
+
+    async dispose(): Promise<void> {
+      // Destroy all windows without checking for attached views
+      for (const window of windows.values()) {
+        window.isDestroyed = true;
+      }
+      windows.clear();
+      contentViews.clear();
+      resizeCallbacks.clear();
+      maximizeCallbacks.clear();
+      unmaximizeCallbacks.clear();
+      closeCallbacks.clear();
     },
 
     // Test helper methods

@@ -42,7 +42,7 @@ export type Unsubscribe = () => void;
  * Provides methods to add/remove child views.
  */
 export interface ContentView {
-  addChildView(view: unknown): void;
+  addChildView(view: unknown, index?: number): void;
   removeChildView(view: unknown): void;
   readonly children: readonly unknown[];
 }
@@ -239,6 +239,13 @@ export interface WindowLayer {
    * @throws ShellError with code WINDOW_NOT_FOUND if handle is invalid
    */
   untrackAttachedView(handle: WindowHandle, viewHandle: ViewHandle): void;
+
+  /**
+   * Dispose of all resources.
+   * Unlike destroyAll(), this does not throw if views are attached.
+   * Used during app shutdown when views have already been disposed.
+   */
+  dispose(): Promise<void>;
 }
 
 /**
@@ -481,6 +488,22 @@ export class DefaultWindowLayer implements WindowLayerInternal {
   _getRawWindow(handle: WindowHandle): BaseWindow {
     const state = this.getWindowState(handle);
     return state.window;
+  }
+
+  async dispose(): Promise<void> {
+    // Destroy all windows without checking for attached views
+    // Used during app shutdown when views have already been disposed
+    for (const [id, state] of this.windows) {
+      try {
+        if (!state.window.isDestroyed()) {
+          state.window.destroy();
+        }
+        this.logger.debug("Window destroyed", { id });
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    this.windows.clear();
   }
 
   private getWindowState(handle: WindowHandle): WindowState {

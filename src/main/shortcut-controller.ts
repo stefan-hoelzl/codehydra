@@ -15,6 +15,7 @@ import type { WebContents, Event as ElectronEvent, Input, BaseWindow } from "ele
 import type { UIMode } from "../shared/ipc";
 import type { ShortcutKey } from "../shared/shortcuts";
 import { isShortcutKey } from "../shared/shortcuts";
+import type { Logger } from "../services/logging";
 
 type ShortcutActivationState = "NORMAL" | "ALT_WAITING";
 
@@ -63,6 +64,8 @@ interface ShortcutControllerDeps {
   getMode: () => UIMode;
   /** Callback when a shortcut key is pressed in shortcut mode */
   onShortcut?: (key: ShortcutKey) => void;
+  /** Logger for debugging */
+  logger?: Logger;
 }
 
 /**
@@ -84,9 +87,11 @@ export class ShortcutController {
   private readonly deps: ShortcutControllerDeps;
   private readonly window: BaseWindow;
   private readonly boundHandleWindowBlur: () => void;
+  private readonly logger: Logger | undefined;
   constructor(window: BaseWindow, deps: ShortcutControllerDeps) {
     this.window = window;
     this.deps = deps;
+    this.logger = deps.logger;
     this.boundHandleWindowBlur = this.handleWindowBlur.bind(this);
     this.window.on("blur", this.boundHandleWindowBlur);
   }
@@ -158,10 +163,23 @@ export class ShortcutController {
    */
   private handleInput(_event: ElectronEvent, input: Input): void {
     const isAltKey = input.key === SHORTCUT_MODIFIER_KEY;
+    const currentMode = this.getCurrentMode();
+
+    // Log all input events for debugging
+    this.logger?.debug("Input received", {
+      type: input.type,
+      key: input.key,
+      isAutoRepeat: input.isAutoRepeat,
+      state: this.state,
+      mode: currentMode,
+    });
 
     // Handle Alt keyUp: exit shortcut mode
     if (input.type === "keyUp" && isAltKey) {
-      const currentMode = this.getCurrentMode();
+      this.logger?.debug("Alt keyUp detected", {
+        mode: currentMode,
+        willExitShortcutMode: currentMode === "shortcut",
+      });
       if (currentMode === "shortcut") {
         if (this.deps.setMode) {
           this.deps.setMode("workspace");
@@ -178,7 +196,6 @@ export class ShortcutController {
     if (input.isAutoRepeat) return;
 
     const isActivationKey = input.key.toLowerCase() === SHORTCUT_ACTIVATION_KEY;
-    const currentMode = this.getCurrentMode();
 
     // Shortcut key detection in shortcut mode
     // NOTE: This runs before Alt+X detection because shortcut mode is already active

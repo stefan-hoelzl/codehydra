@@ -3,8 +3,9 @@
  * Allows mocking in handler tests.
  */
 
-import type { WebContentsView } from "electron";
+import type { WebContents } from "electron";
 import type { UIMode, UIModeChangedEvent } from "../../shared/ipc";
+import type { ViewHandle } from "../../services/shell/types";
 
 /**
  * Timeout for workspace loading in milliseconds.
@@ -30,9 +31,25 @@ export type LoadingChangeCallback = (path: string, loading: boolean) => void;
  */
 export interface IViewManager {
   /**
-   * Returns the UI layer WebContentsView.
+   * Returns the UI layer view handle.
    */
-  getUIView(): WebContentsView;
+  getUIViewHandle(): ViewHandle;
+
+  /**
+   * Returns the UI layer WebContents for IPC communication.
+   * Returns null if the view is destroyed.
+   *
+   * @deprecated Use sendToUI() for IPC communication when possible.
+   */
+  getUIWebContents(): WebContents | null;
+
+  /**
+   * Sends an IPC message to the UI layer.
+   *
+   * @param channel - IPC channel name
+   * @param args - Arguments to send
+   */
+  sendToUI(channel: string, ...args: unknown[]): void;
 
   /**
    * Creates a new workspace view.
@@ -49,14 +66,14 @@ export interface IViewManager {
    * @param projectPath - Absolute path to the project directory (for partition naming)
    * @param isNew - If true, marks workspace as loading until OpenCode client attaches.
    *                Defaults to false (existing workspaces loaded on startup skip loading state).
-   * @returns The created WebContentsView (detached, URL not loaded)
+   * @returns Handle to the created view (detached, URL not loaded)
    */
   createWorkspaceView(
     workspacePath: string,
     url: string,
     projectPath: string,
     isNew?: boolean
-  ): WebContentsView;
+  ): ViewHandle;
 
   /**
    * Destroys a workspace view.
@@ -69,12 +86,12 @@ export interface IViewManager {
   destroyWorkspaceView(workspacePath: string): Promise<void>;
 
   /**
-   * Gets a workspace view by path.
+   * Gets a workspace view handle by path.
    *
    * @param workspacePath - Absolute path to the workspace directory
-   * @returns The WebContentsView or undefined if not found
+   * @returns The ViewHandle or undefined if not found
    */
-  getWorkspaceView(workspacePath: string): WebContentsView | undefined;
+  getWorkspaceView(workspacePath: string): ViewHandle | undefined;
 
   /**
    * Updates all view bounds (called on window resize).
