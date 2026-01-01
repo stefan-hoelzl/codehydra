@@ -1,5 +1,5 @@
 ---
-status: CLEANUP
+status: USER_TESTING
 last_updated: 2026-01-01
 reviewers: [review-arch, review-typescript, review-testing, review-docs, review-platform]
 ---

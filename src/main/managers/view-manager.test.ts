@@ -12,10 +12,9 @@ import {
 } from "../../services/shell/view.test-utils";
 import { createBehavioralSessionLayer } from "../../services/shell/session.test-utils";
 import {
-  createBehavioralWindowLayer,
-  type BehavioralWindowLayer,
+  createTestWindowLayer,
+  type TestWindowLayer,
 } from "../../services/shell/window.test-utils";
-import type { WindowLayerInternal } from "../../services/shell/window";
 import type { WindowHandle } from "../../services/shell/types";
 
 // Mock ShortcutController before imports
@@ -38,8 +37,6 @@ vi.mock("../utils/external-url", () => ({
   openExternal: mockOpenExternal,
 }));
 
-type TestWindowLayer = BehavioralWindowLayer & WindowLayerInternal;
-
 /**
  * Creates a mock WindowManager for testing.
  */
@@ -52,10 +49,15 @@ function createMockWindowManager(windowHandle: WindowHandle) {
 }
 
 /**
- * Creates a test window layer by extending the behavioral layer with _getRawWindow.
+ * Creates a test window layer with a pre-created window for ViewManager tests.
+ *
+ * This extends the shared createTestWindowLayer() with:
+ * - A pre-created window handle (ViewManager needs an existing window)
+ * - A mock _getRawWindow that returns a mock BaseWindow for ShortcutController
  */
-function createTestWindowLayer(): TestWindowLayer & { _createdWindowHandle: WindowHandle } {
-  const behavioralLayer = createBehavioralWindowLayer();
+function createViewManagerWindowLayer(): TestWindowLayer & { _createdWindowHandle: WindowHandle } {
+  const behavioralLayer = createTestWindowLayer();
+
   // Create a window to get a handle
   const windowHandle = behavioralLayer.createWindow({
     width: 1200,
@@ -64,7 +66,7 @@ function createTestWindowLayer(): TestWindowLayer & { _createdWindowHandle: Wind
     show: false,
   });
 
-  // Extend with _getRawWindow that returns a mock BaseWindow
+  // Override _getRawWindow to return a mock BaseWindow for ShortcutController
   // Use 'unknown' cast since we're mocking for tests
   const extended = Object.assign(behavioralLayer, {
     _getRawWindow: () =>
@@ -88,9 +90,7 @@ function createViewManagerDeps(): ViewManagerDeps & {
   viewLayer: BehavioralViewLayer;
   windowLayer: TestWindowLayer & { _createdWindowHandle: WindowHandle };
 } {
-  const windowLayer = createTestWindowLayer() as TestWindowLayer & {
-    _createdWindowHandle: WindowHandle;
-  };
+  const windowLayer = createViewManagerWindowLayer();
   const viewLayer = createBehavioralViewLayer();
   const sessionLayer = createBehavioralSessionLayer();
   const windowManager = createMockWindowManager(windowLayer._createdWindowHandle);

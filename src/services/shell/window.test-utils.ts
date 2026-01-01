@@ -6,7 +6,13 @@
  * requiring Electron.
  */
 
-import type { WindowLayer, WindowOptions, ContentView, Unsubscribe } from "./window";
+import type {
+  WindowLayer,
+  WindowOptions,
+  ContentView,
+  Unsubscribe,
+  WindowLayerInternal,
+} from "./window";
 import type { WindowHandle, Rectangle, ViewHandle } from "./types";
 import type { ImageHandle } from "../platform/types";
 import { ShellError } from "./errors";
@@ -377,4 +383,31 @@ export function createBehavioralWindowLayer(): BehavioralWindowLayer {
       }
     },
   };
+}
+
+/**
+ * Test window layer that extends BehavioralWindowLayer with WindowLayerInternal.
+ *
+ * This is used in manager tests where WindowLayerInternal._getRawWindow is needed
+ * for ShortcutController integration (which requires the real BaseWindow).
+ */
+export type TestWindowLayer = BehavioralWindowLayer & WindowLayerInternal;
+
+/**
+ * Creates a test window layer by extending the behavioral layer with _getRawWindow.
+ *
+ * The _getRawWindow method throws an error by default since tests shouldn't rely on
+ * the raw BaseWindow. In production, WindowManager.getWindow() uses this to return
+ * the real BaseWindow for ShortcutController.
+ *
+ * @returns A TestWindowLayer that combines BehavioralWindowLayer with WindowLayerInternal
+ */
+export function createTestWindowLayer(): TestWindowLayer {
+  const behavioralLayer = createBehavioralWindowLayer();
+  // Extend with _getRawWindow that throws (tests shouldn't use getWindow())
+  return Object.assign(behavioralLayer, {
+    _getRawWindow: () => {
+      throw new Error("_getRawWindow not available in behavioral mock");
+    },
+  }) as TestWindowLayer;
 }

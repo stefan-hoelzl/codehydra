@@ -8,26 +8,10 @@ import { SILENT_LOGGER } from "../../services/logging";
 import { createMockPlatformInfo } from "../../services/platform/platform-info.test-utils";
 import { createBehavioralImageLayer } from "../../services/platform/image.test-utils";
 import {
-  createBehavioralWindowLayer,
-  type BehavioralWindowLayer,
+  createTestWindowLayer,
+  type TestWindowLayer,
 } from "../../services/shell/window.test-utils";
-import type { WindowLayerInternal } from "../../services/shell/window";
 import type { ImageHandle } from "../../services/platform/types";
-
-type TestWindowLayer = BehavioralWindowLayer & WindowLayerInternal;
-
-/**
- * Creates a test window layer by extending the behavioral layer with _getRawWindow.
- */
-function createTestWindowLayer(): TestWindowLayer {
-  const behavioralLayer = createBehavioralWindowLayer();
-  // Extend with _getRawWindow that throws (tests shouldn't use getWindow())
-  return Object.assign(behavioralLayer, {
-    _getRawWindow: () => {
-      throw new Error("_getRawWindow not available in behavioral mock");
-    },
-  }) as TestWindowLayer;
-}
 
 /**
  * Creates WindowManager deps with behavioral mocks.

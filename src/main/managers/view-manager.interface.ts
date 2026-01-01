@@ -40,6 +40,11 @@ export interface IViewManager {
    * Returns null if the view is destroyed.
    *
    * @deprecated Use sendToUI() for IPC communication when possible.
+   *
+   * TODO(SHORTCUT_CONTROLLER_ABSTRACTION): This method exposes raw WebContents because
+   * ShortcutController requires direct access to register keyboard handlers. Once
+   * ShortcutController is abstracted behind a layer interface, this method can be removed.
+   * See planning/SHORTCUT_CONTROLLER_ABSTRACTION.md (to be created).
    */
   getUIWebContents(): WebContents | null;
 

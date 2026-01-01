@@ -807,6 +807,9 @@ async function bootstrap(): Promise<void> {
   const uiHtmlPath = `file://${nodePath.join(__dirname, "../renderer/index.html")}`;
   await viewLayer.loadURL(viewManager.getUIViewHandle(), uiHtmlPath);
 
+  // Focus UI layer so keyboard shortcuts (Alt+X) work immediately on startup
+  viewManager.focusUI();
+
   // 12. Open DevTools in development only
   // Note: DevTools not auto-opened to avoid z-order issues on Linux.
   // Use Ctrl+Shift+I to open manually when needed (opens detached).

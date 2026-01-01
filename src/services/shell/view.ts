@@ -214,6 +214,12 @@ export interface ViewLayer {
    * @internal This is exposed for ShortcutController integration only.
    * Prefer using ViewLayer methods for normal operations.
    *
+   * TODO(SHORTCUT_CONTROLLER_ABSTRACTION): This method exposes raw WebContents because
+   * ShortcutController requires direct access to register keyboard handlers on webContents.
+   * Once ShortcutController is abstracted behind a layer interface that handles keyboard
+   * registration through ViewLayer methods, this method can be removed.
+   * See planning/SHORTCUT_CONTROLLER_ABSTRACTION.md (to be created).
+   *
    * @param handle - Handle to the view
    * @returns The WebContents or null if view is destroyed
    */

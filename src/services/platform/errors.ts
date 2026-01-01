@@ -15,6 +15,7 @@ export type PlatformErrorCode =
   // Dialog errors
   | "DIALOG_CANCELLED"
   // Image errors
+  | "IMAGE_NOT_FOUND"
   | "IMAGE_LOAD_FAILED"
   // App errors
   | "APP_NOT_READY";
