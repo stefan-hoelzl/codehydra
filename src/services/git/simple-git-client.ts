@@ -268,7 +268,7 @@ export class SimpleGitClient implements IGitClient {
       async () => {
         const git = this.getGit(repoPath);
         // Use -D to force delete (handles unmerged branches)
-        await git.branch(["-d", name]);
+        await git.branch(["-D", name]);
       },
       "deleteBranch",
       repoPath,
