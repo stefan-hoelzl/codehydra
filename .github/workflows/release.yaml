@@ -111,9 +111,9 @@ jobs:
           # CodeHydra ${{ needs.check.outputs.version }}
 
           ## Bundled Versions
-          - [code-server](https://github.com/coder/code-server/releases/tag/v${CODE_SERVER}) \`${CODE_SERVER}\`
-          - [opencode](https://github.com/sst/opencode/releases/tag/v${OPENCODE}) \`${OPENCODE}\`
+          - [code-server](https://coder.com/docs/code-server): [${CODE_SERVER}](https://github.com/coder/code-server/releases/tag/v${CODE_SERVER})
+          - [opencode](https://opencode.ai): [${OPENCODE}](https://github.com/sst/opencode/releases/tag/v${OPENCODE})
 
           ## Commits
           EOF
-          git log --format="- [%h](https://github.com/${{ github.repository }}/commit/%H) %s" -20 >> $GITHUB_STEP_SUMMARY
+          git log --format="- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" -20 >> $GITHUB_STEP_SUMMARY
