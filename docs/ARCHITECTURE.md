@@ -363,6 +363,90 @@ metadata.base = config.base ?? branch ?? name
 
 Other metadata keys return their exact config value or `undefined` if not set.
 
+### Shell and Platform Layers
+
+Electron APIs are abstracted behind testable interfaces in two domains. This enables unit testing with behavioral mocks while boundary tests verify real Electron behavior.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             Main Process Components                         │
+│                                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
+│  │ WindowManager   │  │  ViewManager    │  │    BadgeManager             │  │
+│  │ ShortcutCtrl    │  │                 │  │                             │  │
+│  └────────┬────────┘  └────────┬────────┘  └─────────────┬───────────────┘  │
+│           │                    │                         │                  │
+│           │                    │                         │                  │
+└───────────┼────────────────────┼─────────────────────────┼──────────────────┘
+            │                    │                         │
+            │                    │                         │
+┌───────────▼────────────────────▼─────────────────────────▼──────────────────┐
+│                          Abstraction Layers                                 │
+│                                                                             │
+│  ┌─────────────────────────────────┐  ┌───────────────────────────────────┐ │
+│  │          Shell Layers           │  │         Platform Layers           │ │
+│  │         (services/shell/)       │  │       (services/platform/)        │ │
+│  │                                 │  │                                   │ │
+│  │  WindowLayer ───► ImageLayer ───┼──┼─► ImageLayer                      │ │
+│  │       │                         │  │   IpcLayer                        │ │
+│  │       ▼                         │  │   DialogLayer                     │ │
+│  │  ViewLayer ───► SessionLayer    │  │   AppLayer                        │ │
+│  │                                 │  │   MenuLayer                       │ │
+│  └─────────────────────────────────┘  └───────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+            │                    │                         │
+            │                    │                         │
+┌───────────▼────────────────────▼─────────────────────────▼──────────────────┐
+│                            Electron APIs                                    │
+│                                                                             │
+│  BaseWindow    WebContentsView    session    ipcMain    dialog    app       │
+│  nativeImage   Menu                                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Layer Dependency Rules:**
+
+| Rule                | Description                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Shell → Platform    | Shell layers may depend on Platform layers (e.g., WindowLayer uses ImageLayer for overlay icons) |
+| Platform → Platform | Platform layers are independent (no dependencies on each other)                                  |
+| Shell → Shell       | Shell layers may depend on each other (e.g., ViewLayer uses SessionLayer)                        |
+| Platform ↛ Shell    | Platform layers may NOT depend on Shell layers                                                   |
+
+**Handle-Based Design:**
+
+Layers return opaque handles instead of raw Electron objects:
+
+| Layer          | Returns         | Instead of        |
+| -------------- | --------------- | ----------------- |
+| `WindowLayer`  | `WindowHandle`  | `BaseWindow`      |
+| `ViewLayer`    | `ViewHandle`    | `WebContentsView` |
+| `SessionLayer` | `SessionHandle` | `Session`         |
+| `ImageLayer`   | `ImageHandle`   | `NativeImage`     |
+
+This pattern:
+
+- Prevents Electron types from leaking into manager code
+- Enables behavioral mocks that just return `{ id: "test-1", __brand: "ViewHandle" }`
+- Centralizes all Electron access in layer implementations
+
+**Boundary Tests:**
+
+Each layer has boundary tests (`*.boundary.test.ts`) that verify behavior against real Electron APIs:
+
+| Layer          | Boundary Test              |
+| -------------- | -------------------------- |
+| `IpcLayer`     | `ipc.boundary.test.ts`     |
+| `DialogLayer`  | `dialog.boundary.test.ts`  |
+| `ImageLayer`   | `image.boundary.test.ts`   |
+| `AppLayer`     | `app.boundary.test.ts`     |
+| `MenuLayer`    | `menu.boundary.test.ts`    |
+| `WindowLayer`  | `window.boundary.test.ts`  |
+| `ViewLayer`    | `view.boundary.test.ts`    |
+| `SessionLayer` | `session.boundary.test.ts` |
+
 ### Platform Abstractions Overview
 
 All external system access goes through abstraction interfaces defined in `src/services/platform/`. This architecture enables:

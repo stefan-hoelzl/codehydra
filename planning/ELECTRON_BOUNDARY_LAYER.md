@@ -767,15 +767,20 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
 
 **Goal**: Remove obsolete mocks, update all documentation, final validation.
 
-- [ ] **Step 6.1: Remove obsolete Electron mocks**
+- [x] **Step 6.1: Remove obsolete Electron mocks**
   - Search for remaining `vi.mock("electron")` calls in manager/api tests
   - Replace with behavioral layer mocks
   - Delete any unused mock factories
   - `vi.mock("electron")` should ONLY remain in layer boundary tests
   - Files: Various test files
   - Test: No `vi.mock("electron")` remains in manager/api tests
+  - **Note**: Remaining `vi.mock("electron")` uses are legitimate:
+    - `build-info.test.ts` - Tests ElectronBuildInfo (boundary implementation)
+    - `index.test.ts` - Tests wiring with ElectronBuildInfo
+    - `log-handlers.test.ts` - Uses `ipcMain.on` (fire-and-forget, not covered by IpcLayer)
+    - `preload/index.test.ts` - Preload IS the Electron boundary for renderer
 
-- [ ] **Step 6.2: Update AGENTS.md**
+- [x] **Step 6.2: Update AGENTS.md**
   - Add to External System Access Rules table:
     | External System | Required Interface | Forbidden Direct Access |
     |-----------------|-------------------|------------------------|
@@ -790,7 +795,7 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
   - Update Project Structure to document `src/services/shell/` as established pattern for visual container abstractions
   - Files: `AGENTS.md`
 
-- [ ] **Step 6.3: Update docs/PATTERNS.md**
+- [x] **Step 6.3: Update docs/PATTERNS.md**
   - Add "Shell and Platform Layer Patterns" section with:
     - How to inject layers via constructor DI
     - Example of creating a behavioral mock for tests
@@ -798,18 +803,18 @@ export function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLaye
     - Error handling pattern (ShellError, PlatformError)
   - Files: `docs/PATTERNS.md`
 
-- [ ] **Step 6.4: Update docs/ARCHITECTURE.md**
+- [x] **Step 6.4: Update docs/ARCHITECTURE.md**
   - Add component diagram showing Shell and Platform layers between Main Process Components and Electron APIs
   - Document layer dependency rules
   - Files: `docs/ARCHITECTURE.md`
 
-- [ ] **Step 6.5: Update docs/TESTING.md**
+- [x] **Step 6.5: Update docs/TESTING.md**
   - Add Shell/Platform layers to boundary interface list
   - Document xvfb setup for Electron boundary tests
   - Document platform-specific test skipping patterns
   - Files: `docs/TESTING.md`
 
-- [ ] **Step 6.6: Final validation**
+- [x] **Step 6.6: Final validation**
   - Run full test suite: `npm test`
   - Run boundary tests specifically: `npm run test:boundary`
   - Verify all tests < 50ms (integration) or acceptable time (boundary)

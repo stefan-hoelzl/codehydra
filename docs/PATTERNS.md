@@ -924,6 +924,8 @@ class MyService {
 
 **Test utils location:**
 
+All paths below are relative to `src/services/`.
+
 | Interface              | Mock Factory                       | Location                                        |
 | ---------------------- | ---------------------------------- | ----------------------------------------------- |
 | `FileSystemLayer`      | `createMockFileSystemLayer()`      | `platform/filesystem.test-utils.ts`             |
@@ -932,6 +934,173 @@ class MyService {
 | `ProcessRunner`        | `createMockProcessRunner()`        | `platform/process.test-utils.ts`                |
 | `PathProvider`         | `createMockPathProvider()`         | `platform/path-provider.test-utils.ts`          |
 | `WorkspaceLockHandler` | `createMockWorkspaceLockHandler()` | `platform/workspace-lock-handler.test-utils.ts` |
+
+### Shell and Platform Layer Patterns
+
+Electron APIs are abstracted behind testable interfaces in two domains:
+
+| Domain   | Location             | Purpose                       | Examples                                   |
+| -------- | -------------------- | ----------------------------- | ------------------------------------------ |
+| Platform | `services/platform/` | OS/runtime abstractions       | `IpcLayer`, `DialogLayer`, `ImageLayer`    |
+| Shell    | `services/shell/`    | Visual container abstractions | `WindowLayer`, `ViewLayer`, `SessionLayer` |
+
+**Dependency Rule**: Shell layers may depend on Platform layers, but not vice versa.
+
+#### Constructor Dependency Injection
+
+Managers receive layers via constructor parameters, not global imports:
+
+```typescript
+// CORRECT: Inject layers via constructor
+class ViewManager {
+  constructor(
+    private readonly viewLayer: ViewLayer,
+    private readonly sessionLayer: SessionLayer,
+    private readonly windowLayer: WindowLayer,
+    private readonly logger: Logger
+  ) {}
+}
+
+// WRONG: Import Electron directly
+import { WebContentsView } from "electron"; // ❌
+```
+
+#### Handle-Based Interface Design
+
+Layers use opaque handles to prevent leaking Electron types:
+
+```typescript
+// Interface returns handles, not Electron objects
+interface ViewLayer {
+  createView(options: ViewOptions): ViewHandle; // Returns handle
+  loadURL(handle: ViewHandle, url: string): Promise<void>;
+  destroy(handle: ViewHandle): void;
+}
+
+// Branded type prevents accidental mixing
+interface ViewHandle {
+  readonly id: string;
+  readonly __brand: "ViewHandle";
+}
+```
+
+**Benefits:**
+
+- Managers never see `WebContentsView`, `BaseWindow`, etc.
+- Mocks just return `{ id: "test-1", __brand: "ViewHandle" }`
+- All Electron access is centralized in layer implementations
+- Type safety: can't pass `WindowHandle` where `ViewHandle` expected
+
+#### Behavioral Mocks for Layers
+
+Layer mocks maintain in-memory state, not just call tracking:
+
+```typescript
+// Create behavioral mock with state inspection
+function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLayerState } {
+  const views = new Map<string, ViewState>();
+  let nextId = 1;
+
+  return {
+    createView(options) {
+      const id = `view-${nextId++}`;
+      views.set(id, {
+        url: null,
+        bounds: null,
+        attachedTo: null,
+        options,
+      });
+      return { id, __brand: "ViewHandle" };
+    },
+
+    async loadURL(handle, url) {
+      const view = views.get(handle.id);
+      if (!view) throw new ShellError("VIEW_NOT_FOUND", ...);
+      view.url = url;
+    },
+
+    destroy(handle) {
+      if (!views.delete(handle.id)) {
+        throw new ShellError("VIEW_NOT_FOUND", ...);
+      }
+    },
+
+    // State inspection for tests
+    _getState() {
+      return { views: new Map(views) };
+    },
+  };
+}
+```
+
+**Usage in tests:**
+
+```typescript
+const viewLayer = createBehavioralViewLayer();
+const viewManager = new ViewManager(viewLayer, sessionLayer, windowLayer, logger);
+
+// Act
+await viewManager.createWorkspaceView("/path/to/workspace", "http://localhost:8080");
+
+// Assert via state inspection
+expect(viewLayer._getState().views.size).toBe(1);
+```
+
+#### Error Handling Pattern
+
+Each domain has its own error class with typed codes:
+
+```typescript
+// Platform errors
+import { PlatformError } from "./errors";
+
+class DefaultIpcLayer implements IpcLayer {
+  handle(channel, handler) {
+    if (this.registeredChannels.has(channel)) {
+      throw new PlatformError(
+        "IPC_HANDLER_EXISTS",
+        `Handler already exists for channel: ${channel}`
+      );
+    }
+    // ...
+  }
+}
+
+// Shell errors include handle context
+import { ShellError } from "./errors";
+
+class DefaultViewLayer implements ViewLayer {
+  private getView(handle: ViewHandle): WebContentsView {
+    const view = this.views.get(handle.id);
+    if (!view) {
+      throw new ShellError("VIEW_NOT_FOUND", `View ${handle.id} not found`, handle.id);
+    }
+    return view;
+  }
+}
+```
+
+**Error codes:**
+
+| Domain   | Error Codes                                                                 |
+| -------- | --------------------------------------------------------------------------- |
+| Platform | `IPC_HANDLER_EXISTS`, `IPC_HANDLER_NOT_FOUND`, `DIALOG_CANCELLED`, etc.     |
+| Shell    | `WINDOW_NOT_FOUND`, `VIEW_NOT_FOUND`, `VIEW_DESTROYED`, `SESSION_NOT_FOUND` |
+
+#### Test Utils Location
+
+All paths below are relative to `src/services/`.
+
+| Interface      | Mock Factory                     | Location                        |
+| -------------- | -------------------------------- | ------------------------------- |
+| `IpcLayer`     | `createBehavioralIpcLayer()`     | `platform/ipc.test-utils.ts`    |
+| `DialogLayer`  | `createBehavioralDialogLayer()`  | `platform/dialog.test-utils.ts` |
+| `ImageLayer`   | `createBehavioralImageLayer()`   | `platform/image.test-utils.ts`  |
+| `AppLayer`     | `createBehavioralAppLayer()`     | `platform/app.test-utils.ts`    |
+| `MenuLayer`    | `createBehavioralMenuLayer()`    | `platform/menu.test-utils.ts`   |
+| `WindowLayer`  | `createBehavioralWindowLayer()`  | `shell/window.test-utils.ts`    |
+| `ViewLayer`    | `createBehavioralViewLayer()`    | `shell/view.test-utils.ts`      |
+| `SessionLayer` | `createBehavioralSessionLayer()` | `shell/session.test-utils.ts`   |
 
 ### WorkspaceLockHandler Pattern
 

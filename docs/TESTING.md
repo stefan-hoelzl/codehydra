@@ -29,7 +29,13 @@ CodeHydra uses behavior-driven testing with vitest. Tests verify **behavior** th
 
 **What to mock**: NOTHING - tests hit real Git, real filesystem, real HTTP.
 
-**Boundaries**: IGitClient, FileSystemLayer, ProcessRunner, HttpClient, PortManager, ArchiveExtractor, SdkClientFactory
+**Boundaries**:
+
+- Node.js: `FileSystemLayer`, `ProcessRunner`, `HttpClient`, `PortManager`, `ArchiveExtractor`
+- Git: `IGitClient`
+- OpenCode: `SdkClientFactory`
+- Electron Shell: `WindowLayer`, `ViewLayer`, `SessionLayer`
+- Electron Platform: `IpcLayer`, `DialogLayer`, `ImageLayer`, `AppLayer`, `MenuLayer`
 
 **Key characteristics**:
 
@@ -84,6 +90,77 @@ describe("SimpleGitClient", () => {
     await expect(client.createWorktree(testRepo.path, "feature-1", "nonexistent")).rejects.toThrow(
       GitError
     );
+  });
+});
+```
+
+### Electron Boundary Tests
+
+Electron boundary tests (Shell and Platform layers) require special handling since they need a display for window creation.
+
+**Naming Convention**: Boundary tests use the `*.boundary.test.ts` naming pattern (e.g., `window.boundary.test.ts`, `view.boundary.test.ts`). This distinguishes them from `*.integration.test.ts` files which use behavioral mocks instead of real external systems.
+
+**xvfb Setup for Linux CI:**
+
+The test suite uses programmatic xvfb setup for Linux CI environments via `src/test/setup-display.ts`:
+
+```typescript
+// Automatic virtual display setup (Linux CI only)
+// - Uses xvfb npm package (in optionalDependencies)
+// - No manual xvfb-run wrapper needed
+// - npm test just works on all platforms
+```
+
+**All test windows use `show: false`:**
+
+```typescript
+// Boundary tests create invisible windows
+const handle = windowLayer.createWindow({
+  width: 800,
+  height: 600,
+  show: false, // Never visible, even on developer machines
+});
+```
+
+**Platform-Specific Test Skipping:**
+
+Use `it.skipIf()` for tests that only work on specific platforms:
+
+```typescript
+import { platform } from "os";
+
+// macOS-only test
+it.skipIf(platform() !== "darwin")("dock.setBadge sets badge text", async () => {
+  appLayer.dock?.setBadge("42");
+  // ...
+});
+
+// Windows-only test
+it.skipIf(platform() !== "win32")("setOverlayIcon shows on taskbar", async () => {
+  windowLayer.setOverlayIcon(handle, imageHandle, "Notification");
+  // ...
+});
+
+// Linux-only test
+it.skipIf(platform() !== "linux")("uses Unity badge count", async () => {
+  // ...
+});
+```
+
+**Cleanup Requirements:**
+
+Each Electron boundary test file MUST clean up resources:
+
+```typescript
+describe("WindowLayer", () => {
+  let windowLayer: DefaultWindowLayer;
+
+  beforeEach(() => {
+    windowLayer = new DefaultWindowLayer(imageLayer, logger);
+  });
+
+  afterEach(() => {
+    windowLayer.destroyAll(); // Clean up all windows
   });
 });
 ```

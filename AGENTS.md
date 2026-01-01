@@ -79,6 +79,14 @@ All external system access MUST go through abstraction interfaces. Direct librar
 | Process spawning | `ProcessRunner`             | `execa` directly            |
 | OpenCode API     | `OpenCodeClient` (uses SDK) | Direct HTTP/SSE calls       |
 | Git operations   | `GitClient`                 | `simple-git` directly       |
+| Electron Window  | `WindowLayer`               | `BaseWindow` directly       |
+| Electron View    | `ViewLayer`                 | `WebContentsView` directly  |
+| Electron Session | `SessionLayer`              | `session` directly          |
+| Electron IPC     | `IpcLayer`                  | `ipcMain` directly          |
+| Electron Dialog  | `DialogLayer`               | `dialog` directly           |
+| Electron Image   | `ImageLayer`                | `nativeImage` directly      |
+| Electron App     | `AppLayer`                  | `app` directly              |
+| Electron Menu    | `MenuLayer`                 | `Menu` directly             |
 
 **Full details**: See [Service Layer Patterns](docs/PATTERNS.md#service-layer-patterns) for implementation examples and mock factories.
 
@@ -528,7 +536,22 @@ src/
 ├── preload/        # Preload scripts
 ├── renderer/       # Svelte frontend
 └── services/       # Node.js services (pure, no Electron deps)
+    ├── platform/   # OS/runtime abstractions (Path, IPC, Dialog, Image, App, Menu)
+    └── shell/      # Visual container abstractions (Window, View, Session)
 ```
+
+### Service Layer Organization
+
+| Directory           | Purpose                                      | Examples                                      |
+| ------------------- | -------------------------------------------- | --------------------------------------------- |
+| `services/platform` | OS/runtime abstractions (file, process, IPC) | `FileSystemLayer`, `IpcLayer`, `DialogLayer`  |
+| `services/shell`    | Electron visual container abstractions       | `WindowLayer`, `ViewLayer`, `SessionLayer`    |
+| `services/git`      | Git operations                               | `GitClient`, `SimpleGitClient`                |
+| `services/opencode` | OpenCode integration                         | `OpenCodeClient`, `OpenCodeServerManager`     |
+| `services/logging`  | Structured logging                           | `LoggingService`, `ElectronLogService`        |
+| `services/*`        | Domain services                              | `CodeServerManager`, `KeepFilesService`, etc. |
+
+**Dependency Rule**: Shell layers may depend on Platform layers, but not vice versa.
 
 ## Renderer Architecture
 
