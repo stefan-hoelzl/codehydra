@@ -214,6 +214,10 @@ export class CodeServerManager {
       cleanEnv.EDITOR = editorValue;
       cleanEnv.GIT_SEQUENCE_EDITOR = editorValue;
 
+      // Disable code-server's localhost URL rewriting by setting empty proxy URI.
+      // Without this, code-server rewrites localhost URLs to go through /proxy/<port>/
+      cleanEnv.VSCODE_PROXY_URI = "";
+
       // Set plugin port for VS Code extension communication
       if (this.config.pluginPort !== undefined) {
         cleanEnv.CODEHYDRA_PLUGIN_PORT = String(this.config.pluginPort);

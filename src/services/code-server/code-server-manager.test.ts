@@ -939,4 +939,38 @@ describe("CodeServerManager (PATH and EDITOR)", () => {
 
     expect(capturedEnv?.GIT_SEQUENCE_EDITOR).toBe(capturedEnv?.EDITOR);
   });
+
+  it("sets VSCODE_PROXY_URI to empty string to disable localhost URL rewriting", async () => {
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+    const mockProc = createMockSpawnedProcess({ pid: 12345 });
+    const processRunner = {
+      run: vi.fn((_cmd: string, _args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
+        capturedEnv = options?.env;
+        return mockProc;
+      }),
+    };
+
+    const httpClient = createMockHttpClient({ response: new Response("", { status: 200 }) });
+    const portManager = createMockPortManager({ findFreePort: { port: 8080 } });
+    const config = {
+      binaryPath: "/usr/bin/code-server",
+      runtimeDir: "/tmp/runtime",
+      extensionsDir: "/tmp/extensions",
+      userDataDir: "/tmp/user-data",
+      binDir: "/app/bin",
+    };
+
+    const manager = new CodeServerManager(
+      config,
+      processRunner,
+      httpClient,
+      portManager,
+      testLogger
+    );
+    await manager.ensureRunning();
+
+    // VSCODE_PROXY_URI should be empty to disable code-server's localhost URL rewriting.
+    // Without this, code-server rewrites localhost URLs to go through /proxy/<port>/
+    expect(capturedEnv?.VSCODE_PROXY_URI).toBe("");
+  });
 });
