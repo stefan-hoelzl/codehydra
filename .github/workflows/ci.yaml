@@ -46,6 +46,8 @@ jobs:
 
       - run: npm run dist
 
+      - run: git diff --exit-code
+
       - name: Rename Windows output for consistent naming
         if: runner.os == 'Windows'
         run: mv dist/win-unpacked dist/CodeHydra-win
