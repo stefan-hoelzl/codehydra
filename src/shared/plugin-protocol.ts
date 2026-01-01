@@ -5,7 +5,7 @@
  * CodeHydra (server) and VS Code extensions (clients).
  */
 
-import type { WorkspaceStatus } from "./api/types";
+import type { WorkspaceStatus, Workspace, InitialPrompt } from "./api/types";
 import { METADATA_KEY_REGEX, isValidMetadataKey } from "./api/types";
 
 // ============================================================================
@@ -163,6 +163,90 @@ export interface DeleteWorkspaceResponse {
 }
 
 /**
+ * Request payload for creating a workspace.
+ */
+export interface WorkspaceCreateRequest {
+  /** Name for the new workspace (becomes branch name) */
+  readonly name: string;
+  /** Base branch to create the workspace from */
+  readonly base: string;
+  /** Optional initial prompt to send after workspace is created */
+  readonly initialPrompt?: InitialPrompt;
+  /** If true, don't switch to the new workspace (default: false = switch to it) */
+  readonly keepInBackground?: boolean;
+}
+
+/**
+ * Runtime validation for WorkspaceCreateRequest.
+ * Validates structure and required fields.
+ *
+ * @param payload - The payload to validate
+ * @returns Object with valid boolean and optional error message
+ */
+export function validateWorkspaceCreateRequest(
+  payload: unknown
+): { valid: true } | { valid: false; error: string } {
+  if (typeof payload !== "object" || payload === null) {
+    return { valid: false, error: "Request must be an object" };
+  }
+
+  const request = payload as Record<string, unknown>;
+
+  // Validate name
+  if (!("name" in request)) {
+    return { valid: false, error: "Missing required field: name" };
+  }
+
+  if (typeof request.name !== "string") {
+    return { valid: false, error: "Field 'name' must be a string" };
+  }
+
+  if (request.name.trim().length === 0) {
+    return { valid: false, error: "Field 'name' cannot be empty" };
+  }
+
+  // Validate base
+  if (!("base" in request)) {
+    return { valid: false, error: "Missing required field: base" };
+  }
+
+  if (typeof request.base !== "string") {
+    return { valid: false, error: "Field 'base' must be a string" };
+  }
+
+  if (request.base.trim().length === 0) {
+    return { valid: false, error: "Field 'base' cannot be empty" };
+  }
+
+  // Validate initialPrompt (optional)
+  if ("initialPrompt" in request && request.initialPrompt !== undefined) {
+    const prompt = request.initialPrompt;
+    if (typeof prompt === "string") {
+      if (prompt.length === 0) {
+        return { valid: false, error: "Field 'initialPrompt' cannot be empty string" };
+      }
+    } else if (typeof prompt === "object" && prompt !== null) {
+      const promptObj = prompt as Record<string, unknown>;
+      if (typeof promptObj.prompt !== "string" || promptObj.prompt.length === 0) {
+        return { valid: false, error: "Field 'initialPrompt.prompt' must be a non-empty string" };
+      }
+      if ("agent" in promptObj && typeof promptObj.agent !== "string") {
+        return { valid: false, error: "Field 'initialPrompt.agent' must be a string" };
+      }
+    } else {
+      return { valid: false, error: "Field 'initialPrompt' must be a string or object" };
+    }
+  }
+
+  // Validate keepInBackground (optional)
+  if ("keepInBackground" in request && typeof request.keepInBackground !== "boolean") {
+    return { valid: false, error: "Field 'keepInBackground' must be a boolean" };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Runtime validation for SetMetadataRequest.
  * Validates structure and key format against METADATA_KEY_REGEX.
  *
@@ -312,6 +396,17 @@ export interface ClientToServerEvents {
   "api:workspace:delete": (
     request: DeleteWorkspaceRequest | undefined,
     ack: (result: PluginResult<DeleteWorkspaceResponse>) => void
+  ) => void;
+
+  /**
+   * Create a new workspace in the same project as the connected workspace.
+   *
+   * @param request - Workspace creation parameters
+   * @param ack - Acknowledgment callback with the created workspace
+   */
+  "api:workspace:create": (
+    request: WorkspaceCreateRequest,
+    ack: (result: PluginResult<Workspace>) => void
   ) => void;
 
   /**

@@ -25,6 +25,7 @@ import {
   type DeleteWorkspaceRequest,
   type DeleteWorkspaceResponse,
   type ExecuteCommandRequest,
+  type WorkspaceCreateRequest,
   type PluginConfig,
   type LogContext,
   COMMAND_TIMEOUT_MS,
@@ -32,10 +33,11 @@ import {
   validateSetMetadataRequest,
   validateDeleteWorkspaceRequest,
   validateExecuteCommandRequest,
+  validateWorkspaceCreateRequest,
   validateLogRequest,
 } from "../../shared/plugin-protocol";
 import { LogLevel } from "../logging/types";
-import type { WorkspaceStatus } from "../../shared/api/types";
+import type { WorkspaceStatus, Workspace } from "../../shared/api/types";
 import { getErrorMessage } from "../errors";
 import { Path } from "../platform/path";
 
@@ -119,6 +121,14 @@ export interface ApiCallHandlers {
     workspacePath: string,
     request: ExecuteCommandRequest
   ): Promise<PluginResult<unknown>>;
+
+  /**
+   * Handle create request.
+   * @param workspacePath - Normalized workspace path (caller's workspace, used to determine project)
+   * @param request - The validated create request
+   * @returns Created workspace or error
+   */
+  create(workspacePath: string, request: WorkspaceCreateRequest): Promise<PluginResult<Workspace>>;
 }
 
 // ============================================================================
@@ -641,6 +651,17 @@ export class PluginServer {
         validateExecuteCommandRequest,
         (h, req) => h.executeCommand(workspacePath, req),
         (req) => ({ command: req.command })
+      )
+    );
+
+    socket.on(
+      "api:workspace:create",
+      this.createValidatedHandler<WorkspaceCreateRequest, WorkspaceCreateRequest, Workspace>(
+        "api:workspace:create",
+        workspacePath,
+        validateWorkspaceCreateRequest,
+        (h, req) => h.create(workspacePath, req),
+        (req) => ({ name: req.name, base: req.base })
       )
     );
 

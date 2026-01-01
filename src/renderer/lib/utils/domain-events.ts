@@ -111,12 +111,14 @@ export function setupDomainEvents(
   unsubscribes.push(
     api.on("workspace:created", (event) => {
       stores.addWorkspace(event.projectId, event.workspace);
-      // UI decides: newly created workspace should be selected
-      stores.setActiveWorkspace({
-        projectId: event.projectId,
-        workspaceName: event.workspace.name,
-        path: event.workspace.path,
-      });
+      // Only switch to new workspace if not kept in background
+      if (!event.keepInBackground) {
+        stores.setActiveWorkspace({
+          projectId: event.projectId,
+          workspaceName: event.workspace.name,
+          path: event.workspace.path,
+        });
+      }
     })
   );
 

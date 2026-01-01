@@ -13,6 +13,7 @@ import type {
   SetMetadataRequest,
   DeleteWorkspaceRequest,
   ExecuteCommandRequest,
+  WorkspaceCreateRequest,
   PluginResult,
 } from "../../shared/plugin-protocol";
 import type { ICodeHydraApi } from "../../shared/api/interfaces";
@@ -157,6 +158,48 @@ export function wirePluginApi(
           api.workspaces.executeCommand(projectId, workspaceName, request.command, request.args),
         { command: request.command }
       );
+    },
+
+    async create(workspacePath: string, request: WorkspaceCreateRequest) {
+      // For create, we only need the projectId from the caller's workspace
+      // The new workspace will be created in the same project
+      const project = workspaceResolver.findProjectForWorkspace(workspacePath);
+      if (!project) {
+        return { success: false, error: "Workspace not found" };
+      }
+      const projectId = generateProjectId(project.path);
+
+      try {
+        // Build options object conditionally to satisfy exactOptionalPropertyTypes
+        const options =
+          request.initialPrompt !== undefined || request.keepInBackground !== undefined
+            ? {
+                ...(request.initialPrompt !== undefined && {
+                  initialPrompt: request.initialPrompt,
+                }),
+                ...(request.keepInBackground !== undefined && {
+                  keepInBackground: request.keepInBackground,
+                }),
+              }
+            : undefined;
+
+        const workspace = await api.workspaces.create(
+          projectId,
+          request.name,
+          request.base,
+          options
+        );
+        logger.debug("create success", { workspace: workspacePath, name: request.name });
+        return { success: true, data: workspace };
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error("create error", {
+          workspace: workspacePath,
+          name: request.name,
+          error: message,
+        });
+        return { success: false, error: message };
+      }
     },
   };
 

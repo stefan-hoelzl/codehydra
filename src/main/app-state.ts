@@ -439,8 +439,13 @@ export class AppState {
    *
    * @param projectPathInput - Path to the project
    * @param workspace - The internal workspace to add (with Path-based path)
+   * @param options - Optional options (e.g., initialPrompt)
    */
-  addWorkspace(projectPathInput: string, workspace: InternalWorkspace): void {
+  addWorkspace(
+    projectPathInput: string,
+    workspace: InternalWorkspace,
+    options?: { initialPrompt?: { prompt: string; agent?: string } }
+  ): void {
     const normalizedKey = new Path(projectPathInput).toString();
     const openProject = this.openProjects.get(normalizedKey);
     if (!openProject) {
@@ -452,6 +457,10 @@ export class AppState {
     const url = this.getWorkspaceUrl(workspacePathStr);
     this.viewManager.createWorkspaceView(workspacePathStr, url, normalizedKey, true);
 
+    // Preload the URL so VS Code starts loading in the background
+    // This ensures the workspace is ready when the user switches to it
+    this.viewManager.preloadWorkspaceUrl(workspacePathStr);
+
     // Update internal project state
     const updatedProject: OpenProject = {
       ...openProject,
@@ -461,22 +470,30 @@ export class AppState {
     this.openProjects.set(normalizedKey, updatedProject);
 
     // Start OpenCode server for the workspace (agent status tracking is wired via callback)
-    this.startOpenCodeServerAsync(workspacePathStr);
+    this.startOpenCodeServerAsync(workspacePathStr, options?.initialPrompt);
   }
 
   /**
    * Start OpenCode server asynchronously with error logging.
    * Fire-and-forget pattern - failures are logged but don't block.
+   *
+   * @param workspacePath - Path to the workspace
+   * @param initialPrompt - Optional initial prompt to send after server starts
    */
-  private startOpenCodeServerAsync(workspacePath: string): void {
+  private startOpenCodeServerAsync(
+    workspacePath: string,
+    initialPrompt?: { prompt: string; agent?: string }
+  ): void {
     if (this.serverManager) {
-      void this.serverManager.startServer(workspacePath).catch((err: unknown) => {
-        this.logger.error(
-          "Failed to start OpenCode server",
-          { workspacePath },
-          err instanceof Error ? err : undefined
-        );
-      });
+      void this.serverManager
+        .startServer(workspacePath, initialPrompt ? { initialPrompt } : undefined)
+        .catch((err: unknown) => {
+          this.logger.error(
+            "Failed to start OpenCode server",
+            { workspacePath },
+            err instanceof Error ? err : undefined
+          );
+        });
     }
   }
 

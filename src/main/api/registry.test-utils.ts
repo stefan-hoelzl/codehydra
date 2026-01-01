@@ -203,7 +203,8 @@ function createMockCodeHydraApi(
       fetchBases: (projectId) => get("projects.fetchBases")({ projectId }),
     },
     workspaces: {
-      create: (projectId, name, base) => get("workspaces.create")({ projectId, name, base }),
+      create: (projectId, name, base, options) =>
+        get("workspaces.create")({ projectId, name, base, ...options }),
       remove: (projectId, workspaceName, keepBranch) =>
         get("workspaces.remove")({
           projectId,
@@ -245,6 +246,7 @@ function createMockCodeHydraApi(
     lifecycle: {
       getState: () => get("lifecycle.getState")({}),
       setup: () => get("lifecycle.setup")({}),
+      startServices: () => get("lifecycle.startServices")({}),
       quit: () => get("lifecycle.quit")({}),
     },
     on: vi.fn().mockReturnValue(() => {}),
@@ -263,6 +265,7 @@ export function registerAllMethodsWithStubs(
   const defaultHandlers: { [P in MethodPath]: MethodHandler<P> } = {
     "lifecycle.getState": async () => "ready",
     "lifecycle.setup": async () => ({ success: true as const }),
+    "lifecycle.startServices": async () => ({ success: true as const }),
     "lifecycle.quit": async () => {},
     "projects.open": async () => createMockProject(),
     "projects.close": async () => {},

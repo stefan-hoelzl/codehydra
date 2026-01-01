@@ -44,15 +44,16 @@ Both methods provide the same API contract - only the transport differs.
 
 All methods operate on the **connected workspace**.
 
-| Method                  | Signature                                                            | Description                                            |
-| ----------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ |
-| `getStatus`             | `() => Promise<WorkspaceStatus>`                                     | Get workspace status (dirty flag, agent status)        |
-| `getOpencodePort`       | `() => Promise<number \| null>`                                      | Get OpenCode server port (null if not running)         |
-| `restartOpencodeServer` | `() => Promise<number>`                                              | Restart OpenCode server, preserving port, returns port |
-| `getMetadata`           | `() => Promise<Record<string, string>>`                              | Get all metadata (always includes `base` key)          |
-| `setMetadata`           | `(key: string, value: string \| null) => Promise<void>`              | Set or delete a metadata key                           |
-| `executeCommand`        | `(command: string, args?: unknown[]) => Promise<unknown>`            | Execute a VS Code command (10-second timeout)          |
-| `delete`                | `(options?: { keepBranch?: boolean }) => Promise<{ started: true }>` | Delete the workspace (terminates OpenCode, async)      |
+| Method                  | Signature                                                                              | Description                                            |
+| ----------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `getStatus`             | `() => Promise<WorkspaceStatus>`                                                       | Get workspace status (dirty flag, agent status)        |
+| `getOpencodePort`       | `() => Promise<number \| null>`                                                        | Get OpenCode server port (null if not running)         |
+| `restartOpencodeServer` | `() => Promise<number>`                                                                | Restart OpenCode server, preserving port, returns port |
+| `getMetadata`           | `() => Promise<Record<string, string>>`                                                | Get all metadata (always includes `base` key)          |
+| `setMetadata`           | `(key: string, value: string \| null) => Promise<void>`                                | Set or delete a metadata key                           |
+| `executeCommand`        | `(command: string, args?: unknown[]) => Promise<unknown>`                              | Execute a VS Code command (10-second timeout)          |
+| `delete`                | `(options?: { keepBranch?: boolean }) => Promise<{ started: true }>`                   | Delete the workspace (terminates OpenCode, async)      |
+| `create`                | `(name: string, base: string, options?: WorkspaceCreateOptions) => Promise<Workspace>` | Create a new workspace in the same project             |
 
 #### `log` Namespace
 
@@ -156,6 +157,32 @@ const result = await api.workspace.delete({ keepBranch: true });
 ```
 
 **Note:** Deletion is async - the Promise resolves immediately with `{ started: true }`. The actual cleanup happens in the background.
+
+#### Create a New Workspace
+
+```typescript
+// Create a new workspace in the same project
+const workspace = await api.workspace.create("feature-auth", "main");
+console.log("Created workspace:", workspace.name, "at", workspace.path);
+
+// Create workspace with an initial prompt for the AI agent
+const workspace = await api.workspace.create("fix-bug-123", "main", {
+  initialPrompt: "Fix the login validation bug described in issue #123",
+});
+
+// Create workspace with initial prompt and specific agent
+const workspace = await api.workspace.create("refactor-api", "main", {
+  initialPrompt: { prompt: "Refactor the API module for better testability", agent: "coder" },
+  keepInBackground: true, // Don't switch to the new workspace
+});
+```
+
+**Notes:**
+
+- The new workspace is created in the same project as the current workspace
+- `initialPrompt` can be a string (uses default agent) or `{ prompt, agent }` object
+- If `keepInBackground` is `true`, the UI stays on the current workspace; otherwise it switches to the new one
+- The initial prompt is sent asynchronously after the workspace is ready (fire-and-forget)
 
 #### Execute VS Code Commands
 
@@ -290,6 +317,19 @@ interface WorkspaceStatus {
   readonly agent: AgentStatus;
 }
 
+type InitialPrompt = string | { prompt: string; agent?: string };
+
+interface WorkspaceCreateOptions {
+  initialPrompt?: InitialPrompt;
+  keepInBackground?: boolean;
+}
+
+interface Workspace {
+  name: string;
+  path: string;
+  base: string;
+}
+
 interface WorkspaceApi {
   getStatus(): Promise<WorkspaceStatus>;
   getOpencodePort(): Promise<number | null>;
@@ -298,6 +338,7 @@ interface WorkspaceApi {
   setMetadata(key: string, value: string | null): Promise<void>;
   executeCommand(command: string, args?: readonly unknown[]): Promise<unknown>;
   delete(options?: { keepBranch?: boolean }): Promise<{ started: boolean }>;
+  create(name: string, base: string, options?: WorkspaceCreateOptions): Promise<Workspace>;
 }
 
 interface CodehydraApi {
@@ -378,6 +419,7 @@ All events use acknowledgment callbacks for request/response pattern.
 | `api:workspace:setMetadata`           | `SetMetadataRequest`     | `PluginResult<void>`                    |
 | `api:workspace:executeCommand`        | `ExecuteCommandRequest`  | `PluginResult<unknown>`                 |
 | `api:workspace:delete`                | `DeleteWorkspaceRequest` | `PluginResult<DeleteWorkspaceResponse>` |
+| `api:workspace:create`                | `WorkspaceCreateRequest` | `PluginResult<Workspace>`               |
 
 ### Event Channels (Server → Client)
 
@@ -412,6 +454,26 @@ interface DeleteWorkspaceRequest {
 
 interface DeleteWorkspaceResponse {
   started: boolean; // True if deletion was started (deletion is async)
+}
+
+type InitialPrompt = string | { prompt: string; agent?: string };
+
+interface WorkspaceCreateRequest {
+  name: string; // Name for the new workspace (becomes branch name)
+  base: string; // Base branch to create the workspace from
+  initialPrompt?: InitialPrompt; // Optional initial prompt to send to AI agent
+  keepInBackground?: boolean; // If true, don't switch to the new workspace. Default: false
+}
+
+interface WorkspaceCreateOptions {
+  initialPrompt?: InitialPrompt;
+  keepInBackground?: boolean;
+}
+
+interface Workspace {
+  name: string; // Workspace name (also the branch name)
+  path: string; // Absolute path to the workspace directory
+  base: string; // Base branch this workspace was created from
 }
 ```
 

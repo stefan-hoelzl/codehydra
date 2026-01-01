@@ -833,4 +833,81 @@ describe("OpenCodeClient boundary tests", () => {
     },
     CI_TIMEOUT_MS
   );
+
+  // ===========================================================================
+  // Phase 7: Initial Prompt Tests (CREATE_WORKSPACE_TOOL feature)
+  // ===========================================================================
+
+  it(
+    "session.create and session.prompt send prompt successfully",
+    async () => {
+      await withOpencode({ binaryPath, mockLlmMode: "instant" }, async ({ sdk }) => {
+        // Step 1: Create a new session
+        const sessionResult = await sdk.session.create({ body: {} });
+        expect(sessionResult.data).toBeDefined();
+        expect(typeof sessionResult.data!.id).toBe("string");
+        const sessionId = sessionResult.data!.id;
+
+        // Step 2: Send a prompt to the session
+        const promptResult = await sdk.session.prompt({
+          path: { id: sessionId },
+          body: { parts: [{ type: "text", text: "Hello, this is a test prompt" }] },
+        });
+
+        // Step 3: Verify the prompt was sent (response exists)
+        expect(promptResult.data).toBeDefined();
+
+        // Step 4: Verify session exists in list
+        const listResult = await sdk.session.list();
+        const sessions = listResult.data ?? [];
+        const ourSession = sessions.find((s) => s.id === sessionId);
+        expect(ourSession).toBeDefined();
+
+        // Step 5: Verify prompt appears in session messages
+        const messagesResult = await sdk.session.messages({ path: { id: sessionId } });
+        const messages = messagesResult.data ?? [];
+        expect(messages.length).toBeGreaterThan(0);
+
+        // Verify at least one message has info.role === "user"
+        const userMessages = messages.filter((m) => m.info.role === "user");
+        expect(userMessages.length).toBeGreaterThan(0);
+      });
+    },
+    CI_TIMEOUT_MS
+  );
+
+  it(
+    "session.prompt with agent parameter stores agent in UserMessage",
+    async () => {
+      await withOpencode({ binaryPath, mockLlmMode: "instant" }, async ({ sdk }) => {
+        // Step 1: Create a new session
+        const sessionResult = await sdk.session.create({ body: {} });
+        expect(sessionResult.data).toBeDefined();
+        const sessionId = sessionResult.data!.id;
+
+        // Step 2: Send a prompt WITH agent parameter
+        // Using "build" which is a valid default agent in OpenCode
+        const testAgent = "build";
+        await sdk.session.prompt({
+          path: { id: sessionId },
+          body: {
+            agent: testAgent,
+            parts: [{ type: "text", text: "Test prompt with agent" }],
+          },
+        });
+
+        // Step 3: Fetch messages for the session
+        const messagesResult = await sdk.session.messages({ path: { id: sessionId } });
+        const messages = messagesResult.data ?? [];
+
+        // Step 4: Find the UserMessage and verify agent field
+        // Note: SDK types may not include 'agent' property, but OpenCode stores it
+        const userMessage = messages.find((m) => m.info.role === "user");
+        expect(userMessage).toBeDefined();
+        const userInfo = userMessage!.info as { role: string; agent?: string };
+        expect(userInfo.agent).toBe(testAgent);
+      });
+    },
+    CI_TIMEOUT_MS
+  );
 });

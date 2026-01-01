@@ -177,7 +177,8 @@ export class ApiRegistry implements IApiRegistry {
         fetchBases: (projectId) => get("projects.fetchBases")({ projectId }),
       },
       workspaces: {
-        create: (projectId, name, base) => get("workspaces.create")({ projectId, name, base }),
+        create: (projectId, name, base, options) =>
+          get("workspaces.create")({ projectId, name, base, ...options }),
         remove: (projectId, workspaceName, keepBranch) =>
           get("workspaces.remove")({
             projectId,

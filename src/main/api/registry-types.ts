@@ -13,6 +13,7 @@ import type {
   BaseInfo,
   SetupResult,
   AppState,
+  InitialPrompt,
 } from "../../shared/api/types";
 import type { UIMode } from "../../shared/ipc";
 import type { ApiEvents, Unsubscribe, ICodeHydraApi } from "../../shared/api/interfaces";
@@ -39,6 +40,10 @@ export interface WorkspaceCreatePayload {
   readonly projectId: ProjectId;
   readonly name: string;
   readonly base: string;
+  /** Optional initial prompt to send after workspace is created */
+  readonly initialPrompt?: InitialPrompt;
+  /** If true, don't switch to the new workspace (default: false = switch to it) */
+  readonly keepInBackground?: boolean;
 }
 
 /** workspaces.remove */

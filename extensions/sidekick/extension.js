@@ -291,6 +291,50 @@ const codehydraApi = {
       }
       return emitApiCall("api:workspace:executeCommand", { command, args });
     },
+
+    /**
+     * Create a new workspace in the same project as the current workspace.
+     * @param {string} name - Name for the new workspace (becomes branch name)
+     * @param {string} base - Base branch to create the workspace from
+     * @param {{ initialPrompt?: string | { prompt: string; agent?: string }; keepInBackground?: boolean }} [options] - Optional creation options
+     * @returns {Promise<{ name: string; path: string; base: string }>} The created workspace
+     */
+    create(name, base, options) {
+      // Client-side validation
+      if (typeof name !== "string" || name.trim().length === 0) {
+        return Promise.reject(new Error("Name must be a non-empty string"));
+      }
+      if (typeof base !== "string" || base.trim().length === 0) {
+        return Promise.reject(new Error("Base must be a non-empty string"));
+      }
+      // Validate initialPrompt if provided
+      if (options?.initialPrompt !== undefined) {
+        const prompt = options.initialPrompt;
+        if (typeof prompt === "string") {
+          if (prompt.length === 0) {
+            return Promise.reject(new Error("Initial prompt cannot be empty"));
+          }
+        } else if (typeof prompt === "object" && prompt !== null) {
+          if (typeof prompt.prompt !== "string" || prompt.prompt.length === 0) {
+            return Promise.reject(new Error("Initial prompt.prompt must be a non-empty string"));
+          }
+          if (prompt.agent !== undefined && typeof prompt.agent !== "string") {
+            return Promise.reject(new Error("Initial prompt.agent must be a string"));
+          }
+        } else {
+          return Promise.reject(new Error("Initial prompt must be a string or object"));
+        }
+      }
+      // Build request
+      const request = { name, base };
+      if (options?.initialPrompt !== undefined) {
+        request.initialPrompt = options.initialPrompt;
+      }
+      if (options?.keepInBackground !== undefined) {
+        request.keepInBackground = options.keepInBackground;
+      }
+      return emitApiCall("api:workspace:create", request);
+    },
   },
 };
 

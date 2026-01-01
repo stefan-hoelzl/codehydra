@@ -18,6 +18,8 @@ import type { Logger } from "../logging";
 import type { IDisposable, Unsubscribe } from "./types";
 import { waitForHealthy } from "../platform/health-check";
 import { Path } from "../platform/path";
+import { sendInitialPrompt, type SdkClientFactory, defaultSdkFactory } from "./initial-prompt";
+import type { PromptModel } from "../../shared/api/types";
 
 /**
  * Callback types for OpenCodeServerManager.
@@ -47,6 +49,20 @@ export interface OpenCodeServerManagerConfig {
   healthCheckTimeoutMs?: number;
   /** Interval between health check retries in milliseconds. Default: 500 */
   healthCheckIntervalMs?: number;
+  /** Factory for creating SDK clients (for testing). Default: defaultSdkFactory */
+  sdkFactory?: SdkClientFactory;
+}
+
+/**
+ * Options for starting a server.
+ */
+export interface StartServerOptions {
+  /** Initial prompt to send after server becomes healthy */
+  readonly initialPrompt?: {
+    readonly prompt: string;
+    readonly agent?: string;
+    readonly model?: PromptModel;
+  };
 }
 
 /**
@@ -90,6 +106,15 @@ export class OpenCodeServerManager implements IDisposable {
   private readonly startedCallbacks = new Set<ServerStartedCallback>();
   private readonly stoppedCallbacks = new Set<ServerStoppedCallback>();
 
+  /**
+   * Pending initial prompts to send when servers become healthy.
+   * Key is normalized workspace path (via Path.toString()).
+   */
+  private readonly pendingPrompts = new Map<
+    string,
+    { prompt: string; agent?: string; model?: PromptModel }
+  >();
+
   private mcpConfig: McpConfig | null = null;
 
   constructor(
@@ -108,6 +133,7 @@ export class OpenCodeServerManager implements IDisposable {
     this.config = {
       healthCheckTimeoutMs: config?.healthCheckTimeoutMs ?? 30000,
       healthCheckIntervalMs: config?.healthCheckIntervalMs ?? 500,
+      sdkFactory: config?.sdkFactory ?? defaultSdkFactory,
     };
   }
 
@@ -116,10 +142,21 @@ export class OpenCodeServerManager implements IDisposable {
    * Returns the port number on success.
    *
    * @param workspacePath - Absolute path to the workspace
+   * @param options - Optional start options (e.g., initialPrompt)
    * @returns Allocated port number
    * @throws Error if server fails to start or health check times out
    */
-  async startServer(workspacePath: string): Promise<number> {
+  async startServer(workspacePath: string, options?: StartServerOptions): Promise<number> {
+    // Store pending prompt if provided
+    if (options?.initialPrompt) {
+      this.setPendingPrompt(
+        workspacePath,
+        options.initialPrompt.prompt,
+        options.initialPrompt.agent,
+        options.initialPrompt.model
+      );
+    }
+
     // Check if already running/starting
     const existing = this.servers.get(workspacePath);
     if (existing) {
@@ -165,6 +202,20 @@ export class OpenCodeServerManager implements IDisposable {
 
     // pid is guaranteed to be defined since spawnServerOnPort validates it
     this.logger.info("Server started", { workspacePath, port, pid: proc.pid! });
+
+    // Send pending initial prompt (fire-and-forget)
+    const pending = this.consumePendingPrompt(workspacePath);
+    if (pending) {
+      // Fire-and-forget: sendInitialPrompt logs errors internally
+      void sendInitialPrompt(
+        port,
+        pending.prompt,
+        pending.agent,
+        pending.model,
+        this.logger,
+        this.config.sdkFactory
+      );
+    }
 
     return port;
   }
@@ -464,6 +515,56 @@ export class OpenCodeServerManager implements IDisposable {
    */
   getMcpConfig(): McpConfig | null {
     return this.mcpConfig;
+  }
+
+  /**
+   * Store a pending initial prompt to send when the server becomes healthy.
+   *
+   * @param workspacePath - Absolute path to the workspace
+   * @param prompt - The prompt text to send
+   * @param agent - Optional agent name to use
+   * @param model - Optional model to use
+   */
+  setPendingPrompt(
+    workspacePath: string,
+    prompt: string,
+    agent?: string,
+    model?: PromptModel
+  ): void {
+    const normalizedPath = new Path(workspacePath).toString();
+    // Build object conditionally for exactOptionalPropertyTypes
+    const entry: { prompt: string; agent?: string; model?: PromptModel } = { prompt };
+    if (agent !== undefined) {
+      entry.agent = agent;
+    }
+    if (model !== undefined) {
+      entry.model = model;
+    }
+    this.pendingPrompts.set(normalizedPath, entry);
+    this.logger.debug("Pending prompt stored", {
+      workspacePath: normalizedPath,
+      promptLength: prompt.length,
+      ...(agent !== undefined && { agent }),
+      ...(model !== undefined && { model: `${model.providerID}/${model.modelID}` }),
+    });
+  }
+
+  /**
+   * Consume (retrieve and remove) a pending initial prompt.
+   *
+   * @param workspacePath - Absolute path to the workspace
+   * @returns The pending prompt data, or undefined if none exists
+   */
+  consumePendingPrompt(
+    workspacePath: string
+  ): { prompt: string; agent?: string; model?: PromptModel } | undefined {
+    const normalizedPath = new Path(workspacePath).toString();
+    const pending = this.pendingPrompts.get(normalizedPath);
+    if (pending) {
+      this.pendingPrompts.delete(normalizedPath);
+      this.logger.debug("Pending prompt consumed", { workspacePath: normalizedPath });
+    }
+    return pending;
   }
 
   /**

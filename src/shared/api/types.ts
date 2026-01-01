@@ -3,6 +3,7 @@
  * Provides branded types for compile-time safety and runtime type guards for validation.
  */
 
+import { z } from "zod/v4";
 import type { WorkspacePath } from "../ipc";
 
 // =============================================================================
@@ -294,3 +295,92 @@ export interface DeletionProgress {
    */
   readonly blockingProcesses?: readonly BlockingProcess[];
 }
+
+// =============================================================================
+// Initial Prompt Types
+// =============================================================================
+
+/**
+ * Model identifier for OpenCode prompts.
+ */
+export interface PromptModel {
+  readonly providerID: string;
+  readonly modelID: string;
+}
+
+/**
+ * Initial prompt for workspace creation.
+ * Can be a simple string (uses default agent) or an object with optional agent/model.
+ *
+ * @example
+ * // Simple string - uses default agent
+ * initialPrompt: "Implement the login feature"
+ *
+ * // Object with agent - uses specified agent
+ * initialPrompt: { prompt: "Implement the login feature", agent: "build" }
+ *
+ * // Object with model - uses specified model
+ * initialPrompt: { prompt: "Implement the login feature", model: { providerID: "anthropic", modelID: "claude-sonnet" } }
+ */
+export type InitialPrompt =
+  | string
+  | {
+      readonly prompt: string;
+      readonly agent?: string;
+      readonly model?: PromptModel;
+    };
+
+/**
+ * Normalized initial prompt structure.
+ * Always has prompt text, agent and model are optional.
+ */
+export interface NormalizedInitialPrompt {
+  readonly prompt: string;
+  readonly agent?: string;
+  readonly model?: PromptModel;
+}
+
+/**
+ * Normalize an initial prompt to a consistent structure.
+ *
+ * @param input - The initial prompt (string or object)
+ * @returns Normalized object with prompt and optional agent/model
+ */
+export function normalizeInitialPrompt(input: InitialPrompt): NormalizedInitialPrompt {
+  if (typeof input === "string") {
+    return { prompt: input };
+  }
+  // Build result conditionally to satisfy exactOptionalPropertyTypes
+  const result: NormalizedInitialPrompt = { prompt: input.prompt };
+  if (input.agent !== undefined && input.model !== undefined) {
+    return { prompt: input.prompt, agent: input.agent, model: input.model };
+  }
+  if (input.agent !== undefined) {
+    return { prompt: input.prompt, agent: input.agent };
+  }
+  if (input.model !== undefined) {
+    return { prompt: input.prompt, model: input.model };
+  }
+  return result;
+}
+
+/**
+ * Zod schema for validating PromptModel.
+ */
+export const promptModelSchema = z.object({
+  providerID: z.string().min(1),
+  modelID: z.string().min(1),
+});
+
+/**
+ * Zod schema for validating InitialPrompt.
+ * Accepts either a non-empty string or an object with prompt and optional agent/model.
+ */
+export const initialPromptSchema = z.union([
+  z.string().min(1),
+  z.object({
+    prompt: z.string().min(1),
+    agent: z.string().optional(),
+    model: promptModelSchema.optional(),
+  }),
+]);

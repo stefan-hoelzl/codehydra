@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { McpServer, createDefaultMcpServer, type McpServerFactory } from "./mcp-server";
 import type { ICoreApi, IWorkspaceApi, IProjectApi } from "../../shared/api/interfaces";
 import type { WorkspaceLookup } from "./workspace-resolver";
-import type { ProjectId } from "../../shared/api/types";
+import { type ProjectId, initialPromptSchema } from "../../shared/api/types";
 import { createMockLogger } from "../logging";
 
 /**
@@ -157,8 +157,9 @@ describe("McpServer", () => {
       expect(toolNames).toContain("workspace_restart_opencode_server");
       expect(toolNames).toContain("workspace_delete");
       expect(toolNames).toContain("workspace_execute_command");
+      expect(toolNames).toContain("workspace_create");
       expect(toolNames).toContain("log");
-      expect(tools.length).toBe(8);
+      expect(tools.length).toBe(9);
     });
 
     it("workspace_restart_opencode_server tool calls API and returns port", async () => {
@@ -214,5 +215,40 @@ describe("createDefaultMcpServer", () => {
     expect(typeof sdk.registerTool).toBe("function");
     expect(typeof sdk.connect).toBe("function");
     expect(typeof sdk.close).toBe("function");
+  });
+});
+
+describe("initialPromptSchema validation", () => {
+  // Uses the schema imported from types - this tests the exact schema used by workspace_create
+
+  it("rejects empty string prompt", () => {
+    const result = initialPromptSchema.safeParse("");
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects object with empty prompt string", () => {
+    const result = initialPromptSchema.safeParse({ prompt: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts non-empty string prompt", () => {
+    const result = initialPromptSchema.safeParse("Implement the feature");
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts object with non-empty prompt", () => {
+    const result = initialPromptSchema.safeParse({ prompt: "Implement the feature" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts object with prompt and agent", () => {
+    const result = initialPromptSchema.safeParse({
+      prompt: "Implement the feature",
+      agent: "build",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ prompt: "Implement the feature", agent: "build" });
+    }
   });
 });
