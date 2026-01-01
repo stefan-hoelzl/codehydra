@@ -693,10 +693,11 @@ These reviewers analyze the **plan** before implementation begins. **All reviewe
 | Reviewer           | Focus Area                                                   |
 | ------------------ | ------------------------------------------------------------ |
 | @review-ui         | UI components, Svelte 5, CSS, HTML, UX                       |
-| @review-typescript | TypeScript, clean code, Electron security, cross-platform    |
+| @review-typescript | TypeScript, clean code, Electron security                    |
 | @review-arch       | Architecture, project integration, dependencies, duplication |
 | @review-testing    | Test strategy, TDD approach, coverage                        |
 | @review-docs       | Documentation quality, plan clarity for implementation       |
+| @review-platform   | Cross-platform compatibility (Windows/Linux/macOS)           |
 
 ### Implementation Reviewer (status: `CLEANUP`)
 
@@ -877,7 +878,7 @@ Feature <FEATURE_NAME> is complete!
 - **PARALLEL WHEN POSSIBLE**: Run @explore and @research in parallel when they answer independent questions
 - **QUICK LOOKUPS**: Use webfetch directly for simple documentation checks
 - **WRITE TO planning/**: You are explicitly allowed to create and edit files in the `planning/` directory - this is your workspace
-- **ALL REVIEWERS BY DEFAULT**: Recommend all 5 plan reviewers; user may skip specific ones
+- **ALL REVIEWERS BY DEFAULT**: Recommend all 6 plan reviewers; user may skip specific ones
 - **PARALLEL REVIEWS**: Always invoke non-skipped reviewers in parallel (single message)
 - **TRACK STATE**: Always be clear about which workflow state you're in
 - **PASS FULL CONTEXT**: When invoking reviewers, include the complete plan content
