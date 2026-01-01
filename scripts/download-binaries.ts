@@ -1,7 +1,7 @@
 /**
  * Postinstall script to download code-server and opencode binaries.
  *
- * This script is run after `npm install` to ensure binaries are available
+ * This script is run after `pnpm install` to ensure binaries are available
  * for development. In production, binaries are downloaded during app setup.
  *
  * In git worktrees, binaries are symlinked from the main repo's app-data/
@@ -9,7 +9,7 @@
  * Falls back to copying if symlinks aren't supported (Windows without
  * Developer Mode, cross-device scenarios).
  *
- * Usage: npm run postinstall (automatically run after npm install)
+ * Usage: pnpm postinstall (automatically run after pnpm install)
  *        npx tsx scripts/download-binaries.ts (manual run)
  */
 

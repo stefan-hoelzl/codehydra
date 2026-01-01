@@ -4,10 +4,10 @@ git clone https://github.com/stefanhoelzl/codehydra.git
 cd codehydra
 
 # Install dependencies
-npm install
+pnpm install
 
 # Run in development mode
-npm run dev`;
+pnpm dev`;
 
   let copied = $state(false);
 

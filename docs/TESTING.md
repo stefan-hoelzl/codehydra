@@ -6,16 +6,16 @@ CodeHydra uses behavior-driven testing with vitest. Tests verify **behavior** th
 
 ## Quick Reference
 
-| Task                      | Command                    | Section                                             |
-| ------------------------- | -------------------------- | --------------------------------------------------- |
-| Run all tests             | `npm test`                 | [Test Commands](#test-commands)                     |
-| Run integration tests     | `npm run test:integration` | [Test Commands](#test-commands)                     |
-| Run boundary tests        | `npm run test:boundary`    | [Test Commands](#test-commands)                     |
-| Run deprecated unit tests | `npm run test:legacy`      | [Test Commands](#test-commands)                     |
-| Pre-commit validation     | `npm run validate`         | [Test Commands](#test-commands)                     |
-| Decide which test type    | See decision guide         | [Decision Guide](#decision-guide)                   |
-| Create test git repo      | `createTestGitRepo()`      | [Test Helpers](#test-helpers)                       |
-| Create behavioral mock    | `createBehavioralX()`      | [Behavioral Mock Pattern](#behavioral-mock-pattern) |
+| Task                      | Command                 | Section                                             |
+| ------------------------- | ----------------------- | --------------------------------------------------- |
+| Run all tests             | `pnpm test`             | [Test Commands](#test-commands)                     |
+| Run integration tests     | `pnpm test:integration` | [Test Commands](#test-commands)                     |
+| Run boundary tests        | `pnpm test:boundary`    | [Test Commands](#test-commands)                     |
+| Run deprecated unit tests | `pnpm test:legacy`      | [Test Commands](#test-commands)                     |
+| Pre-commit validation     | `pnpm validate`         | [Test Commands](#test-commands)                     |
+| Decide which test type    | See decision guide      | [Decision Guide](#decision-guide)                   |
+| Create test git repo      | `createTestGitRepo()`   | [Test Helpers](#test-helpers)                       |
+| Create behavioral mock    | `createBehavioralX()`   | [Behavioral Mock Pattern](#behavioral-mock-pattern) |
 
 ---
 
@@ -108,7 +108,7 @@ The test suite uses programmatic xvfb setup for Linux CI environments via `src/t
 // Automatic virtual display setup (Linux CI only)
 // - Uses xvfb npm package (in optionalDependencies)
 // - No manual xvfb-run wrapper needed
-// - npm test just works on all platforms
+// - pnpm test just works on all platforms
 ```
 
 **All test windows use `show: false`:**
@@ -299,7 +299,7 @@ describe("generateProjectId", () => {
 
 **Status**: Existing unit tests remain until migrated per-module.
 
-**Command**: `npm run test:legacy`
+**Command**: `pnpm test:legacy`
 
 Unit tests that mock dependencies and verify implementation calls are being replaced by integration tests with behavioral mocks. Existing unit tests will be migrated to integration tests on a per-module basis. Each migration requires a separate plan with user approval.
 
@@ -445,7 +445,7 @@ Integration tests replace unit tests as the primary feedback mechanism during de
 
 **Why speed is non-negotiable**:
 
-- Developers run `npm run validate` continuously during development
+- Developers run `pnpm validate` continuously during development
 - Slow tests → skipped tests → undetected bugs → defeats the whole strategy
 - Integration tests with in-memory behavioral mocks should be **nearly as fast as unit tests**
 - If a test is slow, the behavioral mock is doing too much work
@@ -484,13 +484,13 @@ it("throws when createWorktree fails", ...)
 
 ## Test Commands
 
-| Command                    | What it runs                | Use case                      |
-| -------------------------- | --------------------------- | ----------------------------- |
-| `npm test`                 | All tests                   | Full verification             |
-| `npm run test:integration` | Integration tests only      | Primary development feedback  |
-| `npm run test:boundary`    | Boundary tests only         | Test external interfaces      |
-| `npm run test:legacy`      | Deprecated unit tests       | Until migrated to integration |
-| `npm run validate`         | Integration + check + build | Pre-commit validation (fast)  |
+| Command                 | What it runs                | Use case                      |
+| ----------------------- | --------------------------- | ----------------------------- |
+| `pnpm test`             | All tests                   | Full verification             |
+| `pnpm test:integration` | Integration tests only      | Primary development feedback  |
+| `pnpm test:boundary`    | Boundary tests only         | Test external interfaces      |
+| `pnpm test:legacy`      | Deprecated unit tests       | Until migrated to integration |
+| `pnpm validate`         | Integration + check + build | Pre-commit validation (fast)  |
 
 **Why validate excludes boundary tests**: Boundary tests may be slower, require specific binaries (code-server, opencode), and are only relevant when working on external interface code.
 
@@ -498,12 +498,12 @@ it("throws when createWorktree fails", ...)
 
 ## When to Run Tests
 
-| Test Type       | When to Run                                          |
-| --------------- | ---------------------------------------------------- |
-| **Integration** | Continuously during development (`npm run validate`) |
-| **Boundary**    | When developing new/updated external interfaces      |
-| **Focused**     | Part of integration suite (fast, pure functions)     |
-| **Legacy**      | Temporary - until module is migrated                 |
+| Test Type       | When to Run                                       |
+| --------------- | ------------------------------------------------- |
+| **Integration** | Continuously during development (`pnpm validate`) |
+| **Boundary**    | When developing new/updated external interfaces   |
+| **Focused**     | Part of integration suite (fast, pure functions)  |
+| **Legacy**      | Temporary - until module is migrated              |
 
 ---
 
@@ -864,11 +864,11 @@ For AI agent implementation work, use efficient coverage instead of strict TDD.
 ### For New Features/Code
 
 1. **IMPLEMENT**: Write implementation code and corresponding tests together
-2. **VALIDATE**: After completing all implementation steps, run `npm run validate:fix`
+2. **VALIDATE**: After completing all implementation steps, run `pnpm validate:fix`
 3. **FIX**: Address any failures from batch validation
 
 ### For Bug Fixes (Cleanup Phase)
 
 1. **FIX**: Apply the code fix
 2. **COVER**: Ensure a test covers the fixed behavior (add if missing)
-3. **VALIDATE**: Run `npm run validate:fix`
+3. **VALIDATE**: Run `pnpm validate:fix`

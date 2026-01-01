@@ -59,17 +59,13 @@ jobs:
       - run: echo "C:\Program Files\Git\bin" >> $env:GITHUB_PATH
         if: runner.os == 'Windows'
 
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: 22
-          cache: npm
+          cache: true
 
-      - run: npm ci --force
+      - run: pnpm install --frozen-lockfile
 
-      - run: for dir in extensions/*/; do (cd "$dir" && npm ci --force); done
-        shell: bash
-
-      - run: npm run build
+      - run: pnpm build
         env:
           VERSION: ${{ needs.check.outputs.version }}
 

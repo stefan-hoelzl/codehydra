@@ -40,7 +40,7 @@ describe("OpenCodeClient boundary tests", () => {
 
     if (!existsSync(binaryPath)) {
       throw new Error(
-        `OpenCode binary not found at ${binaryPath}. Run 'npm install' to download binaries.`
+        `OpenCode binary not found at ${binaryPath}. Run 'pnpm install' to download binaries.`
       );
     }
   });

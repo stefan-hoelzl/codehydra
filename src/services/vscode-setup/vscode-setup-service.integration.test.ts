@@ -487,7 +487,7 @@ describe("VscodeSetupService Integration", () => {
 
   /**
    * Real code-server tests - skipped by default.
-   * Run manually with: npm test -- --run vscode-setup-service.integration --no-skip
+   * Run manually with: pnpm test -- --run vscode-setup-service.integration --no-skip
    */
   describe.skip("Real code-server tests (manual only)", () => {
     it("extension install with real code-server", async () => {

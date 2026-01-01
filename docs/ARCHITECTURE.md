@@ -1569,7 +1569,7 @@ CodeHydra downloads code-server and opencode binaries from GitHub releases inste
 │                         Binary Download Flow                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  npm install                          App Setup (Production)                │
+│  pnpm install                         App Setup (Production)                │
 │       │                                      │                              │
 │       v                                      v                              │
 │  ┌─────────────────┐                 ┌─────────────────┐                    │
@@ -1606,7 +1606,7 @@ Binary versions are defined in `src/services/binary-download/versions.ts`:
 - `CODE_SERVER_VERSION` - e.g., "4.106.3"
 - `OPENCODE_VERSION` - e.g., "0.1.47"
 
-**Development**: `npm install` runs the postinstall script which downloads binaries to `./app-data/`.
+**Development**: `pnpm install` runs the postinstall script which downloads binaries to `./app-data/`.
 
 **Production**: The VscodeSetupService downloads binaries to the user's app-data directory during first-run setup. If `CURRENT_SETUP_VERSION` is incremented (which happens when versions change), existing installations re-run setup on next launch.
 
@@ -1687,9 +1687,9 @@ extensions/
 
 ### Build Process
 
-1. `npm run build:extensions` - auto-discovers extension folders, packages them to `dist/extensions/`, downloads external extensions from VS Code Marketplace, and generates `manifest.json` (flat array of all extensions)
+1. `pnpm build:extensions` - auto-discovers extension folders, packages them to `dist/extensions/`, downloads external extensions from VS Code Marketplace, and generates `manifest.json` (flat array of all extensions)
 2. `vite-plugin-static-copy` - copies `dist/extensions/*` to `out/main/assets/` during build
-3. `npm run build` - runs both steps sequentially
+3. `pnpm build` - runs both steps sequentially
 
 **Note:** External extensions are downloaded during the build process, not at runtime. This ensures reproducible builds and eliminates runtime network dependencies for extension installation.
 
@@ -1710,11 +1710,11 @@ dist/
 
 **Distribution commands:**
 
-| Command              | Platform   | Output                          |
-| -------------------- | ---------- | ------------------------------- |
-| `npm run dist`       | Current OS | Platform-specific distributable |
-| `npm run dist:win`   | Windows    | `dist/CodeHydra-x.x.x.exe`      |
-| `npm run dist:linux` | Linux      | `dist/CodeHydra-x.x.x.AppImage` |
+| Command           | Platform   | Output                          |
+| ----------------- | ---------- | ------------------------------- |
+| `pnpm dist`       | Current OS | Platform-specific distributable |
+| `pnpm dist:win`   | Windows    | `dist/CodeHydra-x.x.x.exe`      |
+| `pnpm dist:linux` | Linux      | `dist/CodeHydra-x.x.x.AppImage` |
 
 **Note:** Cross-platform builds have limitations - Windows portable can only be built on Windows, Linux AppImage can only be built on Linux.
 

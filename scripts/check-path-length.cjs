@@ -1,7 +1,7 @@
 /**
  * Windows MAX_PATH Check
  *
- * Runs before npm install to warn users about potential path length issues.
+ * Runs before pnpm install to warn users about potential path length issues.
  * Uses CommonJS (.cjs) to work regardless of package.json "type" setting.
  *
  * This script:
@@ -54,7 +54,7 @@ console.warn(`
   WARNING: Windows MAX_PATH Limitation Detected
 ================================================================================
 
-Your project path is ${cwd.length} characters long, which may cause npm install
+Your project path is ${cwd.length} characters long, which may cause pnpm install
 to fail due to Windows' 260 character path limit.
 
 Current path:

@@ -13,7 +13,7 @@
  * - Release builds (VERSION env set): 1.47.0
  * - Dev builds: 1.47.0-dev.a1b2c3d4
  *
- * Usage: npm run build:extensions
+ * Usage: pnpm build:extensions
  *        npx tsx scripts/build-extensions.ts
  */
 
@@ -219,7 +219,7 @@ function readExtensionPackageJson(extDir: string): ExtensionPackageJson {
 
 /**
  * Build and package an extension.
- * Runs: npm install && npm run build && vsce package
+ * Runs: pnpm install && pnpm build && vsce package
  * Version is computed from git history and injected at package time.
  *
  * Note: vsce package modifies package.json in-place when injecting the version.
@@ -243,13 +243,14 @@ async function buildExtension(
   console.log(`\nBuilding ${extDir}...`);
   console.log(`  Version: ${version}`);
 
-  // Run npm install
-  console.log(`  npm install...`);
-  execSync("npm install", { cwd: extPath, stdio: "inherit" });
+  // Run pnpm install (shell needed for Windows where pnpm may be a .cmd shim)
+  console.log(`  pnpm install...`);
+  const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
+  execSync("pnpm install", { cwd: extPath, stdio: "inherit", shell });
 
-  // Run npm run build
-  console.log(`  npm run build...`);
-  execSync("npm run build", { cwd: extPath, stdio: "inherit" });
+  // Run pnpm build
+  console.log(`  pnpm build...`);
+  execSync("pnpm build", { cwd: extPath, stdio: "inherit", shell });
 
   // Save original package.json and package-lock.json before vsce modifies them
   const originalPackageJson = await fsp.readFile(packageJsonPath, "utf-8");

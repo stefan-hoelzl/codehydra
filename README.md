@@ -36,10 +36,10 @@ git clone https://github.com/stefanhoelzl/codehydra.git
 cd codehydra
 
 # Install dependencies
-npm install
+pnpm install
 
 # Run in development mode
-npm run dev
+pnpm dev
 ```
 
 ## How It Works
@@ -58,19 +58,18 @@ AI agent. Switch between workspaces instantly while each agent continues working
 
 ### Prerequisites
 
-- Node.js 20+
-- npm 10+
+- pnpm (manages Node.js version automatically)
 - Git
 
 ### Commands
 
-| Command                | Description                          |
-| ---------------------- | ------------------------------------ |
-| `npm run dev`          | Start in development mode            |
-| `npm run build`        | Build for production                 |
-| `npm test`             | Run all tests                        |
-| `npm run validate:fix` | Fix lint/format issues and run tests |
-| `npm run dist`         | Create distributable for current OS  |
+| Command             | Description                          |
+| ------------------- | ------------------------------------ |
+| `pnpm dev`          | Start in development mode            |
+| `pnpm build`        | Build for production                 |
+| `pnpm test`         | Run all tests                        |
+| `pnpm validate:fix` | Fix lint/format issues and run tests |
+| `pnpm dist`         | Create distributable for current OS  |
 
 ## License
 

@@ -146,23 +146,23 @@ This also applies to other situations where you're uncertain - ask rather than g
 | Backend         | Node.js services                         |
 | Testing         | Vitest                                   |
 | Build           | Vite                                     |
-| Package Manager | npm                                      |
+| Package Manager | pnpm                                     |
 
 ### Essential Commands
 
-| Command                | Purpose                             |
-| ---------------------- | ----------------------------------- |
-| `npm run dev`          | Start development mode              |
-| `npm run validate:fix` | Fix lint/format issues, run tests   |
-| `npm test`             | Run all tests                       |
-| `npm run build`        | Build for production                |
-| `npm run dist`         | Create distributable for current OS |
-| `npm run dist:linux`   | Create Linux AppImage               |
-| `npm run dist:win`     | Create Windows portable exe         |
-| `npm run site:dev`     | Start landing page dev server       |
-| `npm run site:build`   | Build landing page for production   |
-| `npm run site:preview` | Preview built landing page          |
-| `npm run site:check`   | Type-check landing page             |
+| Command             | Purpose                             |
+| ------------------- | ----------------------------------- |
+| `pnpm dev`          | Start development mode              |
+| `pnpm validate:fix` | Fix lint/format issues, run tests   |
+| `pnpm test`         | Run all tests                       |
+| `pnpm build`        | Build for production                |
+| `pnpm dist`         | Create distributable for current OS |
+| `pnpm dist:linux`   | Create Linux AppImage               |
+| `pnpm dist:win`     | Create Windows portable exe         |
+| `pnpm site:dev`     | Start landing page dev server       |
+| `pnpm site:build`   | Build landing page for production   |
+| `pnpm site:preview` | Preview built landing page          |
+| `pnpm site:check`   | Type-check landing page             |
 
 ### Key Documents
 
@@ -210,9 +210,9 @@ The landing page at [codehydra.dev](https://codehydra.dev) is built with Vite + 
 **Development:**
 
 ```bash
-npm run site:dev      # Start dev server at localhost:5173
-npm run site:build    # Build to site/dist/
-npm run site:check    # Type-check
+pnpm site:dev      # Start dev server at localhost:5173
+pnpm site:build    # Build to site/dist/
+pnpm site:check    # Type-check
 ```
 
 The landing page is self-contained and does not import from the main app's source code.
@@ -245,9 +245,9 @@ VS Code setup assets are stored as dedicated files instead of inline code.
 
 ### Build Process
 
-1. **Extension packaging**: `npm run build:extensions` auto-discovers extension folders, packages them to `dist/extensions/`, downloads external extensions from VS Code Marketplace, and generates `manifest.json`
+1. **Extension packaging**: `pnpm build:extensions` auto-discovers extension folders, packages them to `dist/extensions/`, downloads external extensions from VS Code Marketplace, and generates `manifest.json`
 2. **Asset bundling**: `vite-plugin-static-copy` copies `dist/extensions/*` to `out/main/assets/` during build
-3. **Full build**: `npm run build` runs both steps sequentially
+3. **Full build**: `pnpm build` runs both steps sequentially
 
 **Manifest format** (flat array - all extensions are pre-bundled):
 
@@ -288,7 +288,7 @@ App version via `__APP_VERSION__` (Vite define), logged on startup.
 
 CodeHydra downloads code-server and opencode binaries from GitHub releases. This happens automatically during:
 
-1. **Development (`npm install`)**: Downloads to `./app-data/` via postinstall script
+1. **Development (`pnpm install`)**: Downloads to `./app-data/` via postinstall script
 2. **Production (app setup)**: Downloads to user's app-data directory during first-run setup
 
 ### Binary Storage Layout
@@ -315,7 +315,7 @@ Binary versions are defined in `src/services/binary-download/versions.ts`:
 - `CODE_SERVER_VERSION` - code-server release version
 - `OPENCODE_VERSION` - opencode release version
 
-When these are updated, `npm install` will download new versions. Production installations re-download on next app launch (setup version is incremented).
+When these are updated, `pnpm install` will download new versions. Production installations re-download on next app launch (setup version is incremented).
 
 ## CLI Wrapper Scripts
 
@@ -463,12 +463,12 @@ CODEHYDRA_ELECTRON_FLAGS="--disable-gpu --disable-software-rasterizer"
 1. **Disable GPU** (most common fix):
 
    ```bash
-   CODEHYDRA_ELECTRON_FLAGS="--disable-gpu" npm run dev
+   CODEHYDRA_ELECTRON_FLAGS="--disable-gpu" pnpm dev
    ```
 
 2. **For WebGL-specific crashes**:
    ```bash
-   CODEHYDRA_ELECTRON_FLAGS="--use-gl=swiftshader" npm run dev
+   CODEHYDRA_ELECTRON_FLAGS="--use-gl=swiftshader" pnpm dev
    ```
 
 ## Log Files
@@ -519,10 +519,10 @@ Log entries follow this format:
 
 ```bash
 # Enable verbose logging to console
-CODEHYDRA_LOGLEVEL=debug CODEHYDRA_PRINT_LOGS=1 npm run dev
+CODEHYDRA_LOGLEVEL=debug CODEHYDRA_PRINT_LOGS=1 pnpm dev
 
 # Filter to specific loggers only
-CODEHYDRA_LOGGER=git,process npm run dev
+CODEHYDRA_LOGGER=git,process pnpm dev
 
 # View recent log file
 tail -f ./app-data/logs/*.log
@@ -866,8 +866,8 @@ CodeHydra runs an MCP (Model Context Protocol) server that exposes workspace API
 
 - **Features**: Efficient coverage - implement with tests, batch validate at end
 - **Bug fixes (cleanup phase)**: Fix issue, ensure test coverage exists
-- Scripts: `npm run dev`, `npm run build`, `npm test`, `npm run lint`
-- Use `npm install <package>` for dependencies (never edit package.json manually)
+- Scripts: `pnpm dev`, `pnpm build`, `pnpm test`, `pnpm lint`
+- Use `pnpm add <package>` for dependencies (never edit package.json manually)
 
 ## Git Worktree Merge Workflow
 
@@ -914,37 +914,37 @@ See `docs/TESTING.md` for the complete testing strategy.
 For features and new code:
 
 1. **IMPLEMENT**: Write implementation and tests together (no test runs per step)
-2. **VALIDATE**: Run `npm run validate:fix` after all steps complete
+2. **VALIDATE**: Run `pnpm validate:fix` after all steps complete
 3. **FIX**: Address any failures
 
 For bug fixes during cleanup:
 
 1. **FIX**: Apply the fix
 2. **COVER**: Ensure a test covers the fixed behavior (add if missing)
-3. **VALIDATE**: Run `npm run validate:fix`
+3. **VALIDATE**: Run `pnpm validate:fix`
 
 ### Test Commands
 
-| Command                    | Use Case                                     |
-| -------------------------- | -------------------------------------------- |
-| `npm test`                 | Run all tests                                |
-| `npm run test:integration` | Primary development feedback (fast)          |
-| `npm run test:boundary`    | When developing external interfaces          |
-| `npm run test:legacy`      | Deprecated unit tests (until migrated)       |
-| `npm run validate`         | Pre-commit check (integration tests + build) |
+| Command                 | Use Case                                     |
+| ----------------------- | -------------------------------------------- |
+| `pnpm test`             | Run all tests                                |
+| `pnpm test:integration` | Primary development feedback (fast)          |
+| `pnpm test:boundary`    | When developing external interfaces          |
+| `pnpm test:legacy`      | Deprecated unit tests (until migrated)       |
+| `pnpm validate`         | Pre-commit check (integration tests + build) |
 
 **Important**: Integration tests MUST be fast (<50ms per test). They replace unit tests as the primary feedback mechanism. If tests are slow, fix the behavioral mock.
 
 ## Validation Commands
 
-| Check      | Command              | Requirement   |
-| ---------- | -------------------- | ------------- |
-| TypeScript | npm run check        | Zero errors   |
-| ESLint     | npm run lint         | Zero errors   |
-| Prettier   | npm run format:check | All formatted |
-| Tests      | npm test             | All passing   |
-| Build      | npm run build        | Completes     |
+| Check      | Command           | Requirement   |
+| ---------- | ----------------- | ------------- |
+| TypeScript | pnpm check        | Zero errors   |
+| ESLint     | pnpm lint         | Zero errors   |
+| Prettier   | pnpm format:check | All formatted |
+| Tests      | pnpm test         | All passing   |
+| Build      | pnpm build        | Completes     |
 
-**Recommended**: Use `npm run validate:fix` to auto-fix formatting/linting issues before validation. This saves cycles on small errors.
+**Recommended**: Use `pnpm validate:fix` to auto-fix formatting/linting issues before validation. This saves cycles on small errors.
 
 Run all checks before marking any task complete.

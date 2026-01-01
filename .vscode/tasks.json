@@ -3,8 +3,9 @@
   "tasks": [
     {
       "label": "setup",
-      "type": "npm",
-      "script": "setup",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["setup"],
       "problemMatcher": [],
       "runOptions": {
         "runOn": "folderOpen"
