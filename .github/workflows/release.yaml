@@ -2,11 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: Skip CI status check
-        type: boolean
-        default: false
 
 concurrency:
   group: release
@@ -16,38 +11,33 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     outputs:
-      should_build: ${{ steps.ci.outputs.passed }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - run: |
-          if [[ "${{ inputs.force }}" == "true" ]]; then
-            echo "passed=true" >> $GITHUB_OUTPUT
-            echo "::warning::CI check skipped (force=true)"
-            exit 0
+      - name: Verify CI passed
+        run: |
+          CONCLUSION=$(gh run list --workflow=ci.yaml --commit=$(git rev-parse HEAD) --json conclusion --jq '.[0].conclusion')
+          if [[ "$CONCLUSION" != "success" ]]; then
+            echo "::error::CI has not passed (status: ${CONCLUSION:-not found})"
+            exit 1
           fi
-          STATUS=$(gh api repos/${{ github.repository }}/commits/$(git rev-parse HEAD)/status --jq '.state')
-          echo "passed=$([[ "$STATUS" = "success" ]] && echo true || echo false)" >> $GITHUB_OUTPUT
-        id: ci
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - run: |
+      - id: version
+        run: |
           TODAY=$(date -u +%Y.%m.%d)
           COUNT=$(gh run list --workflow=release.yaml --created=$(date -u +%Y-%m-%d) --json status --jq 'length')
           echo "version=$([[ "$COUNT" -le 1 ]] && echo "$TODAY" || echo "$TODAY.$COUNT")" >> $GITHUB_OUTPUT
-        id: version
-        if: steps.ci.outputs.passed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
 
   build:
     name: Build (${{ matrix.platform }})
     needs: check
-    if: needs.check.outputs.should_build == 'true'
     strategy:
       matrix:
         include:
@@ -94,7 +84,7 @@ jobs:
           path: dist/CodeHydra-*
 
   summary:
-    needs: [check, build]
+    needs: [build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
