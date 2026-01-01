@@ -251,8 +251,15 @@ async function buildExtension(
   console.log(`  npm run build...`);
   execSync("npm run build", { cwd: extPath, stdio: "inherit" });
 
-  // Save original package.json before vsce modifies it
-  const originalContent = await fsp.readFile(packageJsonPath, "utf-8");
+  // Save original package.json and package-lock.json before vsce modifies them
+  const originalPackageJson = await fsp.readFile(packageJsonPath, "utf-8");
+  const packageLockPath = path.join(extPath, "package-lock.json");
+  let originalPackageLock: string | undefined;
+  try {
+    originalPackageLock = await fsp.readFile(packageLockPath, "utf-8");
+  } catch {
+    // package-lock.json may not exist
+  }
 
   try {
     // Package with vsce, injecting the computed version
@@ -268,8 +275,18 @@ async function buildExtension(
     console.log(`  Created ${vsixName}`);
     return { vsix: vsixName, version };
   } finally {
-    // Restore original package.json to prevent git noise
-    await fsp.writeFile(packageJsonPath, originalContent);
+    // Restore original package.json and package-lock.json to prevent git noise
+    await fsp.writeFile(packageJsonPath, originalPackageJson);
+    if (originalPackageLock !== undefined) {
+      await fsp.writeFile(packageLockPath, originalPackageLock);
+    } else {
+      // package-lock.json was created during build, remove it
+      try {
+        await fsp.unlink(packageLockPath);
+      } catch {
+        // Ignore if file doesn't exist
+      }
+    }
   }
 }
 
