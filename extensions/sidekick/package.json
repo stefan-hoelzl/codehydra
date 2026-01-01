@@ -56,7 +56,8 @@
       "workbench.startupEditor": "none",
       "window.autoDetectColorScheme": true,
       "workbench.preferredDarkColorTheme": "Default Dark+",
-      "workbench.preferredLightColorTheme": "Default Light+"
+      "workbench.preferredLightColorTheme": "Default Light+",
+      "remote.autoForwardPorts": false
     }
   }
 }
