@@ -38,7 +38,11 @@ export default defineConfig({
           name: "renderer",
           environment: "happy-dom",
           include: ["src/renderer/**/*.{test,spec}.{js,ts}"],
-          setupFiles: ["./src/test/setup.ts", "./src/test/setup-renderer.ts"],
+          setupFiles: [
+            "./src/test/setup.ts",
+            "./src/test/setup-matchers.ts",
+            "./src/test/setup-renderer.ts",
+          ],
         },
       },
       {
@@ -54,14 +58,13 @@ export default defineConfig({
             "src/preload/**/*.{test,spec}.{js,ts}",
           ],
           exclude: ["**/*.boundary.test.{js,ts}"],
-          setupFiles: ["./src/test/setup.ts"],
+          setupFiles: ["./src/test/setup.ts", "./src/test/setup-matchers.ts"],
           // Use forks pool for better ESM/CJS interop with native modules like ws/socket.io
           pool: "forks",
         },
       },
       {
         // Boundary tests: test layer implementations against real external systems
-        // Uses xvfb globalSetup for Electron tests on Linux CI
         extends: true,
         test: {
           name: "boundary",
@@ -70,8 +73,7 @@ export default defineConfig({
             "src/main/**/*.boundary.test.{js,ts}",
             "src/services/**/*.boundary.test.{js,ts}",
           ],
-          setupFiles: ["./src/test/setup.ts"],
-          globalSetup: ["./src/test/setup-display.ts"],
+          setupFiles: ["./src/test/setup.ts", "./src/test/setup-matchers.ts"],
           pool: "forks",
         },
       },
@@ -82,7 +84,7 @@ export default defineConfig({
           name: "extensions",
           environment: "node",
           include: ["extensions/**/*.{test,spec}.{js,ts}"],
-          setupFiles: ["./src/test/setup.ts"],
+          setupFiles: ["./src/test/setup.ts", "./src/test/setup-matchers.ts"],
           pool: "forks",
         },
       },

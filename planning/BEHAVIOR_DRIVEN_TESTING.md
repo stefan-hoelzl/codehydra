@@ -788,6 +788,10 @@ Current `*.integration.test.ts` files use **call-tracking mocks**, not **behavio
 
 All modules with unit tests that need migration. Mark checkbox when that module's separate migration plan is completed.
 
+**Phase 1: Infrastructure (Complete)**
+
+- [x] Mock Infrastructure - `planning/MOCK_INFRASTRUCTURE.md` (state-mock.ts, setup-matchers.ts, toBeUnchanged matcher)
+
 **Phase 2: CodeHydraApi + AppState (High Priority)**
 
 - [ ] AppState (`src/main/app-state.test.ts`)

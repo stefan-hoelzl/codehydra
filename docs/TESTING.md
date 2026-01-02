@@ -94,79 +94,6 @@ describe("SimpleGitClient", () => {
 });
 ```
 
-### Electron Boundary Tests
-
-Electron boundary tests (Shell and Platform layers) require special handling since they need a display for window creation.
-
-**Naming Convention**: Boundary tests use the `*.boundary.test.ts` naming pattern (e.g., `window.boundary.test.ts`, `view.boundary.test.ts`). This distinguishes them from `*.integration.test.ts` files which use behavioral mocks instead of real external systems.
-
-**xvfb Setup for Linux CI:**
-
-The test suite uses programmatic xvfb setup for Linux CI environments via `src/test/setup-display.ts`:
-
-```typescript
-// Automatic virtual display setup (Linux CI only)
-// - Uses xvfb npm package (in optionalDependencies)
-// - No manual xvfb-run wrapper needed
-// - pnpm test just works on all platforms
-```
-
-**All test windows use `show: false`:**
-
-```typescript
-// Boundary tests create invisible windows
-const handle = windowLayer.createWindow({
-  width: 800,
-  height: 600,
-  show: false, // Never visible, even on developer machines
-});
-```
-
-**Platform-Specific Test Skipping:**
-
-Use `it.skipIf()` for tests that only work on specific platforms:
-
-```typescript
-import { platform } from "os";
-
-// macOS-only test
-it.skipIf(platform() !== "darwin")("dock.setBadge sets badge text", async () => {
-  appLayer.dock?.setBadge("42");
-  // ...
-});
-
-// Windows-only test
-it.skipIf(platform() !== "win32")("setOverlayIcon shows on taskbar", async () => {
-  windowLayer.setOverlayIcon(handle, imageHandle, "Notification");
-  // ...
-});
-
-// Linux-only test
-it.skipIf(platform() !== "linux")("uses Unity badge count", async () => {
-  // ...
-});
-```
-
-**Cleanup Requirements:**
-
-Each Electron boundary test file MUST clean up resources:
-
-```typescript
-describe("WindowLayer", () => {
-  let windowLayer: DefaultWindowLayer;
-
-  beforeEach(() => {
-    windowLayer = new DefaultWindowLayer(imageLayer, logger);
-  });
-
-  afterEach(() => {
-    windowLayer.destroyAll(); // Clean up all windows
-  });
-});
-```
-
----
-
 ### Integration Tests (\*.integration.test.ts)
 
 **Purpose**: Verify application behavior through high-level entry points.
@@ -427,6 +354,132 @@ function createBehavioralFileSystem(options?: {
 - Use `path.join()` for path construction
 - Use `path.normalize()` for path comparison
 - Throw errors with correct `code` property (ENOENT, EEXIST, etc.)
+
+---
+
+## State Mock Pattern
+
+State mocks provide a standardized interface for behavioral mocks with type-safe matchers. This formalizes the existing `_getState()` pattern into a consistent API.
+
+### File Naming Convention
+
+State mock files use the `*.state-mock.ts` suffix:
+
+- `src/services/platform/file-system.state-mock.ts`
+- `src/services/git/git-client.state-mock.ts`
+
+### Core Interfaces
+
+All state mocks implement these interfaces from `src/test/state-mock.ts`:
+
+```typescript
+// Base interface for mock state - pure data, logic belongs in matchers
+interface MockState {
+  snapshot(): Snapshot; // Capture state for comparison
+  toString(): string; // Human-readable state for error messages
+}
+
+// Mock with inspectable state via the `$` property
+interface MockWithState<TState extends MockState> {
+  readonly $: TState;
+}
+```
+
+### Snapshot and `toBeUnchanged()` Matcher
+
+The base `toBeUnchanged(snapshot)` matcher compares state before and after an action:
+
+```typescript
+it("does not modify state when branch does not exist", async () => {
+  const gitMock = createMockGitClient({
+    repositories: new Map([["/project", { branches: ["main"] }]]),
+  });
+
+  // Capture state before action
+  const snapshot = gitMock.$.snapshot();
+
+  // Action should fail
+  await expect(gitMock.addWorktree(/* ... */)).rejects.toThrow();
+
+  // State should be unchanged
+  expect(gitMock).toBeUnchanged(snapshot);
+});
+
+it("creates worktree when branch exists", async () => {
+  const gitMock = createMockGitClient(/* ... */);
+  const snapshot = gitMock.$.snapshot();
+
+  await gitMock.addWorktree(/* ... */);
+
+  // Assert state changed
+  expect(gitMock).not.toBeUnchanged(snapshot);
+});
+```
+
+### Custom Matchers Pattern
+
+Each state mock file can define custom matchers for domain-specific assertions:
+
+```typescript
+// In *.state-mock.ts files:
+
+// 1. State interface (pure data, extends MockState)
+export interface FileSystemMockState extends MockState {
+  readonly files: ReadonlyMap<string, string | Buffer>;
+  readonly directories: ReadonlySet<string>;
+}
+
+// 2. Mock type (Layer & MockWithState<State>)
+export type MockFileSystemLayer = FileSystemLayer & MockWithState<FileSystemMockState>;
+
+// 3. Matchers interface
+interface FileSystemMatchers {
+  toHaveFile(path: string | Path): void;
+  toHaveDirectory(path: string | Path): void;
+}
+
+// 4. Vitest augmentation
+declare module "vitest" {
+  interface Assertion<T> extends MatchersFor<T, MockFileSystemLayer, FileSystemMatchers> {}
+}
+
+// 5. Matcher implementations (type-safe via MatcherImplementationsFor)
+export const fileSystemMatchers: MatcherImplementationsFor<
+  MockFileSystemLayer,
+  FileSystemMatchers
+> = {
+  toHaveFile(received, path) {
+    const normalized = new Path(path).toString();
+    const pass = received.$.files.has(normalized);
+    return {
+      pass,
+      message: () =>
+        pass
+          ? `Expected mock not to have file "${normalized}"`
+          : `Expected mock to have file "${normalized}"`,
+    };
+  },
+  // ... other matchers
+};
+
+// 6. Factory function
+export function createMockFileSystem(options?: MockFileSystemOptions): MockFileSystemLayer {
+  // ... implementation
+}
+```
+
+### Matcher Registration
+
+Matchers are registered in `src/test/setup-matchers.ts`:
+
+```typescript
+// Base matchers (toBeUnchanged) auto-registered via import
+import "./state-mock";
+
+// Mock-specific matchers
+import { fileSystemMatchers } from "../services/platform/file-system.state-mock";
+expect.extend({ ...fileSystemMatchers });
+```
 
 ---
 

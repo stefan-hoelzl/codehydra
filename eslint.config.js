@@ -73,5 +73,20 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
+  },
+  // State mocks - allow empty object types for conditional interface extension
+  // and unused type parameters in vitest module augmentation
+  {
+    files: ["**/state-mock.ts", "**/*.state-mock.ts"],
+    rules: {
+      "@typescript-eslint/no-empty-object-type": [
+        "error",
+        { allowInterfaces: "with-single-extends", allowObjectTypes: "always" },
+      ],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_|^T$" },
+      ],
+    },
   }
 );
