@@ -460,7 +460,7 @@ All external system access goes through abstraction interfaces defined in `src/s
 
 | External System    | Interface              | Implementation                | Test Mock Factory                  |
 | ------------------ | ---------------------- | ----------------------------- | ---------------------------------- |
-| Filesystem         | `FileSystemLayer`      | `DefaultFileSystemLayer`      | `createMockFileSystemLayer()`      |
+| Filesystem         | `FileSystemLayer`      | `DefaultFileSystemLayer`      | `createFileSystemMock()`           |
 | HTTP requests      | `HttpClient`           | `DefaultNetworkLayer`         | `createMockHttpClient()`           |
 | Port operations    | `PortManager`          | `DefaultNetworkLayer`         | `createPortManagerMock()`          |
 | Process spawning   | `ProcessRunner`        | `ExecaProcessRunner`          | `createMockProcessRunner()`        |
@@ -689,7 +689,7 @@ All methods throw `FileSystemError` (extends `ServiceError`) with mapped error c
 
 **Usage Pattern:**
 
-- Unit tests: Use `createMockFileSystemLayer()` from `filesystem.test-utils.ts`
+- Integration tests: Use `createFileSystemMock()` from `filesystem.state-mock.ts`
 - Integration tests: Use `DefaultFileSystemLayer()` for real filesystem operations
 - Boundary tests: `filesystem.boundary.test.ts` tests `DefaultFileSystemLayer` against real filesystem
 

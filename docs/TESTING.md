@@ -307,53 +307,52 @@ await expect(api.workspaces.create("/project", "feat-1", "main")).rejects.toThro
 
 ### State Inspection
 
-Behavioral mocks should expose state inspection utilities:
+Behavioral mocks expose state inspection via the `$` property and custom matchers:
 
 ```typescript
-const mockFs = createBehavioralFileSystem({ files: new Map() });
-await mockFs.writeFile("/data/config.json", '{"key": "value"}');
+import { createFileSystemMock, directory } from "../platform/filesystem.state-mock";
 
-// Direct state inspection
-expect(mockFs._getState().files.has("/data/config.json")).toBe(true);
+const mock = createFileSystemMock({ entries: { "/data": directory() } });
+await mock.writeFile("/data/config.json", '{"key": "value"}');
+
+// State access via $ property
+expect(mock.$.entries.has("/data/config.json")).toBe(true);
+
+// Custom matchers for cleaner assertions
+expect(mock).toHaveFile("/data/config.json", '{"key": "value"}');
+expect(mock).toHaveDirectory("/data");
 ```
 
 ### Cross-Platform Requirements
 
-Behavioral mocks must handle platform differences:
+Behavioral mocks must handle platform differences. The `createFileSystemMock` factory handles path normalization automatically:
 
 ```typescript
-function createBehavioralFileSystem(options?: {
-  files?: Map<string, string | Buffer>;
-  directories?: Set<string>;
-}): FileSystemLayer {
-  const files = new Map(options?.files ?? []);
-  const dirs = new Set(options?.directories ?? []);
+import { createFileSystemMock, file, directory, symlink } from "../platform/filesystem.state-mock";
 
-  // Normalize paths for cross-platform compatibility
-  const normalizePath = (p: string) => path.normalize(p);
+// Create mock with initial filesystem state
+const mock = createFileSystemMock({
+  entries: {
+    "/app": directory(),
+    "/app/config.json": file('{"debug": true}'),
+    "/app/bin/run.sh": file("#!/bin/bash\necho hi", { executable: true }),
+    "/app/current": symlink("/app/v1"),
+  },
+});
 
-  return {
-    async readFile(filePath, encoding) {
-      const normalized = normalizePath(filePath);
-      const content = files.get(normalized);
-      if (!content) {
-        const error = new Error(`ENOENT: no such file: ${filePath}`);
-        (error as NodeJS.ErrnoException).code = "ENOENT";
-        throw error;
-      }
-      return encoding ? content.toString() : content;
-    },
-    // ... other methods with path normalization
-    _getState: () => ({ files: new Map(files), dirs: new Set(dirs) }),
-  };
-}
+// Paths are normalized automatically (handles Windows backslashes, case sensitivity)
+await mock.readFile("/APP/config.json"); // Works on case-insensitive platforms
+await mock.readFile("C:\\app\\config.json"); // Normalized to c:/app/config.json
+
+// State access via $ property
+console.log(mock.$.entries.size); // 4
 ```
 
 **Key requirements**:
 
-- Use `path.join()` for path construction
-- Use `path.normalize()` for path comparison
-- Throw errors with correct `code` property (ENOENT, EEXIST, etc.)
+- Use `createFileSystemMock` from `filesystem.state-mock.ts`
+- Paths are normalized via `Path` class (POSIX format, case-normalized on Windows)
+- Errors thrown as `FileSystemError` with typed error codes (ENOENT, EEXIST, etc.)
 
 ---
 
@@ -365,8 +364,7 @@ State mocks provide a standardized interface for behavioral mocks with type-safe
 
 State mock files use the `*.state-mock.ts` suffix:
 
-- `src/services/platform/file-system.state-mock.ts`
-- `src/services/platform/port-manager.state-mock.ts`
+- `src/services/platform/filesystem.state-mock.ts`
 - `src/services/git/git-client.state-mock.ts`
 
 ### Core Interfaces
@@ -477,10 +475,11 @@ Matchers are registered in `src/test/setup-matchers.ts`:
 // Base matchers (toBeUnchanged) auto-registered via import
 import "./state-mock";
 
-// Mock-specific matchers
-import { fileSystemMatchers } from "../services/platform/file-system.state-mock";
-expect.extend({ ...fileSystemMatchers });
+// Filesystem matchers (auto-registered via import side effect)
+import "../services/platform/filesystem.state-mock";
 ```
+
+Note: The `filesystem.state-mock.ts` file calls `expect.extend(fileSystemMatchers)` when imported, so matchers are automatically available in tests.
 
 ---
 

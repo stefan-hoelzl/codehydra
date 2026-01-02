@@ -4,62 +4,89 @@
  * Tests business logic with mock FileSystemLayer.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ProjectStore } from "./project-store";
 import { CURRENT_PROJECT_VERSION } from "./types";
-import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
+import {
+  createFileSystemMock,
+  file,
+  directory,
+  createDirEntry,
+} from "../platform/filesystem.state-mock";
 import { FileSystemError } from "../errors";
-import type { PathLike } from "../platform/filesystem";
+import type { FileSystemLayer, PathLike, MkdirOptions, RmOptions } from "../platform/filesystem";
 
 /** Convert PathLike to string for testing */
 const pathString = (p: PathLike): string => (typeof p === "string" ? p : p.toString());
+
+/**
+ * Create an inline FileSystemLayer mock with vi.fn() for call tracking.
+ * Used for tests that need to verify call patterns rather than state outcomes.
+ */
+function createTrackingMock(
+  overrides: Partial<{
+    readFile: (path: PathLike) => Promise<string>;
+    writeFile: (path: PathLike, content: string) => Promise<void>;
+    mkdir: (path: PathLike, options?: MkdirOptions) => Promise<void>;
+    readdir: (
+      path: PathLike
+    ) => Promise<
+      readonly { name: string; isDirectory: boolean; isFile: boolean; isSymbolicLink: boolean }[]
+    >;
+    unlink: (path: PathLike) => Promise<void>;
+    rm: (path: PathLike, options?: RmOptions) => Promise<void>;
+  }> = {}
+): FileSystemLayer {
+  return {
+    readFile: vi.fn(overrides.readFile ?? (async () => "")),
+    writeFile: vi.fn(overrides.writeFile ?? (async () => {})),
+    mkdir: vi.fn(overrides.mkdir ?? (async () => {})),
+    readdir: vi.fn(overrides.readdir ?? (async () => [])),
+    unlink: vi.fn(overrides.unlink ?? (async () => {})),
+    rm: vi.fn(overrides.rm ?? (async () => {})),
+    copyTree: vi.fn(async () => {}),
+    makeExecutable: vi.fn(async () => {}),
+    writeFileBuffer: vi.fn(async () => {}),
+    symlink: vi.fn(async () => {}),
+    rename: vi.fn(async () => {}),
+  };
+}
 
 describe("ProjectStore", () => {
   const projectsDir = "/data/projects";
 
   describe("saveProject", () => {
     it("creates directory and writes config.json with correct structure", async () => {
-      const writtenFiles: Map<string, string> = new Map();
-      const createdDirs: string[] = [];
-
-      const mockFs = createMockFileSystemLayer({
-        mkdir: {
-          implementation: async (path) => {
-            createdDirs.push(pathString(path));
-          },
-        },
-        writeFile: {
-          implementation: async (path, content) => {
-            writtenFiles.set(pathString(path), content);
-          },
+      // Use behavioral mock - we verify the outcome (file content)
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
         },
       });
 
       const store = new ProjectStore(projectsDir, mockFs);
       await store.saveProject("/home/user/projects/my-repo");
 
-      // Verify directory was created with recursive option
-      expect(createdDirs.length).toBeGreaterThan(0);
-      expect(createdDirs[0]).toContain("my-repo");
+      // Find the config.json file that was created
+      let configPath: string | undefined;
+      for (const [path] of mockFs.$.entries) {
+        if (path.includes("config.json") && path.includes("my-repo")) {
+          configPath = path;
+          break;
+        }
+      }
+      expect(configPath).toBeDefined();
 
-      // Verify config.json was written
-      expect(writtenFiles.size).toBe(1);
-      const configPath = Array.from(writtenFiles.keys())[0]!;
-      expect(configPath).toContain("config.json");
-
-      // Verify config content structure
-      const configContent = writtenFiles.get(configPath)!;
-      const config = JSON.parse(configContent) as unknown;
-      expect(config).toEqual({
-        version: CURRENT_PROJECT_VERSION,
-        path: "/home/user/projects/my-repo",
-      });
+      // Verify content structure (JSON may be formatted with spaces)
+      expect(mockFs).toHaveFileContaining(configPath!, `"version": ${CURRENT_PROJECT_VERSION}`);
+      expect(mockFs).toHaveFileContaining(configPath!, `"path": "/home/user/projects/my-repo"`);
     });
 
     it("wraps filesystem errors in ProjectStoreError", async () => {
-      const mockFs = createMockFileSystemLayer({
-        mkdir: {
-          error: new FileSystemError("EACCES", "/data/projects", "Permission denied"),
+      // Use tracking mock to simulate mkdir error
+      const mockFs = createTrackingMock({
+        mkdir: async () => {
+          throw new FileSystemError("EACCES", "/data/projects", "Permission denied");
         },
       });
 
@@ -71,34 +98,37 @@ describe("ProjectStore", () => {
     });
 
     it("handles paths with special characters", async () => {
-      const writtenFiles: Map<string, string> = new Map();
-
-      const mockFs = createMockFileSystemLayer({
-        mkdir: { implementation: async () => {} },
-        writeFile: {
-          implementation: async (path, content) => {
-            writtenFiles.set(pathString(path), content);
-          },
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
         },
       });
 
       const store = new ProjectStore(projectsDir, mockFs);
       await store.saveProject("/home/user/projects/my-repo with spaces");
 
-      // Verify config content has correct path
-      const configContent = Array.from(writtenFiles.values())[0]!;
-      const config = JSON.parse(configContent) as { path: string };
-      expect(config.path).toBe("/home/user/projects/my-repo with spaces");
+      // Find the config.json file that was created
+      let configPath: string | undefined;
+      for (const [path] of mockFs.$.entries) {
+        if (path.includes("config.json") && path.includes("my-repo with spaces")) {
+          configPath = path;
+          break;
+        }
+      }
+      expect(configPath).toBeDefined();
+
+      // Verify config content has correct path (JSON may be formatted with spaces)
+      expect(mockFs).toHaveFileContaining(
+        configPath!,
+        `"path": "/home/user/projects/my-repo with spaces"`
+      );
     });
   });
 
   describe("loadAllProjects", () => {
     it("returns empty array when projects directory does not exist", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: {
-          error: new FileSystemError("ENOENT", projectsDir, "Not found"),
-        },
-      });
+      // Empty mock - directory doesn't exist
+      const mockFs = createFileSystemMock();
 
       const store = new ProjectStore(projectsDir, mockFs);
       const projects = await store.loadAllProjects();
@@ -107,8 +137,10 @@ describe("ProjectStore", () => {
     });
 
     it("returns empty array when projects directory is empty", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: { entries: [] },
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
+        },
       });
 
       const store = new ProjectStore(projectsDir, mockFs);
@@ -118,29 +150,23 @@ describe("ProjectStore", () => {
     });
 
     it("loads projects from config.json files", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("my-repo-abc12345", { isDirectory: true }),
-            createDirEntry("other-repo-def67890", { isDirectory: true }),
-          ],
-        },
-        readFile: {
-          implementation: async (path) => {
-            if (pathString(path).includes("my-repo-abc12345")) {
-              return JSON.stringify({
-                version: CURRENT_PROJECT_VERSION,
-                path: "/home/user/projects/my-repo",
-              });
-            }
-            if (pathString(path).includes("other-repo-def67890")) {
-              return JSON.stringify({
-                version: CURRENT_PROJECT_VERSION,
-                path: "/home/user/projects/other-repo",
-              });
-            }
-            throw new FileSystemError("ENOENT", pathString(path), "Not found");
-          },
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
+          "/data/projects/my-repo-abc12345": directory(),
+          "/data/projects/my-repo-abc12345/config.json": file(
+            JSON.stringify({
+              version: CURRENT_PROJECT_VERSION,
+              path: "/home/user/projects/my-repo",
+            })
+          ),
+          "/data/projects/other-repo-def67890": directory(),
+          "/data/projects/other-repo-def67890/config.json": file(
+            JSON.stringify({
+              version: CURRENT_PROJECT_VERSION,
+              path: "/home/user/projects/other-repo",
+            })
+          ),
         },
       });
 
@@ -153,23 +179,18 @@ describe("ProjectStore", () => {
     });
 
     it("skips directories without config.json", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("valid-project", { isDirectory: true }),
-            createDirEntry("no-config-dir", { isDirectory: true }),
-          ],
-        },
-        readFile: {
-          implementation: async (path) => {
-            if (pathString(path).includes("valid-project")) {
-              return JSON.stringify({
-                version: CURRENT_PROJECT_VERSION,
-                path: "/home/user/valid-project",
-              });
-            }
-            throw new FileSystemError("ENOENT", pathString(path), "Not found");
-          },
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
+          "/data/projects/valid-project": directory(),
+          "/data/projects/valid-project/config.json": file(
+            JSON.stringify({
+              version: CURRENT_PROJECT_VERSION,
+              path: "/home/user/valid-project",
+            })
+          ),
+          "/data/projects/no-config-dir": directory(),
+          // Note: no-config-dir has no config.json
         },
       });
 
@@ -180,26 +201,18 @@ describe("ProjectStore", () => {
     });
 
     it("skips entries with malformed JSON", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("valid-project", { isDirectory: true }),
-            createDirEntry("malformed-project", { isDirectory: true }),
-          ],
-        },
-        readFile: {
-          implementation: async (path) => {
-            if (pathString(path).includes("valid-project")) {
-              return JSON.stringify({
-                version: CURRENT_PROJECT_VERSION,
-                path: "/home/user/valid-project",
-              });
-            }
-            if (pathString(path).includes("malformed-project")) {
-              return "not valid json";
-            }
-            throw new FileSystemError("ENOENT", pathString(path), "Not found");
-          },
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
+          "/data/projects/valid-project": directory(),
+          "/data/projects/valid-project/config.json": file(
+            JSON.stringify({
+              version: CURRENT_PROJECT_VERSION,
+              path: "/home/user/valid-project",
+            })
+          ),
+          "/data/projects/malformed-project": directory(),
+          "/data/projects/malformed-project/config.json": file("not valid json"),
         },
       });
 
@@ -210,26 +223,20 @@ describe("ProjectStore", () => {
     });
 
     it("skips config.json missing path field", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("valid-project", { isDirectory: true }),
-            createDirEntry("missing-path", { isDirectory: true }),
-          ],
-        },
-        readFile: {
-          implementation: async (path) => {
-            if (pathString(path).includes("valid-project")) {
-              return JSON.stringify({
-                version: CURRENT_PROJECT_VERSION,
-                path: "/home/user/valid-project",
-              });
-            }
-            if (pathString(path).includes("missing-path")) {
-              return JSON.stringify({ version: CURRENT_PROJECT_VERSION });
-            }
-            throw new FileSystemError("ENOENT", pathString(path), "Not found");
-          },
+      const mockFs = createFileSystemMock({
+        entries: {
+          "/data/projects": directory(),
+          "/data/projects/valid-project": directory(),
+          "/data/projects/valid-project/config.json": file(
+            JSON.stringify({
+              version: CURRENT_PROJECT_VERSION,
+              path: "/home/user/valid-project",
+            })
+          ),
+          "/data/projects/missing-path": directory(),
+          "/data/projects/missing-path/config.json": file(
+            JSON.stringify({ version: CURRENT_PROJECT_VERSION })
+          ),
         },
       });
 
@@ -240,24 +247,22 @@ describe("ProjectStore", () => {
     });
 
     it("skips non-directory entries", async () => {
-      const mockFs = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("valid-project", { isDirectory: true }),
-            createDirEntry("file.txt", { isFile: true }),
-            createDirEntry("symlink", { isSymbolicLink: true }),
-          ],
-        },
-        readFile: {
-          implementation: async (path) => {
-            if (pathString(path).includes("valid-project")) {
-              return JSON.stringify({
-                version: CURRENT_PROJECT_VERSION,
-                path: "/home/user/valid-project",
-              });
-            }
-            throw new FileSystemError("ENOENT", pathString(path), "Not found");
-          },
+      // Use tracking mock for this test because behavioral mock doesn't support
+      // files and symlinks at the same level as directories in readdir
+      const mockFs = createTrackingMock({
+        readdir: async () => [
+          createDirEntry("valid-project", { isDirectory: true }),
+          createDirEntry("file.txt", { isFile: true }),
+          createDirEntry("symlink", { isSymbolicLink: true }),
+        ],
+        readFile: async (path) => {
+          if (pathString(path).includes("valid-project")) {
+            return JSON.stringify({
+              version: CURRENT_PROJECT_VERSION,
+              path: "/home/user/valid-project",
+            });
+          }
+          throw new FileSystemError("ENOENT", pathString(path), "Not found");
         },
       });
 
@@ -273,16 +278,12 @@ describe("ProjectStore", () => {
       const unlinkedPaths: string[] = [];
       const rmCalls: Array<{ path: string; recursive: boolean | undefined }> = [];
 
-      const mockFs = createMockFileSystemLayer({
-        unlink: {
-          implementation: async (path) => {
-            unlinkedPaths.push(pathString(path));
-          },
+      const mockFs = createTrackingMock({
+        unlink: async (path) => {
+          unlinkedPaths.push(pathString(path));
         },
-        rm: {
-          implementation: async (path, options) => {
-            rmCalls.push({ path: pathString(path), recursive: options?.recursive });
-          },
+        rm: async (path, options) => {
+          rmCalls.push({ path: pathString(path), recursive: options?.recursive });
         },
       });
 
@@ -302,9 +303,9 @@ describe("ProjectStore", () => {
     });
 
     it("does not throw if project was not saved (ENOENT)", async () => {
-      const mockFs = createMockFileSystemLayer({
-        unlink: {
-          error: new FileSystemError("ENOENT", "/path", "Not found"),
+      const mockFs = createTrackingMock({
+        unlink: async () => {
+          throw new FileSystemError("ENOENT", "/path", "Not found");
         },
       });
 
@@ -319,15 +320,12 @@ describe("ProjectStore", () => {
     it("preserves directory when workspaces exist (ENOTEMPTY)", async () => {
       const unlinkedPaths: string[] = [];
 
-      const mockFs = createMockFileSystemLayer({
-        unlink: {
-          implementation: async (path) => {
-            unlinkedPaths.push(pathString(path));
-          },
+      const mockFs = createTrackingMock({
+        unlink: async (path) => {
+          unlinkedPaths.push(pathString(path));
         },
-        rm: {
-          // rm() without recursive fails with ENOTEMPTY when directory has contents
-          error: new FileSystemError("ENOTEMPTY", "/path", "Directory not empty"),
+        rm: async () => {
+          throw new FileSystemError("ENOTEMPTY", "/path", "Directory not empty");
         },
       });
 

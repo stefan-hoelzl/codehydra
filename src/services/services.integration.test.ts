@@ -11,7 +11,7 @@ import { GitWorktreeProvider } from "./git/git-worktree-provider";
 import { ProjectStore } from "./project/project-store";
 import { DefaultFileSystemLayer } from "./platform/filesystem";
 import { SILENT_LOGGER } from "./logging";
-import { createMockFileSystemLayer } from "./platform/filesystem.test-utils";
+import { createFileSystemMock, directory } from "./platform/filesystem.state-mock";
 import { createGitWorktreeProvider } from "./index";
 import { projectDirName } from "./platform/paths";
 import { Path } from "./platform/path";
@@ -227,7 +227,11 @@ describe("Services Integration", () => {
         unsetBranchConfig: async () => {},
       };
 
-      const mockFileSystemLayer = createMockFileSystemLayer();
+      const mockFileSystemLayer = createFileSystemMock({
+        entries: {
+          "/mock/workspaces": directory(),
+        },
+      });
       const provider = await GitWorktreeProvider.create(
         new Path("/mock/repo"),
         mockGitClient,

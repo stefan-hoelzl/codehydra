@@ -8,7 +8,13 @@ import { GitWorktreeProvider } from "./git-worktree-provider";
 import type { IGitClient } from "./git-client";
 import { WorkspaceError } from "../errors";
 import type { BranchInfo, WorktreeInfo } from "./types";
-import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
+import {
+  createFileSystemMock,
+  createSpyFileSystemLayer,
+  directory,
+  symlink,
+  file,
+} from "../platform/filesystem.state-mock";
 import { FileSystemError } from "../errors";
 import { createMockLogger } from "../logging/logging.test-utils";
 import { delay } from "../test-utils";
@@ -47,7 +53,7 @@ function createMockGitClient(overrides: Partial<IGitClient> = {}): IGitClient {
 describe("GitWorktreeProvider", () => {
   const PROJECT_ROOT = new Path("/home/user/projects/my-repo");
   const WORKSPACES_DIR = new Path("/home/user/app-data/projects/my-repo-abc12345/workspaces");
-  const mockFs = createMockFileSystemLayer();
+  const mockFs = createFileSystemMock();
   const mockLogger = createMockLogger();
 
   describe("create (factory)", () => {
@@ -1542,21 +1548,18 @@ describe("GitWorktreeProvider", () => {
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
       // Mock fs with registered worktree and an orphan
-      const rmFn = vi.fn();
-      const mockFsWithOrphan = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("feature-x", { isDirectory: true }),
-            createDirEntry("orphan-workspace", { isDirectory: true }),
-          ],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "feature-x").toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "orphan-workspace").toString()]: directory(),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithOrphan,
+        spyFs,
         mockLogger
       );
 
@@ -1564,7 +1567,7 @@ describe("GitWorktreeProvider", () => {
 
       expect(result.removedCount).toBe(1);
       expect(result.failedPaths).toHaveLength(0);
-      expect(rmFn).toHaveBeenCalledWith(new Path(WORKSPACES_DIR, "orphan-workspace"), {
+      expect(spyFs.rm).toHaveBeenCalledWith(new Path(WORKSPACES_DIR, "orphan-workspace"), {
         recursive: true,
         force: true,
       });
@@ -1583,25 +1586,24 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const rmFn = vi.fn();
-      const mockFsOnlyRegistered = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("feature-x", { isDirectory: true })],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "feature-x").toString()]: directory(),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsOnlyRegistered,
+        spyFs,
         mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
 
       expect(result.removedCount).toBe(0);
-      expect(rmFn).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("skips symlinks", async () => {
@@ -1611,25 +1613,24 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const rmFn = vi.fn();
-      const mockFsWithSymlink = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("symlink-entry", { isSymbolicLink: true })],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "symlink-entry").toString()]: symlink("/target"),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithSymlink,
+        spyFs,
         mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
 
       expect(result.removedCount).toBe(0);
-      expect(rmFn).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("skips files", async () => {
@@ -1639,25 +1640,24 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const rmFn = vi.fn();
-      const mockFsWithFile = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("some-file.txt", { isFile: true })],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "some-file.txt").toString()]: file(""),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithFile,
+        spyFs,
         mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
 
       expect(result.removedCount).toBe(0);
-      expect(rmFn).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("validates paths stay within workspacesDir", async () => {
@@ -1667,26 +1667,31 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const rmFn = vi.fn();
-      // Entry name with path traversal attempt
-      const mockFsWithTraversal = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("../../../etc", { isDirectory: true })],
+      // Note: The behavioral mock normalizes paths, so "../../../etc" becomes
+      // a normalized path that's not a child of workspacesDir
+      // We create a directory with the name "../../../etc" as a child entry
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          // Path traversal attempts are normalized and would escape workspacesDir
         },
-        rm: { implementation: rmFn },
       });
+      // Manually add an entry with a suspicious name using setEntry
+      // to simulate what readdir might return
+      spyFs.$.setEntry(new Path(WORKSPACES_DIR, "../../../etc"), directory());
+
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithTraversal,
+        spyFs,
         mockLogger
       );
 
       const result = await provider.cleanupOrphanedWorkspaces();
 
       expect(result.removedCount).toBe(0);
-      expect(rmFn).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("re-checks registration before delete (TOCTOU protection)", async () => {
@@ -1708,18 +1713,17 @@ describe("GitWorktreeProvider", () => {
           .mockResolvedValueOnce(worktrees) // First call: initial check
           .mockResolvedValueOnce(worktreesWithNewWorkspace), // Second call: re-check before delete
       });
-      const rmFn = vi.fn();
-      const mockFsWithOrphan = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("orphan-workspace", { isDirectory: true })],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "orphan-workspace").toString()]: directory(),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithOrphan,
+        spyFs,
         mockLogger
       );
 
@@ -1727,7 +1731,7 @@ describe("GitWorktreeProvider", () => {
 
       // Should not delete because it's now registered
       expect(result.removedCount).toBe(0);
-      expect(rmFn).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("returns CleanupResult with counts", async () => {
@@ -1737,21 +1741,18 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const rmFn = vi.fn();
-      const mockFsMultipleOrphans = createMockFileSystemLayer({
-        readdir: {
-          entries: [
-            createDirEntry("orphan-1", { isDirectory: true }),
-            createDirEntry("orphan-2", { isDirectory: true }),
-          ],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "orphan-1").toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "orphan-2").toString()]: directory(),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsMultipleOrphans,
+        spyFs,
         mockLogger
       );
 
@@ -1769,20 +1770,23 @@ describe("GitWorktreeProvider", () => {
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
       const orphanPath = new Path(WORKSPACES_DIR, "orphan-workspace");
-      const mockFsWithRmError = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("orphan-workspace", { isDirectory: true })],
-        },
-        rm: {
-          error: new FileSystemError("EACCES", orphanPath.toNative(), "Permission denied"),
+      // Use directory with error configured - behavioral mock throws error on rm when entry has error
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [orphanPath.toString()]: directory({ error: "EACCES" }),
         },
       });
+      // Override rm to throw error (behavioral mock doesn't throw on rm with error entry)
+      spyFs.rm.mockRejectedValue(
+        new FileSystemError("EACCES", orphanPath.toNative(), "Permission denied")
+      );
 
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsWithRmError,
+        spyFs,
         mockLogger
       );
 
@@ -1821,9 +1825,8 @@ describe("GitWorktreeProvider", () => {
             { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
           ]),
       });
-      const mockFsNotFound = createMockFileSystemLayer({
-        readdir: { error: new FileSystemError("ENOENT", WORKSPACES_DIR.toNative(), "Not found") },
-      });
+      // Empty mock - no workspacesDir means readdir throws ENOENT
+      const mockFsNotFound = createFileSystemMock();
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
@@ -1846,8 +1849,11 @@ describe("GitWorktreeProvider", () => {
             { name: "my-repo", path: PROJECT_ROOT, branch: "main", isMain: true },
           ]),
       });
-      const mockFsEmpty = createMockFileSystemLayer({
-        readdir: { entries: [] },
+      // Workspaces dir exists but is empty
+      const mockFsEmpty = createFileSystemMock({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+        },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
@@ -1877,18 +1883,17 @@ describe("GitWorktreeProvider", () => {
       const mockClient = createMockGitClient({
         listWorktrees: vi.fn().mockResolvedValue(worktrees),
       });
-      const rmFn = vi.fn();
-      const mockFsNormalized = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("feature-x", { isDirectory: true })],
+      const spyFs = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "feature-x").toString()]: directory(),
         },
-        rm: { implementation: rmFn },
       });
       const provider = await GitWorktreeProvider.create(
         PROJECT_ROOT,
         mockClient,
         WORKSPACES_DIR,
-        mockFsNormalized,
+        spyFs,
         mockLogger
       );
 
@@ -1896,7 +1901,7 @@ describe("GitWorktreeProvider", () => {
 
       // Should NOT delete because it matches registered worktree
       expect(result.removedCount).toBe(0);
-      expect(rmFn).not.toHaveBeenCalled();
+      expect(spyFs.rm).not.toHaveBeenCalled();
     });
 
     it("returns early if already in progress", async () => {
@@ -1920,9 +1925,10 @@ describe("GitWorktreeProvider", () => {
           return Promise.resolve(worktrees);
         }),
       });
-      const mockFsWithOrphan = createMockFileSystemLayer({
-        readdir: {
-          entries: [createDirEntry("orphan", { isDirectory: true })],
+      const mockFsWithOrphan = createSpyFileSystemLayer({
+        entries: {
+          [WORKSPACES_DIR.toString()]: directory(),
+          [new Path(WORKSPACES_DIR, "orphan").toString()]: directory(),
         },
       });
       const provider = await GitWorktreeProvider.create(

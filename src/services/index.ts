@@ -102,7 +102,20 @@ export type {
   FileSystemErrorCode,
   PathLike,
 } from "./platform/filesystem";
-export { createMockFileSystemLayer, createDirEntry } from "./platform/filesystem.test-utils";
+export {
+  createFileSystemMock,
+  createSpyFileSystemLayer,
+  createDirEntry,
+  file,
+  directory,
+  symlink,
+  type MockFileSystemLayer,
+  type SpyFileSystemLayer,
+  type Entry,
+  type FileEntry,
+  type DirectoryEntry,
+  type SymlinkEntry,
+} from "./platform/filesystem.state-mock";
 
 // VSCode setup
 export { VscodeSetupService, CURRENT_SETUP_VERSION } from "./vscode-setup";

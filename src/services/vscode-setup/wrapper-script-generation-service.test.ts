@@ -10,7 +10,7 @@ import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
 import {
   createSpyFileSystemLayer,
   type SpyFileSystemLayer,
-} from "../platform/filesystem.test-utils";
+} from "../platform/filesystem.state-mock";
 import type { PathProvider } from "../platform/path-provider";
 import type { PlatformInfo } from "../platform/platform-info";
 import type { PathLike } from "../platform/filesystem";

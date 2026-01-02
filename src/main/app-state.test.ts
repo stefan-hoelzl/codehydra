@@ -6,7 +6,7 @@ import { delay } from "../services/test-utils";
 import type { IViewManager } from "./managers/view-manager.interface";
 import {
   createMockPathProvider,
-  createMockFileSystemLayer,
+  createFileSystemMock,
   createMockLoggingService,
   type PathProvider,
   type FileSystemLayer,
@@ -110,7 +110,7 @@ describe("AppState", () => {
       dataRootDir: WORKSPACES_DIR,
     });
     // Create mock FileSystemLayer and LoggingService
-    mockFileSystemLayer = createMockFileSystemLayer();
+    mockFileSystemLayer = createFileSystemMock();
     mockLoggingService = createMockLoggingService();
 
     // Set up workspace provider mock implementations with Path objects

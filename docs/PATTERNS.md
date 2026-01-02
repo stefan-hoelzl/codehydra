@@ -838,42 +838,43 @@ All methods throw `FileSystemError` (extends `ServiceError`) with mapped error c
 | `ENOTEMPTY` | Directory not empty                 |
 | `UNKNOWN`   | Other errors (check `originalCode`) |
 
-**Testing with Mocks:**
+**Testing with Behavioral Mocks:**
 
 ```typescript
-import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
+import { createFileSystemMock, file, directory, symlink } from "../platform/filesystem.state-mock";
 
-// Basic mock - all operations succeed
-const mockFs = createMockFileSystemLayer();
-
-// Return specific file content
-const mockFs = createMockFileSystemLayer({
-  readFile: { content: '{"key": "value"}' },
-});
-
-// Simulate specific error
-const mockFs = createMockFileSystemLayer({
-  readFile: { error: new FileSystemError("ENOENT", "/path", "Not found") },
-});
-
-// Custom implementation for complex logic
-const mockFs = createMockFileSystemLayer({
-  readFile: {
-    implementation: async (path) => {
-      if (path === "/config.json") return "{}";
-      throw new FileSystemError("ENOENT", path, "Not found");
-    },
+// Create mock with initial filesystem state
+const mock = createFileSystemMock({
+  entries: {
+    "/projects": directory(),
+    "/projects/config.json": file('{"key": "value"}'),
+    "/projects/bin/run.sh": file("#!/bin/bash", { executable: true }),
+    "/projects/current": symlink("/projects/v1"),
   },
-  readdir: {
-    entries: [
-      createDirEntry("file.txt", { isFile: true }),
-      createDirEntry("subdir", { isDirectory: true }),
-    ],
+});
+
+// Simulate error on specific entry
+const mockWithError = createFileSystemMock({
+  entries: {
+    "/protected.txt": file("secret", { error: "EACCES" }),
   },
 });
 
 // Inject into service
-const service = new ProjectStore(projectsDir, mockFs);
+const service = new ProjectStore(projectsDir, mock);
+
+// Assert filesystem state after operations
+await service.saveConfig({ debug: true });
+expect(mock).toHaveFile("/projects/config.json");
+expect(mock).toHaveFileContaining("/projects/config.json", "debug");
+
+// Access state directly via $ property
+expect(mock.$.entries.size).toBe(4);
+
+// Use snapshot for unchanged assertions
+const snapshot = mock.$.snapshot();
+await expect(mock.readFile("/missing")).rejects.toThrow();
+expect(mock).toBeUnchanged(snapshot);
 ```
 
 ### External System Access Rules
@@ -931,7 +932,7 @@ All paths below are relative to `src/services/`.
 
 | Interface              | Mock Factory                       | Location                                        |
 | ---------------------- | ---------------------------------- | ----------------------------------------------- |
-| `FileSystemLayer`      | `createMockFileSystemLayer()`      | `platform/filesystem.test-utils.ts`             |
+| `FileSystemLayer`      | `createFileSystemMock()`           | `platform/filesystem.state-mock.ts`             |
 | `HttpClient`           | `createMockHttpClient()`           | `platform/network.test-utils.ts`                |
 | `PortManager`          | `createPortManagerMock()`          | `platform/port-manager.state-mock.ts`           |
 | `ProcessRunner`        | `createMockProcessRunner()`        | `platform/process.test-utils.ts`                |

@@ -15,7 +15,7 @@ import { AppState } from "./app-state";
 import type { IViewManager } from "./managers/view-manager.interface";
 import {
   createMockPathProvider,
-  createMockFileSystemLayer,
+  createFileSystemMock,
   createMockLoggingService,
   type PathProvider,
   type ProjectStore,
@@ -164,7 +164,7 @@ describe("AppState Integration: Workspace Removal Cleanup Flow", () => {
     mockViewManager = createMockViewManager();
     mockAgentStatusManager = createMockAgentStatusManager();
     mockServerManager = createMockServerManager();
-    mockFileSystemLayer = createMockFileSystemLayer();
+    mockFileSystemLayer = createFileSystemMock();
     mockLoggingService = createMockLoggingService();
 
     // Set up workspace provider mock implementations with Path objects

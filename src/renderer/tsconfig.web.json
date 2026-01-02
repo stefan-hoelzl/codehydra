@@ -19,5 +19,5 @@
     "../test/**/*",
     "../services/test-utils.ts"
   ],
-  "exclude": ["../../node_modules", "../../app-data"]
+  "exclude": ["../../node_modules", "../../app-data", "../test/setup-matchers.ts"]
 }

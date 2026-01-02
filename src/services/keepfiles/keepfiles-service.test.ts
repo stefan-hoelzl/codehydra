@@ -7,7 +7,13 @@
 import { join } from "path";
 import { describe, it, expect, vi } from "vitest";
 import { KeepFilesService } from "./keepfiles-service";
-import { createMockFileSystemLayer, createDirEntry } from "../platform/filesystem.test-utils";
+import {
+  createFileSystemMock,
+  file,
+  directory,
+  symlink,
+  createDirEntry,
+} from "../platform/filesystem.state-mock";
 import { FileSystemError } from "../errors";
 import type { FileSystemLayer } from "../platform/filesystem";
 import { SILENT_LOGGER } from "../logging";
@@ -19,9 +25,11 @@ describe("KeepFilesService", () => {
   describe("copyToWorkspace", () => {
     describe("no .keepfiles config", () => {
       it("returns configExists: false when no .keepfiles", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: {
-            error: new FileSystemError("ENOENT", "/project/.keepfiles", "Not found"),
+        // Empty filesystem - .keepfiles doesn't exist
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/workspace": directory(),
           },
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
@@ -37,9 +45,12 @@ describe("KeepFilesService", () => {
 
     describe("empty .keepfiles config", () => {
       it("returns configExists: true with copiedCount: 0 when .keepfiles is empty", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: "" },
-          readdir: { entries: [] },
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file(""),
+            "/workspace": directory(),
+          },
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
@@ -54,9 +65,12 @@ describe("KeepFilesService", () => {
 
     describe("comments and blank lines", () => {
       it("ignores comments and blank lines", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: "# This is a comment\n\n# Another comment\n" },
-          readdir: { entries: [] },
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file("# This is a comment\n\n# Another comment\n"),
+            "/workspace": directory(),
+          },
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
@@ -67,9 +81,12 @@ describe("KeepFilesService", () => {
       });
 
       it("ignores whitespace-only lines", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: "  \n\t\n   \t   \n" },
-          readdir: { entries: [] },
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file("  \n\t\n   \t   \n"),
+            "/workspace": directory(),
+          },
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
@@ -82,12 +99,13 @@ describe("KeepFilesService", () => {
 
     describe("single file pattern", () => {
       it("matches and copies single file", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: ".env" },
-          readdir: {
-            entries: [createDirEntry(".env", { isFile: true })],
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file(".env"),
+            "/project/.env": file("ENV_VAR=value"),
+            "/workspace": directory(),
           },
-          copyTree: {},
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
@@ -95,6 +113,8 @@ describe("KeepFilesService", () => {
 
         expect(result.configExists).toBe(true);
         expect(result.copiedCount).toBe(1);
+        // Verify the file was copied
+        expect(mockFs).toHaveFile("/workspace/.env", "ENV_VAR=value");
       });
     });
 
@@ -150,22 +170,25 @@ describe("KeepFilesService", () => {
 
     describe("glob patterns", () => {
       it("matches glob pattern .env.*", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: ".env.*" },
-          readdir: {
-            entries: [
-              createDirEntry(".env.local", { isFile: true }),
-              createDirEntry(".env.development", { isFile: true }),
-              createDirEntry("README.md", { isFile: true }),
-            ],
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file(".env.*"),
+            "/project/.env.local": file("LOCAL=true"),
+            "/project/.env.development": file("DEV=true"),
+            "/project/README.md": file("# Readme"),
+            "/workspace": directory(),
           },
-          copyTree: {},
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
         expect(result.copiedCount).toBe(2); // .env.local and .env.development
+        // Verify the right files were copied
+        expect(mockFs).toHaveFile("/workspace/.env.local", "LOCAL=true");
+        expect(mockFs).toHaveFile("/workspace/.env.development", "DEV=true");
+        expect(mockFs).not.toHaveFile("/workspace/README.md");
       });
     });
 
@@ -291,15 +314,14 @@ describe("KeepFilesService", () => {
 
     describe("symlink handling", () => {
       it("skips symlinks and counts them in skippedCount", async () => {
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: "link.txt\nfile.txt" },
-          readdir: {
-            entries: [
-              createDirEntry("link.txt", { isSymbolicLink: true }),
-              createDirEntry("file.txt", { isFile: true }),
-            ],
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file("link.txt\nfile.txt"),
+            "/project/link.txt": symlink("/somewhere/else"),
+            "/project/file.txt": file("content"),
+            "/workspace": directory(),
           },
-          copyTree: {},
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
@@ -307,27 +329,29 @@ describe("KeepFilesService", () => {
 
         expect(result.copiedCount).toBe(1); // Only file.txt
         expect(result.skippedCount).toBe(1); // link.txt was skipped
+        expect(mockFs).toHaveFile("/workspace/file.txt", "content");
       });
     });
 
     describe("UTF-8 BOM handling", () => {
       it("handles .keepfiles with UTF-8 BOM correctly", async () => {
         // UTF-8 BOM: \ufeff
-        const mockFs = createMockFileSystemLayer({
-          readFile: { content: "\ufeff.env\n.env.local" },
-          readdir: {
-            entries: [
-              createDirEntry(".env", { isFile: true }),
-              createDirEntry(".env.local", { isFile: true }),
-            ],
+        const mockFs = createFileSystemMock({
+          entries: {
+            "/project": directory(),
+            "/project/.keepfiles": file("\ufeff.env\n.env.local"),
+            "/project/.env": file("ENV=value"),
+            "/project/.env.local": file("LOCAL=value"),
+            "/workspace": directory(),
           },
-          copyTree: {},
         });
         const service = new KeepFilesService(mockFs, SILENT_LOGGER);
 
         const result = await service.copyToWorkspace("/project", "/workspace");
 
         expect(result.copiedCount).toBe(2);
+        expect(mockFs).toHaveFile("/workspace/.env", "ENV=value");
+        expect(mockFs).toHaveFile("/workspace/.env.local", "LOCAL=value");
       });
     });
   });
