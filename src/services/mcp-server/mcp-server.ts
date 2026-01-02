@@ -576,7 +576,7 @@ export class McpServer implements IMcpServer {
       }
 
       // Query caller's OpenCode for current session's model
-      const sdk = createOpencodeClient({ baseUrl: `http://localhost:${callerPort}` });
+      const sdk = createOpencodeClient({ baseUrl: `http://127.0.0.1:${callerPort}` });
       const sessions = await sdk.session.list();
       const activeSession = sessions.data?.[0];
 

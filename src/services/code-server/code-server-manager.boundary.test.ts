@@ -248,7 +248,7 @@ describe("CodeServerManager (boundary)", () => {
         const port = await manager.ensureRunning();
 
         // Act - bypass CodeServerManager, hit endpoint directly
-        const response = await fetch(`http://localhost:${port}/healthz`);
+        const response = await fetch(`http://127.0.0.1:${port}/healthz`);
 
         // Assert
         expect(response.status).toBe(200);

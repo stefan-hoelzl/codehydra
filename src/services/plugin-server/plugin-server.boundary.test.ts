@@ -103,7 +103,7 @@ describe("PluginServer (boundary)", { timeout: TEST_TIMEOUT }, () => {
 
     it("rejects client with missing workspacePath property", async () => {
       // Client with auth object that has no workspacePath property at all
-      const client = ioClient(`http://localhost:${port}`, {
+      const client = ioClient(`http://127.0.0.1:${port}`, {
         // Use polling transport to match server configuration
         transports: ["polling"],
         autoConnect: false,

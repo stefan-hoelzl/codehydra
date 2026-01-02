@@ -226,8 +226,8 @@ export function createTestServer(routes?: Record<string, RouteHandler>): TestSer
       });
 
       await new Promise<void>((resolve, reject) => {
-        // CRITICAL: Bind to localhost only for security
-        server!.listen(0, "localhost", () => {
+        // CRITICAL: Bind to 127.0.0.1 only for security (avoid IPv4/IPv6 resolution issues)
+        server!.listen(0, "127.0.0.1", () => {
           const addr = server!.address();
           if (addr && typeof addr === "object") {
             serverPort = addr.port;
@@ -259,7 +259,7 @@ export function createTestServer(routes?: Record<string, RouteHandler>): TestSer
       if (serverPort === null) {
         throw new Error("Server not started - call start() first");
       }
-      return `http://localhost:${serverPort}${path}`;
+      return `http://127.0.0.1:${serverPort}${path}`;
     },
   };
 }
@@ -329,7 +329,7 @@ async function isPortOpen(port: number): Promise<boolean> {
   const { createConnection } = await import("net");
 
   return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "localhost" }, () => {
+    const socket = createConnection({ port, host: "127.0.0.1" }, () => {
       socket.destroy();
       resolve(true);
     });

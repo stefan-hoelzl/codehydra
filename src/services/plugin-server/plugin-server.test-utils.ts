@@ -60,7 +60,7 @@ export interface TestClientOptions {
  * ```
  */
 export function createTestClient(port: number, options: TestClientOptions): TestClientSocket {
-  return ioClient(`http://localhost:${port}`, {
+  return ioClient(`http://127.0.0.1:${port}`, {
     // Use polling transport to match server configuration
     transports: ["polling"],
     autoConnect: options.autoConnect ?? false,

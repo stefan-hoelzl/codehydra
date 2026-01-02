@@ -188,7 +188,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -207,7 +207,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -238,7 +238,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -267,7 +267,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -276,7 +276,7 @@ describe("ViewManager", () => {
 
       const state = deps.viewLayer._getState();
       const workspaceView = [...state.views.values()][1];
-      expect(workspaceView?.url).toBe("http://localhost:8080/?folder=/path");
+      expect(workspaceView?.url).toBe("http://127.0.0.1:8080/?folder=/path");
     });
 
     it("does not reload URL on subsequent activations", () => {
@@ -285,12 +285,12 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace1",
-        "http://localhost:8080/?folder=/path1",
+        "http://127.0.0.1:8080/?folder=/path1",
         "/path/to/project"
       );
       manager.createWorkspaceView(
         "/path/to/workspace2",
-        "http://localhost:8080/?folder=/path2",
+        "http://127.0.0.1:8080/?folder=/path2",
         "/path/to/project"
       );
 
@@ -305,7 +305,7 @@ describe("ViewManager", () => {
 
       const state = deps.viewLayer._getState();
       const workspace1View = [...state.views.values()][1];
-      expect(workspace1View?.url).toBe("http://localhost:8080/?folder=/path1");
+      expect(workspace1View?.url).toBe("http://127.0.0.1:8080/?folder=/path1");
     });
   });
 
@@ -316,7 +316,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -325,7 +325,7 @@ describe("ViewManager", () => {
       const state = deps.viewLayer._getState();
       const workspaceView = [...state.views.values()][1];
       // URL should be loaded
-      expect(workspaceView?.url).toBe("http://localhost:8080/?folder=/path");
+      expect(workspaceView?.url).toBe("http://127.0.0.1:8080/?folder=/path");
       // But still not attached
       expect(workspaceView?.attachedTo).toBeNull();
     });
@@ -336,7 +336,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -348,7 +348,7 @@ describe("ViewManager", () => {
       // Should still work (idempotent)
       const state = deps.viewLayer._getState();
       const workspaceView = [...state.views.values()][1];
-      expect(workspaceView?.url).toBe("http://localhost:8080/?folder=/path");
+      expect(workspaceView?.url).toBe("http://127.0.0.1:8080/?folder=/path");
     });
 
     it("does nothing for nonexistent workspace", () => {
@@ -367,7 +367,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -382,7 +382,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setActiveWorkspace("/path/to/workspace");
@@ -399,7 +399,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -421,7 +421,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -466,12 +466,12 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace1",
-        "http://localhost:8080/?folder=/path1",
+        "http://127.0.0.1:8080/?folder=/path1",
         "/path/to/project"
       );
       manager.createWorkspaceView(
         "/path/to/workspace2",
-        "http://localhost:8080/?folder=/path2",
+        "http://127.0.0.1:8080/?folder=/path2",
         "/path/to/project"
       );
 
@@ -513,7 +513,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setActiveWorkspace("/path/to/workspace");
@@ -537,7 +537,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setActiveWorkspace("/path/to/workspace");
@@ -562,7 +562,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -574,7 +574,7 @@ describe("ViewManager", () => {
       const state = deps.viewLayer._getState();
       const workspaceView = [...state.views.values()][1];
       // URL should be loaded
-      expect(workspaceView?.url).toBe("http://localhost:8080/?folder=/path");
+      expect(workspaceView?.url).toBe("http://127.0.0.1:8080/?folder=/path");
       // View should be attached
       expect(workspaceView?.attachedTo).toBe(deps.windowLayer._createdWindowHandle.id);
     });
@@ -585,12 +585,12 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace1",
-        "http://localhost:8080/?folder=/path1",
+        "http://127.0.0.1:8080/?folder=/path1",
         "/path/to/project"
       );
       manager.createWorkspaceView(
         "/path/to/workspace2",
-        "http://localhost:8080/?folder=/path2",
+        "http://127.0.0.1:8080/?folder=/path2",
         "/path/to/project"
       );
 
@@ -620,7 +620,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setWorkspaceLoaded("/path/to/workspace");
@@ -641,7 +641,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setWorkspaceLoaded("/path/to/workspace");
@@ -661,7 +661,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -769,7 +769,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setActiveWorkspace("/path/to/workspace");
@@ -783,7 +783,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setActiveWorkspace("/path/to/workspace");
@@ -807,7 +807,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
       manager.setActiveWorkspace("/path/to/workspace");
@@ -837,7 +837,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -982,12 +982,12 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace1",
-        "http://localhost:8080/?folder=/path1",
+        "http://127.0.0.1:8080/?folder=/path1",
         "/path/to/project"
       );
       manager.createWorkspaceView(
         "/path/to/workspace2",
-        "http://localhost:8080/?folder=/path2",
+        "http://127.0.0.1:8080/?folder=/path2",
         "/path/to/project"
       );
 

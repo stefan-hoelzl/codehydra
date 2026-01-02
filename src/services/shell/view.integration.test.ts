@@ -85,9 +85,9 @@ describe("ViewLayer (integration)", () => {
     it("sets the URL on the view", async () => {
       const handle = viewLayer.createView({});
 
-      await viewLayer.loadURL(handle, "http://localhost:8080");
+      await viewLayer.loadURL(handle, "http://127.0.0.1:8080");
 
-      expect(viewLayer.getURL(handle)).toBe("http://localhost:8080");
+      expect(viewLayer.getURL(handle)).toBe("http://127.0.0.1:8080");
     });
 
     it("throws VIEW_NOT_FOUND for non-existent view", async () => {
@@ -106,9 +106,9 @@ describe("ViewLayer (integration)", () => {
 
     it("returns the loaded URL", async () => {
       const handle = viewLayer.createView({});
-      await viewLayer.loadURL(handle, "http://localhost:3000");
+      await viewLayer.loadURL(handle, "http://127.0.0.1:3000");
 
-      expect(viewLayer.getURL(handle)).toBe("http://localhost:3000");
+      expect(viewLayer.getURL(handle)).toBe("http://127.0.0.1:3000");
     });
   });
 

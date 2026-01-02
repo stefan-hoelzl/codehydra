@@ -287,7 +287,7 @@ export async function withOpencode(
       provider: {
         mock: {
           npm: "@ai-sdk/openai-compatible",
-          options: { baseURL: `http://localhost:${mockLlm.port}/v1` },
+          options: { baseURL: `http://127.0.0.1:${mockLlm.port}/v1` },
           models: { test: { name: "Test Model" } },
         },
       },
@@ -303,7 +303,7 @@ export async function withOpencode(
     await waitForPort(port, CI_TIMEOUT_MS);
 
     // Create clients
-    const sdk = createOpencodeClient({ baseUrl: `http://localhost:${port}` });
+    const sdk = createOpencodeClient({ baseUrl: `http://127.0.0.1:${port}` });
     client = new OpenCodeClient(port, SILENT_LOGGER);
 
     // Run the test

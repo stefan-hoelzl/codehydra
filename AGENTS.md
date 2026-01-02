@@ -121,6 +121,20 @@ path1 === path2;                     // ❌ Fails for "C:\foo" vs "C:/foo"
 
 **Full details**: See [Path Handling Patterns](docs/PATTERNS.md#path-handling-patterns) for code examples.
 
+### Use 127.0.0.1 Instead of localhost
+
+**ALWAYS use `127.0.0.1` instead of `localhost` for local network connections.**
+
+- Server bindings: `server.listen(port, "127.0.0.1")`
+- URL construction: `http://127.0.0.1:${port}/...`
+- Socket connections: `{ host: "127.0.0.1", port }`
+
+**Why this matters:**
+
+1. **IPv4/IPv6 mismatch**: Node.js may resolve `localhost` to `::1` (IPv6) while servers bind to `127.0.0.1` (IPv4), causing connection failures
+2. **Windows DNS latency**: Resolving `localhost` on Windows can be slow, causing test timeouts
+3. **Consistency**: Using explicit IP avoids platform-specific DNS behavior
+
 ### Ask When Uncertain
 
 **NEVER make decisions based on assumptions without proof.**

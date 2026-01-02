@@ -320,7 +320,7 @@ export class ViewManager implements IViewManager {
 
     // Configure navigation handler to prevent navigation away from code-server
     this.viewLayer.onWillNavigate(viewHandle, (navigationUrl) => {
-      const codeServerOrigin = `http://localhost:${this.codeServerPort}`;
+      const codeServerOrigin = `http://127.0.0.1:${this.codeServerPort}`;
       if (!navigationUrl.startsWith(codeServerOrigin)) {
         openExternal(navigationUrl).catch((error: unknown) => {
           this.logger.warn("Failed to open external URL", {

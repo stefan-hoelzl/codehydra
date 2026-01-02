@@ -239,8 +239,8 @@ export class PluginServer {
     this.setupEventHandlers();
 
     await new Promise<void>((resolve, reject) => {
-      // Listen on localhost only for security
-      this.httpServer!.listen(port, "localhost", () => {
+      // Listen on 127.0.0.1 only for security (avoid IPv4/IPv6 resolution issues)
+      this.httpServer!.listen(port, "127.0.0.1", () => {
         this.port = port;
         this.logger.info("Started", { port });
         resolve();

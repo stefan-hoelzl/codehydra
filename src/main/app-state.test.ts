@@ -202,7 +202,7 @@ describe("AppState", () => {
 
       expect(mockViewManager.createWorkspaceView).toHaveBeenCalledWith(
         "/project/.worktrees/feature-1",
-        expect.stringContaining("http://localhost:8080"),
+        expect.stringContaining("http://127.0.0.1:8080"),
         "/project",
         true
       );
@@ -565,7 +565,7 @@ describe("AppState", () => {
 
       const url = appState.getWorkspaceUrl("/path/to/workspace");
 
-      expect(url).toContain("http://localhost:8080");
+      expect(url).toContain("http://127.0.0.1:8080");
       expect(url).toContain("folder=");
     });
   });

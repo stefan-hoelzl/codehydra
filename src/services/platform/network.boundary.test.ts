@@ -363,7 +363,7 @@ describe("DefaultNetworkLayer boundary tests", () => {
           const unusedPort = 59999;
 
           try {
-            await httpClient.fetch(`http://localhost:${unusedPort}/test`, { timeout: 1000 });
+            await httpClient.fetch(`http://127.0.0.1:${unusedPort}/test`, { timeout: 1000 });
             expect.fail("Expected fetch to throw");
           } catch (error) {
             // On Node.js, connection refused errors are wrapped in TypeError with "fetch failed"

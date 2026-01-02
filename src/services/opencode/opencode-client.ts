@@ -171,7 +171,7 @@ export class OpenCodeClient implements IDisposable {
 
   constructor(port: number, logger: Logger, sdkFactory: SdkClientFactory = defaultSdkFactory) {
     this.port = port;
-    this.baseUrl = `http://localhost:${port}`;
+    this.baseUrl = `http://127.0.0.1:${port}`;
     this.logger = logger;
     this.sdk = sdkFactory(this.baseUrl);
   }

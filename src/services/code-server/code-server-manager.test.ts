@@ -18,32 +18,32 @@ describe("urlForFolder", () => {
   it("generates correct URL with folder path", () => {
     const url = urlForFolder(8080, "/home/user/projects/my-repo");
 
-    expect(url).toBe("http://localhost:8080/?folder=/home/user/projects/my-repo");
+    expect(url).toBe("http://127.0.0.1:8080/?folder=/home/user/projects/my-repo");
   });
 
   it("encodes spaces in folder path", () => {
     const url = urlForFolder(8080, "/home/user/My Projects/repo");
 
-    expect(url).toBe("http://localhost:8080/?folder=/home/user/My%20Projects/repo");
+    expect(url).toBe("http://127.0.0.1:8080/?folder=/home/user/My%20Projects/repo");
   });
 
   it("encodes special characters in path", () => {
     const url = urlForFolder(8080, "/home/user/project#1");
 
-    expect(url).toBe("http://localhost:8080/?folder=/home/user/project%231");
+    expect(url).toBe("http://127.0.0.1:8080/?folder=/home/user/project%231");
   });
 
   it("handles Windows paths", () => {
     // Windows paths need to be converted for URL
     const url = urlForFolder(8080, "C:/Users/user/projects/repo");
 
-    expect(url).toBe("http://localhost:8080/?folder=/C:/Users/user/projects/repo");
+    expect(url).toBe("http://127.0.0.1:8080/?folder=/C:/Users/user/projects/repo");
   });
 
   it("handles unicode characters", () => {
     const url = urlForFolder(8080, "/home/user/cafe");
 
-    expect(url).toBe("http://localhost:8080/?folder=/home/user/cafe");
+    expect(url).toBe("http://127.0.0.1:8080/?folder=/home/user/cafe");
   });
 });
 

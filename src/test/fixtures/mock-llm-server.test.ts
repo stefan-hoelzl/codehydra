@@ -26,7 +26,7 @@ describe("createMockLlmServer", () => {
   it("returns instant completion in instant mode", async () => {
     server.setMode("instant");
 
-    const response = await fetch(`http://localhost:${server.port}/v1/chat/completions`, {
+    const response = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -48,7 +48,7 @@ describe("createMockLlmServer", () => {
   it("returns tool call in tool-call mode", async () => {
     server.setMode("tool-call");
 
-    const response = await fetch(`http://localhost:${server.port}/v1/chat/completions`, {
+    const response = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -74,7 +74,7 @@ describe("createMockLlmServer", () => {
   it("returns 429 in rate-limit mode", async () => {
     server.setMode("rate-limit");
 
-    const response = await fetch(`http://localhost:${server.port}/v1/chat/completions`, {
+    const response = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -92,7 +92,7 @@ describe("createMockLlmServer", () => {
   it("returns task tool call in sub-agent mode", async () => {
     server.setMode("sub-agent");
 
-    const response = await fetch(`http://localhost:${server.port}/v1/chat/completions`, {
+    const response = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -127,7 +127,7 @@ describe("createMockLlmServer", () => {
     server.setMode("slow-stream");
 
     const startTime = Date.now();
-    const response = await fetch(`http://localhost:${server.port}/v1/chat/completions`, {
+    const response = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

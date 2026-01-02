@@ -43,7 +43,7 @@ export function urlForFolder(port: number, folderPath: string): string {
 
   // Encode the path but preserve colons for Windows drive letters
   const encodedPath = encodePathForUrl(normalizedPath).replace(/%3A/g, ":");
-  return `http://localhost:${port}/?folder=${encodedPath}`;
+  return `http://127.0.0.1:${port}/?folder=${encodedPath}`;
 }
 
 /**
@@ -270,7 +270,7 @@ export class CodeServerManager {
    */
   private async checkHealth(port: number): Promise<boolean> {
     try {
-      const response = await this.httpClient.fetch(`http://localhost:${port}/healthz`, {
+      const response = await this.httpClient.fetch(`http://127.0.0.1:${port}/healthz`, {
         timeout: 1000,
       });
       const healthy = response.status === 200;

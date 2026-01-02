@@ -20,7 +20,7 @@ describe("DefaultNetworkLayer", () => {
       const mockResponse = new Response(JSON.stringify({ status: "ok" }), { status: 200 });
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(mockResponse);
 
-      const response = await networkLayer.fetch("http://localhost:8080/test");
+      const response = await networkLayer.fetch("http://127.0.0.1:8080/test");
 
       expect(response.ok).toBe(true);
       expect(response.status).toBe(200);
@@ -52,7 +52,7 @@ describe("DefaultNetworkLayer", () => {
       });
 
       await expect(
-        networkLayer.fetch("http://localhost:8080/slow", { timeout: 50 })
+        networkLayer.fetch("http://127.0.0.1:8080/slow", { timeout: 50 })
       ).rejects.toThrow();
 
       expect(abortTriggered).toBe(true);
@@ -83,7 +83,7 @@ describe("DefaultNetworkLayer", () => {
       });
 
       // Should timeout using the custom default of 50ms
-      await expect(customLayer.fetch("http://localhost:8080/slow")).rejects.toThrow();
+      await expect(customLayer.fetch("http://127.0.0.1:8080/slow")).rejects.toThrow();
 
       expect(abortTriggered).toBe(true);
 
@@ -106,7 +106,7 @@ describe("DefaultNetworkLayer", () => {
         });
       });
 
-      const resultPromise = networkLayer.fetch("http://localhost:8080/test", {
+      const resultPromise = networkLayer.fetch("http://127.0.0.1:8080/test", {
         signal: controller.signal,
       });
 
@@ -123,7 +123,7 @@ describe("DefaultNetworkLayer", () => {
       const mockResponse = new Response("ok", { status: 200 });
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(mockResponse);
 
-      await networkLayer.fetch("http://localhost:8080/test");
+      await networkLayer.fetch("http://127.0.0.1:8080/test");
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
 
@@ -134,7 +134,7 @@ describe("DefaultNetworkLayer", () => {
       const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
       vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("Network error"));
 
-      await expect(networkLayer.fetch("http://localhost:8080/test")).rejects.toThrow();
+      await expect(networkLayer.fetch("http://127.0.0.1:8080/test")).rejects.toThrow();
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
 
@@ -151,9 +151,9 @@ describe("DefaultNetworkLayer", () => {
       });
 
       const [r1, r2, r3] = await Promise.all([
-        networkLayer.fetch("http://localhost:8080/a"),
-        networkLayer.fetch("http://localhost:8080/b"),
-        networkLayer.fetch("http://localhost:8080/c"),
+        networkLayer.fetch("http://127.0.0.1:8080/a"),
+        networkLayer.fetch("http://127.0.0.1:8080/b"),
+        networkLayer.fetch("http://127.0.0.1:8080/c"),
       ]);
 
       responses.push(r1, r2, r3);
@@ -176,7 +176,7 @@ describe("DefaultNetworkLayer", () => {
       });
 
       await expect(
-        networkLayer.fetch("http://localhost:8080/test", { signal: controller.signal })
+        networkLayer.fetch("http://127.0.0.1:8080/test", { signal: controller.signal })
       ).rejects.toThrow();
 
       vi.restoreAllMocks();
@@ -213,7 +213,7 @@ describe("waitForPort", () => {
     // This gives us a port that was just freed and is almost certainly not listening
     const unusedPort = await new Promise<number>((resolve, reject) => {
       const server = createServer();
-      server.listen(0, "localhost", () => {
+      server.listen(0, "127.0.0.1", () => {
         const addr = server.address();
         if (addr && typeof addr === "object") {
           const port = addr.port;
@@ -237,7 +237,7 @@ describe("waitForPort", () => {
     const findUnusedPort = (): Promise<number> =>
       new Promise((resolve, reject) => {
         const server = createServer();
-        server.listen(0, "localhost", () => {
+        server.listen(0, "127.0.0.1", () => {
           const addr = server.address();
           if (addr && typeof addr === "object") {
             const port = addr.port;
@@ -255,7 +255,7 @@ describe("waitForPort", () => {
       (resolve) => {
         setTimeout(() => {
           const server = createServer();
-          server.listen(port, "localhost", () => {
+          server.listen(port, "127.0.0.1", () => {
             resolve({ server, port });
           });
         }, 150);
