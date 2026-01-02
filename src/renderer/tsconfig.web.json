@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "rootDir": "..",
+    "outDir": "../../out",
+    "baseUrl": "../..",
+    "paths": {
+      "$lib/*": ["src/renderer/lib/*"],
+      "@shared/*": ["src/shared/*"],
+      "@services/*": ["src/services/*"]
+    }
+  },
+  "include": [
+    "../env.d.ts",
+    "./**/*",
+    "../shared/**/*",
+    "../test/**/*",
+    "../services/test-utils.ts"
+  ],
+  "exclude": ["../../node_modules", "../../app-data"]
+}

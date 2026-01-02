@@ -16,13 +16,10 @@
   ],
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "node esbuild.config.js"
+    "build": "vite build"
   },
   "dependencies": {
     "socket.io-client": "^4.7.0"
-  },
-  "devDependencies": {
-    "esbuild": "^0.24.0"
   },
   "contributes": {
     "commands": [

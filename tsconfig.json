@@ -12,8 +12,14 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext"
   },
-  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }],
+  "references": [
+    { "path": "./src/tsconfig.node.json" },
+    { "path": "./src/renderer/tsconfig.web.json" }
+  ],
   "files": []
 }

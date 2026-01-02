@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "../out",
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["env.d.ts", "main/**/*", "preload/**/*", "services/**/*", "shared/**/*", "test/**/*"]
+}

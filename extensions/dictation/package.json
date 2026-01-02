@@ -16,16 +16,11 @@
   ],
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "node esbuild.config.js"
+    "build": "vite build"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.43",
     "assemblyai": "^4.0.0"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.74.0",
-    "esbuild": "^0.24.0",
-    "typescript": "^5.0.0"
   },
   "contributes": {
     "commands": [
