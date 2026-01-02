@@ -677,7 +677,8 @@ describe("DictationController", () => {
       // Should have "Ready" status after stop
       const lastStatus =
         mockAudioCapturePanel.statusUpdates[mockAudioCapturePanel.statusUpdates.length - 1];
-      expect(lastStatus.status).toBe("Ready");
+      expect(lastStatus).toBeDefined();
+      expect(lastStatus!.status).toBe("Ready");
     });
 
     it("tab stays open after recording stops", async () => {
