@@ -223,7 +223,7 @@ describe("ViewManager", () => {
 
       const createdHandle = manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -253,7 +253,7 @@ describe("ViewManager", () => {
 
       const handle = manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -439,7 +439,7 @@ describe("ViewManager", () => {
 
       const createdHandle = manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project"
       );
 
@@ -823,7 +823,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew
       );
@@ -850,7 +850,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew
       );
@@ -868,7 +868,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew - starts loading
       );
@@ -894,7 +894,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true
       );
@@ -918,7 +918,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew
       );
@@ -932,7 +932,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew
       );
@@ -956,7 +956,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew
       );
@@ -1017,7 +1017,7 @@ describe("ViewManager", () => {
 
       manager.createWorkspaceView(
         "/path/to/workspace",
-        "http://localhost:8080/?folder=/path",
+        "http://127.0.0.1:8080/?folder=/path",
         "/path/to/project",
         true // isNew
       );

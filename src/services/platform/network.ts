@@ -40,7 +40,7 @@ export interface HttpClient {
    * @throws TypeError on network error (connection refused, DNS failure)
    *
    * @example
-   * const response = await httpClient.fetch('http://localhost:8080/api');
+   * const response = await httpClient.fetch('http://127.0.0.1:8080/api');
    * if (response.ok) {
    *   const data = await response.json();
    * }
