@@ -121,7 +121,7 @@ Execute these steps in order, only stopping on CI_TIMEOUT or CI_FAILED.
 ## 1. Commit (skip if already committed)
 - Check if there are uncommitted changes: git status --porcelain
 - If no changes: skip to step 2 (idempotent restart)
-- Update plan status to USER_TESTING, last_updated to today
+- Update plan status to COMPLETED, last_updated to today
 - git add -A
 - Commit with message:
   feat(<scope>): <short description>
@@ -192,7 +192,6 @@ If PASSED: Continue to merge
   git -C <main-dir> fetch origin <target>
   git -C <main-dir> pull --ff-only origin <target>
   (If pull fails due to local changes, report warning but continue)
-- Update plan status to COMPLETED
 
 ## Report Formats
 
