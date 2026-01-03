@@ -10,7 +10,7 @@ import {
   createBehavioralViewLayer,
   type BehavioralViewLayer,
 } from "../../services/shell/view.test-utils";
-import { createBehavioralSessionLayer } from "../../services/shell/session.test-utils";
+import { createSessionLayerMock } from "../../services/shell/session.state-mock";
 import {
   createTestWindowLayer,
   type TestWindowLayer,
@@ -92,7 +92,7 @@ function createViewManagerDeps(): ViewManagerDeps & {
 } {
   const windowLayer = createViewManagerWindowLayer();
   const viewLayer = createBehavioralViewLayer();
-  const sessionLayer = createBehavioralSessionLayer();
+  const sessionLayer = createSessionLayerMock();
   const windowManager = createMockWindowManager(windowLayer._createdWindowHandle);
 
   return {

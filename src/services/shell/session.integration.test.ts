@@ -3,14 +3,14 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { createBehavioralSessionLayer, type BehavioralSessionLayer } from "./session.test-utils";
+import { createSessionLayerMock, type MockSessionLayer } from "./session.state-mock";
 import { ShellError, isShellErrorWithCode } from "./errors";
 
 describe("SessionLayer (integration)", () => {
-  let sessionLayer: BehavioralSessionLayer;
+  let sessionLayer: MockSessionLayer;
 
   beforeEach(() => {
-    sessionLayer = createBehavioralSessionLayer();
+    sessionLayer = createSessionLayerMock();
   });
 
   describe("fromPartition", () => {
@@ -19,9 +19,7 @@ describe("SessionLayer (integration)", () => {
 
       expect(handle.id).toMatch(/^session-\d+$/);
       expect(handle.__brand).toBe("SessionHandle");
-
-      const state = sessionLayer._getState();
-      expect(state.sessions.has(handle.id)).toBe(true);
+      expect(sessionLayer).toHaveSession(handle.id);
     });
 
     it("returns the same handle for the same partition", () => {
@@ -29,9 +27,7 @@ describe("SessionLayer (integration)", () => {
       const handle2 = sessionLayer.fromPartition("persist:same-partition");
 
       expect(handle1.id).toBe(handle2.id);
-
-      const state = sessionLayer._getState();
-      expect(state.sessions.size).toBe(1);
+      expect(sessionLayer).toHaveSessionCount(1);
     });
 
     it("creates different handles for different partitions", () => {
@@ -39,16 +35,14 @@ describe("SessionLayer (integration)", () => {
       const handle2 = sessionLayer.fromPartition("persist:partition-b");
 
       expect(handle1.id).not.toBe(handle2.id);
-
-      const state = sessionLayer._getState();
-      expect(state.sessions.size).toBe(2);
+      expect(sessionLayer).toHaveSessionCount(2);
     });
 
     it("tracks partition name correctly", () => {
       const partition = "persist:test-project/workspace";
       const handle = sessionLayer.fromPartition(partition);
 
-      expect(sessionLayer._getPartition(handle)).toBe(partition);
+      expect(sessionLayer).toHaveSession(handle.id, { partition });
     });
   });
 
@@ -58,8 +52,7 @@ describe("SessionLayer (integration)", () => {
 
       await sessionLayer.clearStorageData(handle);
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.get(handle.id)?.cleared).toBe(true);
+      expect(sessionLayer).toHaveSession(handle.id, { cleared: true });
     });
 
     it("can be called multiple times", async () => {
@@ -68,8 +61,7 @@ describe("SessionLayer (integration)", () => {
       await sessionLayer.clearStorageData(handle);
       await sessionLayer.clearStorageData(handle);
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.get(handle.id)?.cleared).toBe(true);
+      expect(sessionLayer).toHaveSession(handle.id, { cleared: true });
     });
 
     it("throws SESSION_NOT_FOUND for invalid handle", async () => {
@@ -91,8 +83,7 @@ describe("SessionLayer (integration)", () => {
 
       sessionLayer.setPermissionRequestHandler(handle, () => true);
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.get(handle.id)?.hasPermissionRequestHandler).toBe(true);
+      expect(sessionLayer).toHaveSession(handle.id, { requestHandler: true });
     });
 
     it("tracks handler state when cleared", () => {
@@ -101,8 +92,7 @@ describe("SessionLayer (integration)", () => {
       sessionLayer.setPermissionRequestHandler(handle, () => true);
       sessionLayer.setPermissionRequestHandler(handle, null);
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.get(handle.id)?.hasPermissionRequestHandler).toBe(false);
+      expect(sessionLayer).toHaveSession(handle.id, { requestHandler: false });
     });
 
     it("throws SESSION_NOT_FOUND for invalid handle", () => {
@@ -120,8 +110,7 @@ describe("SessionLayer (integration)", () => {
 
       sessionLayer.setPermissionCheckHandler(handle, () => true);
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.get(handle.id)?.hasPermissionCheckHandler).toBe(true);
+      expect(sessionLayer).toHaveSession(handle.id, { checkHandler: true });
     });
 
     it("tracks handler state when cleared", () => {
@@ -130,8 +119,7 @@ describe("SessionLayer (integration)", () => {
       sessionLayer.setPermissionCheckHandler(handle, () => true);
       sessionLayer.setPermissionCheckHandler(handle, null);
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.get(handle.id)?.hasPermissionCheckHandler).toBe(false);
+      expect(sessionLayer).toHaveSession(handle.id, { checkHandler: false });
     });
 
     it("throws SESSION_NOT_FOUND for invalid handle", () => {
@@ -150,24 +138,11 @@ describe("SessionLayer (integration)", () => {
 
       await sessionLayer.dispose();
 
-      const state = sessionLayer._getState();
-      expect(state.sessions.size).toBe(0);
+      expect(sessionLayer).toHaveSessionCount(0);
     });
 
     it("can be called on empty layer", async () => {
       await expect(sessionLayer.dispose()).resolves.not.toThrow();
-    });
-  });
-
-  describe("_getState", () => {
-    it("returns immutable copy of state", () => {
-      const handle = sessionLayer.fromPartition("persist:state-test");
-
-      const state1 = sessionLayer._getState();
-      state1.sessions.delete(handle.id); // Attempt to modify
-
-      const state2 = sessionLayer._getState();
-      expect(state2.sessions.has(handle.id)).toBe(true);
     });
   });
 });

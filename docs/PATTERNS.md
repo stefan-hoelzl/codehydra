@@ -1127,16 +1127,16 @@ class DefaultViewLayer implements ViewLayer {
 
 All paths below are relative to `src/services/`.
 
-| Interface      | Mock Factory                     | Location                        |
-| -------------- | -------------------------------- | ------------------------------- |
-| `IpcLayer`     | `createBehavioralIpcLayer()`     | `platform/ipc.test-utils.ts`    |
-| `DialogLayer`  | `createBehavioralDialogLayer()`  | `platform/dialog.test-utils.ts` |
-| `ImageLayer`   | `createBehavioralImageLayer()`   | `platform/image.test-utils.ts`  |
-| `AppLayer`     | `createBehavioralAppLayer()`     | `platform/app.test-utils.ts`    |
-| `MenuLayer`    | `createBehavioralMenuLayer()`    | `platform/menu.test-utils.ts`   |
-| `WindowLayer`  | `createBehavioralWindowLayer()`  | `shell/window.test-utils.ts`    |
-| `ViewLayer`    | `createBehavioralViewLayer()`    | `shell/view.test-utils.ts`      |
-| `SessionLayer` | `createBehavioralSessionLayer()` | `shell/session.test-utils.ts`   |
+| Interface      | Mock Factory                    | Location                        |
+| -------------- | ------------------------------- | ------------------------------- |
+| `IpcLayer`     | `createBehavioralIpcLayer()`    | `platform/ipc.test-utils.ts`    |
+| `DialogLayer`  | `createBehavioralDialogLayer()` | `platform/dialog.test-utils.ts` |
+| `ImageLayer`   | `createBehavioralImageLayer()`  | `platform/image.test-utils.ts`  |
+| `AppLayer`     | `createBehavioralAppLayer()`    | `platform/app.test-utils.ts`    |
+| `MenuLayer`    | `createBehavioralMenuLayer()`   | `platform/menu.test-utils.ts`   |
+| `WindowLayer`  | `createBehavioralWindowLayer()` | `shell/window.test-utils.ts`    |
+| `ViewLayer`    | `createBehavioralViewLayer()`   | `shell/view.test-utils.ts`      |
+| `SessionLayer` | `createSessionLayerMock()`      | `shell/session.state-mock.ts`   |
 
 ### WorkspaceLockHandler Pattern
 
