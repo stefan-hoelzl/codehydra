@@ -1132,7 +1132,7 @@ All paths below are relative to `src/services/`.
 | `IpcLayer`     | `createBehavioralIpcLayer()`    | `platform/ipc.test-utils.ts`    |
 | `DialogLayer`  | `createBehavioralDialogLayer()` | `platform/dialog.test-utils.ts` |
 | `ImageLayer`   | `createImageLayerMock()`        | `platform/image.state-mock.ts`  |
-| `AppLayer`     | `createBehavioralAppLayer()`    | `platform/app.test-utils.ts`    |
+| `AppLayer`     | `createAppLayerMock()`          | `platform/app.state-mock.ts`    |
 | `MenuLayer`    | `createBehavioralMenuLayer()`   | `platform/menu.test-utils.ts`   |
 | `WindowLayer`  | `createBehavioralWindowLayer()` | `shell/window.test-utils.ts`    |
 | `ViewLayer`    | `createBehavioralViewLayer()`   | `shell/view.test-utils.ts`      |
