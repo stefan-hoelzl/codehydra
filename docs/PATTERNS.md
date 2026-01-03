@@ -1029,57 +1029,65 @@ interface ViewHandle {
 
 #### Behavioral Mocks for Layers
 
-Layer mocks maintain in-memory state, not just call tracking:
+Layer mocks maintain in-memory state with custom matchers for assertions:
 
 ```typescript
-// Create behavioral mock with state inspection
-function createBehavioralViewLayer(): ViewLayer & { _getState(): ViewLayerState } {
-  const views = new Map<string, ViewState>();
-  let nextId = 1;
+import { createViewLayerMock } from "../shell/view.state-mock";
 
-  return {
-    createView(options) {
-      const id = `view-${nextId++}`;
-      views.set(id, {
-        url: null,
-        bounds: null,
-        attachedTo: null,
-        options,
-      });
-      return { id, __brand: "ViewHandle" };
-    },
+// Create mock with state access via $ property
+const mock = createViewLayerMock();
 
-    async loadURL(handle, url) {
-      const view = views.get(handle.id);
-      if (!view) throw new ShellError("VIEW_NOT_FOUND", ...);
-      view.url = url;
-    },
+// All ViewLayer methods work with in-memory state
+const handle = mock.createView({ backgroundColor: "#1e1e1e" });
+await mock.loadURL(handle, "http://127.0.0.1:8080");
 
-    destroy(handle) {
-      if (!views.delete(handle.id)) {
-        throw new ShellError("VIEW_NOT_FOUND", ...);
-      }
-    },
+// State access via $ property
+const snapshot = mock.$.snapshot();
 
-    // State inspection for tests
-    _getState() {
-      return { views: new Map(views) };
-    },
-  };
-}
+// Trigger simulated events
+mock.$.triggerDidFinishLoad(handle);
+mock.$.triggerWillNavigate(handle, "http://example.com");
+```
+
+**Custom matchers for assertions:**
+
+```typescript
+// Check view exists
+expect(mock).toHaveView(handle.id);
+
+// Check view properties
+expect(mock).toHaveView(handle.id, {
+  url: "http://127.0.0.1:8080",
+  attachedTo: null,
+  backgroundColor: "#1e1e1e",
+});
+
+// Check exact set of views
+expect(mock).toHaveViews([handle.id]);
+
+// Use .not for negations
+expect(mock).not.toHaveView("view-999");
+
+// Snapshot comparison
+const before = mock.$.snapshot();
+mock.createView({});
+expect(mock).not.toBeUnchanged(before);
 ```
 
 **Usage in tests:**
 
 ```typescript
-const viewLayer = createBehavioralViewLayer();
+import { createViewLayerMock } from "../shell/view.state-mock";
+
+const viewLayer = createViewLayerMock();
 const viewManager = new ViewManager(viewLayer, sessionLayer, windowLayer, logger);
 
 // Act
-await viewManager.createWorkspaceView("/path/to/workspace", "http://localhost:8080");
+await viewManager.createWorkspaceView("/path/to/workspace", "http://127.0.0.1:8080");
 
-// Assert via state inspection
-expect(viewLayer._getState().views.size).toBe(1);
+// Assert via custom matchers (preferred)
+expect(viewLayer).toHaveViews(["view-1"]);
+expect(viewLayer).toHaveView("view-1", { url: "http://127.0.0.1:8080" });
 ```
 
 #### Error Handling Pattern
@@ -1136,7 +1144,7 @@ All paths below are relative to `src/services/`.
 | `MenuLayer`           | `createBehavioralMenuLayer()`     | `platform/menu.test-utils.ts`   |
 | `WindowLayer`         | `createWindowLayerMock()`         | `shell/window.state-mock.ts`    |
 | `WindowLayerInternal` | `createWindowLayerInternalMock()` | `shell/window.state-mock.ts`    |
-| `ViewLayer`           | `createBehavioralViewLayer()`     | `shell/view.test-utils.ts`      |
+| `ViewLayer`           | `createViewLayerMock()`           | `shell/view.state-mock.ts`      |
 | `SessionLayer`        | `createSessionLayerMock()`        | `shell/session.state-mock.ts`   |
 
 ### WorkspaceLockHandler Pattern

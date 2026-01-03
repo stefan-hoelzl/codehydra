@@ -3,14 +3,14 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createBehavioralViewLayer, type BehavioralViewLayer } from "./view.test-utils";
+import { createViewLayerMock, type MockViewLayer } from "./view.state-mock";
 import { ShellError, isShellErrorWithCode } from "./errors";
 
 describe("ViewLayer (integration)", () => {
-  let viewLayer: BehavioralViewLayer;
+  let viewLayer: MockViewLayer;
 
   beforeEach(() => {
-    viewLayer = createBehavioralViewLayer();
+    viewLayer = createViewLayerMock();
   });
 
   describe("createView", () => {
@@ -19,17 +19,13 @@ describe("ViewLayer (integration)", () => {
 
       expect(handle.id).toMatch(/^view-\d+$/);
       expect(handle.__brand).toBe("ViewHandle");
-
-      const state = viewLayer._getState();
-      expect(state.views.has(handle.id)).toBe(true);
+      expect(viewLayer).toHaveView(handle.id);
     });
 
     it("creates a view with background color", () => {
       const handle = viewLayer.createView({ backgroundColor: "#ff0000" });
 
-      const state = viewLayer._getState();
-      const viewState = state.views.get(handle.id);
-      expect(viewState?.backgroundColor).toBe("#ff0000");
+      expect(viewLayer).toHaveView(handle.id, { backgroundColor: "#ff0000" });
     });
 
     it("creates multiple views with unique IDs", () => {
@@ -37,9 +33,7 @@ describe("ViewLayer (integration)", () => {
       const handle2 = viewLayer.createView({});
 
       expect(handle1.id).not.toBe(handle2.id);
-
-      const state = viewLayer._getState();
-      expect(state.views.size).toBe(2);
+      expect(viewLayer).toHaveViews([handle1.id, handle2.id]);
     });
   });
 
@@ -49,8 +43,7 @@ describe("ViewLayer (integration)", () => {
 
       viewLayer.destroy(handle);
 
-      const state = viewLayer._getState();
-      expect(state.views.has(handle.id)).toBe(false);
+      expect(viewLayer).not.toHaveView(handle.id);
     });
 
     it("throws VIEW_NOT_FOUND for non-existent view", () => {
@@ -76,8 +69,7 @@ describe("ViewLayer (integration)", () => {
 
       viewLayer.destroyAll();
 
-      const state = viewLayer._getState();
-      expect(state.views.size).toBe(0);
+      expect(viewLayer).toHaveViews([]);
     });
   });
 
@@ -141,8 +133,7 @@ describe("ViewLayer (integration)", () => {
 
       viewLayer.setBackgroundColor(handle, "#00ff00");
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.backgroundColor).toBe("#00ff00");
+      expect(viewLayer).toHaveView(handle.id, { backgroundColor: "#00ff00" });
     });
   });
 
@@ -167,8 +158,7 @@ describe("ViewLayer (integration)", () => {
 
       viewLayer.attachToWindow(handle, windowHandle);
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.attachedTo).toBe("window-1");
+      expect(viewLayer).toHaveView(handle.id, { attachedTo: "window-1" });
     });
 
     it("detaches view from window", () => {
@@ -178,8 +168,7 @@ describe("ViewLayer (integration)", () => {
       viewLayer.attachToWindow(handle, windowHandle);
       viewLayer.detachFromWindow(handle);
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.attachedTo).toBeNull();
+      expect(viewLayer).toHaveView(handle.id, { attachedTo: null });
     });
 
     it("attach is idempotent", () => {
@@ -189,8 +178,7 @@ describe("ViewLayer (integration)", () => {
       viewLayer.attachToWindow(handle, windowHandle);
       viewLayer.attachToWindow(handle, windowHandle);
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.attachedTo).toBe("window-1");
+      expect(viewLayer).toHaveView(handle.id, { attachedTo: "window-1" });
     });
 
     it("detach is idempotent", () => {
@@ -199,8 +187,7 @@ describe("ViewLayer (integration)", () => {
       // Not attached - should be no-op
       viewLayer.detachFromWindow(handle);
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.attachedTo).toBeNull();
+      expect(viewLayer).toHaveView(handle.id, { attachedTo: null });
     });
   });
 
@@ -210,7 +197,7 @@ describe("ViewLayer (integration)", () => {
       const callback = vi.fn();
 
       viewLayer.onDidFinishLoad(handle, callback);
-      viewLayer._triggerDidFinishLoad(handle);
+      viewLayer.$.triggerDidFinishLoad(handle);
 
       expect(callback).toHaveBeenCalled();
     });
@@ -221,7 +208,7 @@ describe("ViewLayer (integration)", () => {
 
       const unsubscribe = viewLayer.onDidFinishLoad(handle, callback);
       unsubscribe();
-      viewLayer._triggerDidFinishLoad(handle);
+      viewLayer.$.triggerDidFinishLoad(handle);
 
       expect(callback).not.toHaveBeenCalled();
     });
@@ -233,7 +220,7 @@ describe("ViewLayer (integration)", () => {
 
       viewLayer.onDidFinishLoad(handle, callback1);
       viewLayer.onDidFinishLoad(handle, callback2);
-      viewLayer._triggerDidFinishLoad(handle);
+      viewLayer.$.triggerDidFinishLoad(handle);
 
       expect(callback1).toHaveBeenCalled();
       expect(callback2).toHaveBeenCalled();
@@ -243,21 +230,21 @@ describe("ViewLayer (integration)", () => {
   describe("onWillNavigate", () => {
     it("registers callback with URL", () => {
       const handle = viewLayer.createView({});
-      const callback = vi.fn();
+      const callback = vi.fn().mockReturnValue(true);
 
       viewLayer.onWillNavigate(handle, callback);
-      viewLayer._triggerWillNavigate(handle, "http://test.com");
+      viewLayer.$.triggerWillNavigate(handle, "http://test.com");
 
       expect(callback).toHaveBeenCalledWith("http://test.com");
     });
 
     it("unsubscribes from callback", () => {
       const handle = viewLayer.createView({});
-      const callback = vi.fn();
+      const callback = vi.fn().mockReturnValue(true);
 
       const unsubscribe = viewLayer.onWillNavigate(handle, callback);
       unsubscribe();
-      viewLayer._triggerWillNavigate(handle, "http://test.com");
+      viewLayer.$.triggerWillNavigate(handle, "http://test.com");
 
       expect(callback).not.toHaveBeenCalled();
     });
@@ -269,8 +256,7 @@ describe("ViewLayer (integration)", () => {
 
       viewLayer.setWindowOpenHandler(handle, () => ({ action: "deny" }));
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.hasWindowOpenHandler).toBe(true);
+      expect(viewLayer).toHaveView(handle.id, { hasWindowOpenHandler: true });
     });
 
     it("tracks handler state when cleared", () => {
@@ -279,8 +265,7 @@ describe("ViewLayer (integration)", () => {
       viewLayer.setWindowOpenHandler(handle, () => ({ action: "deny" }));
       viewLayer.setWindowOpenHandler(handle, null);
 
-      const state = viewLayer._getState();
-      expect(state.views.get(handle.id)?.hasWindowOpenHandler).toBe(false);
+      expect(viewLayer).toHaveView(handle.id, { hasWindowOpenHandler: false });
     });
   });
 
@@ -309,8 +294,7 @@ describe("ViewLayer (integration)", () => {
 
       await viewLayer.dispose();
 
-      const state = viewLayer._getState();
-      expect(state.views.size).toBe(0);
+      expect(viewLayer).toHaveViews([]);
     });
   });
 
@@ -328,7 +312,7 @@ describe("ViewLayer (integration)", () => {
       expect(() => viewLayer.setBackgroundColor(fakeHandle, "#fff")).toThrow(ShellError);
       expect(() => viewLayer.focus(fakeHandle)).toThrow(ShellError);
       expect(() => viewLayer.onDidFinishLoad(fakeHandle, () => {})).toThrow(ShellError);
-      expect(() => viewLayer.onWillNavigate(fakeHandle, () => {})).toThrow(ShellError);
+      expect(() => viewLayer.onWillNavigate(fakeHandle, () => true)).toThrow(ShellError);
       expect(() => viewLayer.setWindowOpenHandler(fakeHandle, null)).toThrow(ShellError);
       expect(() => viewLayer.send(fakeHandle, "channel", {})).toThrow(ShellError);
 

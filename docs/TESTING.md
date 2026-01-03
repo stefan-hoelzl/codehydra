@@ -470,6 +470,40 @@ export function createMockFileSystem(options?: MockFileSystemOptions): MockFileS
 }
 ```
 
+### ViewLayer State Mock Example
+
+The ViewLayer mock demonstrates the same pattern with custom matchers for view-specific assertions:
+
+```typescript
+import { createViewLayerMock } from "../shell/view.state-mock";
+
+const mock = createViewLayerMock();
+
+// Create views and interact with them
+const handle = mock.createView({ backgroundColor: "#1e1e1e" });
+await mock.loadURL(handle, "http://127.0.0.1:8080");
+
+// Custom matchers for view assertions
+expect(mock).toHaveView(handle.id);
+expect(mock).toHaveView(handle.id, {
+  url: "http://127.0.0.1:8080",
+  backgroundColor: "#1e1e1e",
+  attachedTo: null,
+});
+
+// Assert exact set of views
+expect(mock).toHaveViews([handle.id]);
+
+// Trigger simulated events
+mock.onDidFinishLoad(handle, () => console.log("loaded"));
+mock.$.triggerDidFinishLoad(handle);
+
+// Snapshot for unchanged assertions
+const snapshot = mock.$.snapshot();
+// ... action that should not change state ...
+expect(mock).toBeUnchanged(snapshot);
+```
+
 ### Matcher Registration
 
 Matchers are registered in `src/test/setup-matchers.ts`:
@@ -483,9 +517,12 @@ import "../services/platform/filesystem.state-mock";
 
 // ProcessRunner matchers (auto-registered via import side effect)
 import "../services/platform/process.state-mock";
+
+// ViewLayer matchers (auto-registered via import side effect)
+import "../services/shell/view.state-mock";
 ```
 
-Note: State mock files call `expect.extend()` when imported, so matchers are automatically available in tests.
+Note: Each `*.state-mock.ts` file calls `expect.extend(matchers)` when imported, so matchers are automatically available in tests.
 
 ### ProcessRunner Mock Example
 
