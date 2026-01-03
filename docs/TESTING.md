@@ -480,9 +480,50 @@ import "./state-mock";
 
 // Filesystem matchers (auto-registered via import side effect)
 import "../services/platform/filesystem.state-mock";
+
+// ProcessRunner matchers (auto-registered via import side effect)
+import "../services/platform/process.state-mock";
 ```
 
-Note: The `filesystem.state-mock.ts` file calls `expect.extend(fileSystemMatchers)` when imported, so matchers are automatically available in tests.
+Note: State mock files call `expect.extend()` when imported, so matchers are automatically available in tests.
+
+### ProcessRunner Mock Example
+
+The ProcessRunner state mock provides behavioral simulation for process spawning:
+
+```typescript
+// Factory with per-spawn configuration
+const runner = createMockProcessRunner({
+  onSpawn: (command, args, cwd) => {
+    if (command.includes("code-server")) {
+      return { pid: 12345, exitCode: 0 };
+    }
+    return { pid: undefined, stderr: "spawn ENOENT" }; // Spawn failure
+  },
+});
+
+// Use in tests
+const manager = new CodeServerManager(runner, ...);
+await manager.ensureRunning();
+
+// Custom matchers for verification
+expect(runner).toHaveSpawned([
+  { command: expect.stringContaining("code-server"), cwd: "/workspace" },
+]);
+
+// Stop and verify kill was called
+await manager.stop();
+expect(runner.$.spawned(0)).toHaveBeenKilled();
+expect(runner.$.spawned(0)).toHaveBeenKilledWith(1000, 1000);
+```
+
+**Custom Matchers:**
+
+| Matcher                            | Target             | Description                      |
+| ---------------------------------- | ------------------ | -------------------------------- |
+| `toHaveSpawned(records[])`         | MockProcessRunner  | Verify spawned processes         |
+| `toHaveBeenKilled()`               | MockSpawnedProcess | Verify kill() was called         |
+| `toHaveBeenKilledWith(term, kill)` | MockSpawnedProcess | Verify kill() with specific args |
 
 ### SDK Client Mock
 

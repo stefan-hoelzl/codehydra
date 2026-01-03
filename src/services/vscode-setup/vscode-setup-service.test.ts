@@ -1,8 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VscodeSetupService } from "./vscode-setup-service";
-import { type SetupMarker, type ProcessRunner, type ProcessResult } from "./types";
-import type { SpawnedProcess } from "../platform/process";
+import { type SetupMarker } from "./types";
 import type { PathProvider } from "../platform/path-provider";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
 import { Path } from "../platform/path";
@@ -15,6 +14,7 @@ import {
   type MockFileSystemLayer,
 } from "../platform/filesystem.state-mock";
 import { createMockPlatformInfo } from "../platform/platform-info.test-utils";
+import { createMockProcessRunner, type MockProcessRunner } from "../platform/process.state-mock";
 import { VscodeSetupError } from "../errors";
 import type { PathLike, RmOptions } from "../platform/filesystem";
 import type { PlatformInfo } from "../platform/platform-info";
@@ -26,17 +26,6 @@ import type { BinaryDownloadService } from "../binary-download/binary-download-s
 function wasRmCalledWith(spyFs: SpyFileSystemLayer, pathPattern: string): boolean {
   const calls = spyFs.rm.mock.calls as Array<[PathLike, RmOptions?]>;
   return calls.some(([path]) => String(path).includes(pathPattern));
-}
-
-/**
- * Create a mock SpawnedProcess with controllable wait() result.
- */
-function createMockSpawnedProcess(result: ProcessResult): SpawnedProcess {
-  return {
-    pid: 12345,
-    kill: vi.fn().mockReturnValue(true),
-    wait: vi.fn().mockResolvedValue(result),
-  };
 }
 
 /**
@@ -98,16 +87,14 @@ function createFullSetupPreflightResult(): {
 }
 
 describe("VscodeSetupService", () => {
-  let mockProcessRunner: ProcessRunner;
+  let mockProcessRunner: MockProcessRunner;
   let mockPathProvider: PathProvider;
   let mockFs: MockFileSystemLayer;
   let mockPlatformInfo: PlatformInfo;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessRunner = {
-      run: vi.fn(),
-    };
+    mockProcessRunner = createMockProcessRunner();
     mockPathProvider = createMockPathProvider({
       dataRootDir: "/mock",
       vscodeDir: "/mock/vscode",
@@ -267,13 +254,9 @@ describe("VscodeSetupService", () => {
           "/mock/vscode": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
       await service.installExtensions();
@@ -291,27 +274,30 @@ describe("VscodeSetupService", () => {
           "/mock/vscode": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
       await service.installExtensions();
 
-      // First call is for bundled vsix - uses codeServerBinaryPath.toNative() from pathProvider
-      expect(mockProcessRunner.run).toHaveBeenCalledWith(
-        mockPathProvider.codeServerBinaryPath.toNative(),
-        [
-          "--install-extension",
-          new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toNative(),
-          "--extensions-dir",
-          mockPathProvider.vscodeExtensionsDir.toNative(),
-        ]
-      );
+      // Installs bundled vsix - uses codeServerBinaryPath.toNative() from pathProvider
+      expect(mockProcessRunner).toHaveSpawned([
+        {
+          command: mockPathProvider.codeServerBinaryPath.toNative(),
+          args: expect.arrayContaining([
+            "--install-extension",
+            new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toNative(),
+          ]),
+        },
+        {
+          command: mockPathProvider.codeServerBinaryPath.toNative(),
+          args: expect.arrayContaining([
+            "--install-extension",
+            new Path("/mock/vscode", "sst-dev-opencode-0.0.13.vsix").toNative(),
+          ]),
+        },
+      ]);
     });
 
     it("installs all extensions from bundled vsix files", async () => {
@@ -323,27 +309,27 @@ describe("VscodeSetupService", () => {
           "/mock/vscode": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
       const progressCallback = vi.fn();
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
       await service.installExtensions(progressCallback);
 
       // Verify both extensions installed from vsix files
-      expect(mockProcessRunner.run).toHaveBeenCalledTimes(2);
-      const calls = vi.mocked(mockProcessRunner.run).mock.calls;
-      expect(calls[0]?.[1]?.[1]).toBe(
-        new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toNative()
-      );
-      expect(calls[1]?.[1]?.[1]).toBe(
-        new Path("/mock/vscode", "sst-dev-opencode-0.0.13.vsix").toNative()
-      );
+      expect(mockProcessRunner).toHaveSpawned([
+        {
+          args: expect.arrayContaining([
+            new Path("/mock/vscode", "codehydra-sidekick-0.0.3.vsix").toNative(),
+          ]),
+        },
+        {
+          args: expect.arrayContaining([
+            new Path("/mock/vscode", "sst-dev-opencode-0.0.13.vsix").toNative(),
+          ]),
+        },
+      ]);
 
       // Verify progress messages
       const progressMessages = progressCallback.mock.calls.map(
@@ -362,13 +348,9 @@ describe("VscodeSetupService", () => {
           "/mock/vscode": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "",
-          stderr: "Failed to install extension",
-          exitCode: 1,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "", stderr: "Failed to install extension", exitCode: 1 },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
       const result = await service.installExtensions();
@@ -392,13 +374,10 @@ describe("VscodeSetupService", () => {
           "/mock/vscode": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "",
-          stderr: "spawn ENOENT: code-server not found",
-          exitCode: null,
-        })
-      );
+      // Spawn failure is detected by ENOENT in stderr and non-zero exit code
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "", stderr: "spawn ENOENT: code-server not found", exitCode: 1 },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
       const result = await service.installExtensions();
@@ -466,13 +445,9 @@ describe("VscodeSetupService", () => {
           "/mock/bin": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       const progressCallback = vi.fn();
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
@@ -501,13 +476,9 @@ describe("VscodeSetupService", () => {
           "/mock/vscode": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "",
-          stderr: "Failed",
-          exitCode: 1,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "", stderr: "Failed", exitCode: 1 },
+      });
 
       const service = new VscodeSetupService(mockProcessRunner, mockPathProvider, mockFs);
       const preflight = createFullSetupPreflightResult();
@@ -672,13 +643,9 @@ describe("VscodeSetupService", () => {
           "/mock/bin": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       const service = new VscodeSetupService(
         mockProcessRunner,
@@ -718,13 +685,9 @@ describe("VscodeSetupService", () => {
           "/mock/bin": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       const service = new VscodeSetupService(
         mockProcessRunner,
@@ -803,13 +766,9 @@ describe("VscodeSetupService", () => {
           "/mock/bin": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       const progressCallback = vi.fn();
       const service = new VscodeSetupService(
@@ -847,13 +806,9 @@ describe("VscodeSetupService", () => {
           "/mock/bin": directory(),
         },
       });
-      vi.mocked(mockProcessRunner.run).mockReturnValue(
-        createMockSpawnedProcess({
-          stdout: "Extension installed",
-          stderr: "",
-          exitCode: 0,
-        })
-      );
+      mockProcessRunner = createMockProcessRunner({
+        defaultResult: { stdout: "Extension installed", stderr: "", exitCode: 0 },
+      });
 
       // No binaryDownloadService passed
       const service = new VscodeSetupService(

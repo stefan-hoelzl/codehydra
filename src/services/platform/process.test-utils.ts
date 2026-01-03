@@ -1,5 +1,9 @@
 /**
  * Test utilities for process module.
+ *
+ * @deprecated Use the state mock pattern from `./process.state-mock.ts` instead.
+ * The new mock provides behavioral simulation with state tracking and custom matchers.
+ * See `createMockProcessRunner()` in process.state-mock.ts.
  */
 import { vi, type Mock } from "vitest";
 import type {
@@ -12,6 +16,8 @@ import type {
 
 /**
  * Mock SpawnedProcess with vitest mock methods for assertions.
+ *
+ * @deprecated Use `MockSpawnedProcess` from `./process.state-mock.ts` instead.
  */
 export interface MockSpawnedProcess extends SpawnedProcess {
   kill: Mock<(termTimeout?: number, killTimeout?: number) => Promise<KillResult>>;
@@ -20,6 +26,8 @@ export interface MockSpawnedProcess extends SpawnedProcess {
 
 /**
  * Mock ProcessRunner with vitest mock method for assertions.
+ *
+ * @deprecated Use `MockProcessRunner` from `./process.state-mock.ts` instead.
  */
 export interface MockProcessRunner extends ProcessRunner {
   run: Mock<(command: string, args: readonly string[], options?: ProcessOptions) => SpawnedProcess>;
@@ -27,6 +35,9 @@ export interface MockProcessRunner extends ProcessRunner {
 
 /**
  * Create a mock SpawnedProcess with controllable behavior.
+ *
+ * @deprecated Use `createMockProcessRunner()` from `./process.state-mock.ts` instead.
+ * The new mock provides behavioral state tracking and custom matchers like `toHaveBeenKilled()`.
  *
  * @param overrides - Configuration for mock behavior
  * @param overrides.pid - Process ID (defaults to 12345, set to null to simulate spawn failure)
@@ -72,6 +83,9 @@ export function createMockSpawnedProcess(overrides?: {
 
 /**
  * Create a mock ProcessRunner returning the given SpawnedProcess.
+ *
+ * @deprecated Use `createMockProcessRunner()` from `./process.state-mock.ts` instead.
+ * The new mock provides behavioral state tracking and custom matchers like `toHaveSpawned()`.
  */
 export function createMockProcessRunner(spawnedProcess?: SpawnedProcess): MockProcessRunner {
   return {

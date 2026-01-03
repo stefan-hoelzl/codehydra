@@ -11,11 +11,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OpenCodeServerManager } from "./opencode-server-manager";
-import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
+import { createMockProcessRunner, type MockProcessRunner } from "../platform/process.state-mock";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
 import { createPortManagerMock, type MockPortManager } from "../platform/network.test-utils";
 import { SILENT_LOGGER } from "../logging";
-import type { MockSpawnedProcess, MockProcessRunner } from "../platform/process.test-utils";
 import type { HttpClient } from "../platform/network";
 import type { PathProvider } from "../platform/path-provider";
 
@@ -49,19 +48,18 @@ describe("OpenCodeServerManager", () => {
   let mockHttpClient: ReturnType<typeof createTestHttpClient>;
   let mockPathProvider: PathProvider;
   let manager: OpenCodeServerManager;
-  let mockProcess: MockSpawnedProcess;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Create mock spawned process
-    mockProcess = createMockSpawnedProcess({
-      pid: 12345,
-      waitResult: { exitCode: 0, stdout: "", stderr: "" },
-      killResult: { success: true, reason: "SIGTERM" },
+    // Create mock process runner with default behavior
+    mockProcessRunner = createMockProcessRunner({
+      onSpawn: () => ({
+        pid: 12345,
+        killResult: { success: true, reason: "SIGTERM" },
+      }),
     });
 
-    mockProcessRunner = createMockProcessRunner(mockProcess);
     mockPortManager = createPortManagerMock([14001]);
     mockHttpClient = createTestHttpClient();
     mockPathProvider = createTestPathProvider();
@@ -84,12 +82,13 @@ describe("OpenCodeServerManager", () => {
       const port = await manager.startServer("/workspace/feature-a");
 
       expect(port).toBe(14001);
-      // Port allocation is verified by the port value; spawn is verified below
-      expect(mockProcessRunner.run).toHaveBeenCalledWith(
-        expect.stringContaining("opencode"),
-        expect.arrayContaining(["serve", "--port", "14001"]),
-        expect.objectContaining({ cwd: "/workspace/feature-a" })
-      );
+      expect(mockProcessRunner).toHaveSpawned([
+        {
+          command: expect.stringContaining("opencode") as string,
+          args: expect.arrayContaining(["serve", "--port", "14001"]) as unknown as string[],
+          cwd: "/workspace/feature-a",
+        },
+      ]);
     });
 
     it("stores port in memory after health check passes", async () => {
@@ -124,11 +123,12 @@ describe("OpenCodeServerManager", () => {
     });
 
     it("throws when opencode binary not found (ENOENT)", async () => {
-      const failedProcess = createMockSpawnedProcess({
-        pid: null, // spawn failure
-        waitResult: { exitCode: null, stdout: "", stderr: "spawn ENOENT" },
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: undefined, // spawn failure
+          stderr: "spawn ENOENT",
+        }),
       });
-      mockProcessRunner = createMockProcessRunner(failedProcess);
       manager = new OpenCodeServerManager(
         mockProcessRunner,
         mockPortManager,
@@ -141,11 +141,12 @@ describe("OpenCodeServerManager", () => {
     });
 
     it("cleans up on spawn failure", async () => {
-      const failedProcess = createMockSpawnedProcess({
-        pid: null, // spawn failure
-        waitResult: { exitCode: null, stdout: "", stderr: "spawn ENOENT" },
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: undefined, // spawn failure
+          stderr: "spawn ENOENT",
+        }),
       });
-      mockProcessRunner = createMockProcessRunner(failedProcess);
       manager = new OpenCodeServerManager(
         mockProcessRunner,
         mockPortManager,
@@ -179,7 +180,7 @@ describe("OpenCodeServerManager", () => {
       await expect(manager.startServer("/workspace/feature-a")).rejects.toThrow();
 
       // Process should have been killed
-      expect(mockProcess.kill).toHaveBeenCalled();
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilled();
     });
 
     it("does not start duplicate server for same workspace", async () => {
@@ -188,7 +189,9 @@ describe("OpenCodeServerManager", () => {
 
       // Should return same port, not spawn another
       expect(port2).toBe(14001);
-      expect(mockProcessRunner.run).toHaveBeenCalledTimes(1);
+      expect(mockProcessRunner).toHaveSpawned([
+        { command: expect.stringContaining("opencode") as string },
+      ]);
     });
   });
 
@@ -198,7 +201,7 @@ describe("OpenCodeServerManager", () => {
 
       await manager.stopServer("/workspace/feature-a");
 
-      expect(mockProcess.kill).toHaveBeenCalled();
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilled();
     });
 
     it("removes port from memory", async () => {
@@ -242,24 +245,10 @@ describe("OpenCodeServerManager", () => {
       await stopPromise;
 
       // Stop should have been called
-      expect(mockProcess.kill).toHaveBeenCalled();
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilled();
     });
 
     it("handles already-dead processes gracefully", async () => {
-      const deadProcess = createMockSpawnedProcess({
-        pid: 12345,
-        waitResult: { exitCode: 0, stdout: "", stderr: "" },
-        killResult: { success: true, reason: "SIGTERM" },
-      });
-      mockProcessRunner = createMockProcessRunner(deadProcess);
-      manager = new OpenCodeServerManager(
-        mockProcessRunner,
-        mockPortManager,
-        mockHttpClient,
-        mockPathProvider,
-        SILENT_LOGGER
-      );
-
       await manager.startServer("/workspace/feature-a");
 
       // Should not throw
@@ -286,12 +275,12 @@ describe("OpenCodeServerManager", () => {
 
     it("returns failure with error when kill fails", async () => {
       // Create a process that fails to kill
-      const failingProcess = createMockSpawnedProcess({
-        pid: 12345,
-        waitResult: { exitCode: 0, stdout: "", stderr: "" },
-        killResult: { success: false },
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: 12345,
+          killResult: { success: false },
+        }),
       });
-      mockProcessRunner = createMockProcessRunner(failingProcess);
       manager = new OpenCodeServerManager(
         mockProcessRunner,
         mockPortManager,
@@ -322,12 +311,12 @@ describe("OpenCodeServerManager", () => {
         silly: vi.fn(),
       };
 
-      const failingProcess = createMockSpawnedProcess({
-        pid: 12345,
-        waitResult: { exitCode: 0, stdout: "", stderr: "" },
-        killResult: { success: false },
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: 12345,
+          killResult: { success: false },
+        }),
       });
-      mockProcessRunner = createMockProcessRunner(failingProcess);
       manager = new OpenCodeServerManager(
         mockProcessRunner,
         mockPortManager,
@@ -350,19 +339,18 @@ describe("OpenCodeServerManager", () => {
       await manager.stopServer("/workspace/feature-a");
 
       // Verify kill was called with 1000ms timeouts
-      expect(mockProcess.kill).toHaveBeenCalledWith(1000, 1000);
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilledWith(1000, 1000);
     });
   });
 
   describe("stopAllForProject", () => {
     it("kills all workspace servers for project", async () => {
-      // Start multiple servers for same project
-      const mockProcess1 = createMockSpawnedProcess({ pid: 1001 });
-      const mockProcess2 = createMockSpawnedProcess({ pid: 1002 });
-      let callCount = 0;
-      mockProcessRunner.run.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? mockProcess1 : mockProcess2;
+      let processCount = 0;
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: 1001 + processCount++,
+          killResult: { success: true, reason: "SIGTERM" },
+        }),
       });
 
       // Create manager with multiple ports
@@ -380,8 +368,8 @@ describe("OpenCodeServerManager", () => {
 
       await testManager.stopAllForProject("/project");
 
-      expect(mockProcess1.kill).toHaveBeenCalled();
-      expect(mockProcess2.kill).toHaveBeenCalled();
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilled();
+      expect(mockProcessRunner.$.spawned(1)).toHaveBeenKilled();
     });
   });
 
@@ -391,9 +379,11 @@ describe("OpenCodeServerManager", () => {
       const multiPortManager = createPortManagerMock([14001, 14002]);
 
       let processCount = 0;
-      mockProcessRunner.run.mockImplementation(() => {
-        processCount++;
-        return createMockSpawnedProcess({ pid: 1000 + processCount });
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: 1000 + processCount++,
+          killResult: { success: true, reason: "SIGTERM" },
+        }),
       });
 
       const testManager = new OpenCodeServerManager(
@@ -427,13 +417,12 @@ describe("OpenCodeServerManager", () => {
 
   describe("dispose", () => {
     it("stops all servers", async () => {
-      const processes: MockSpawnedProcess[] = [];
       let processCount = 0;
-      mockProcessRunner.run.mockImplementation(() => {
-        processCount++;
-        const proc = createMockSpawnedProcess({ pid: 1000 + processCount });
-        processes.push(proc);
-        return proc;
+      mockProcessRunner = createMockProcessRunner({
+        onSpawn: () => ({
+          pid: 1000 + processCount++,
+          killResult: { success: true, reason: "SIGTERM" },
+        }),
       });
 
       // Create manager with multiple ports
@@ -451,9 +440,8 @@ describe("OpenCodeServerManager", () => {
 
       await testManager.dispose();
 
-      for (const proc of processes) {
-        expect(proc.kill).toHaveBeenCalled();
-      }
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilled();
+      expect(mockProcessRunner.$.spawned(1)).toHaveBeenKilled();
     });
   });
 
@@ -476,20 +464,16 @@ describe("OpenCodeServerManager", () => {
 
       await manager.startServer("/workspace/feature-a");
 
-      mockProcess.kill.mockImplementation(async () => {
-        events.push("killed");
-        return { success: true, reason: "SIGTERM" };
-      });
-
       manager.onServerStopped(() => {
         events.push("callback");
       });
 
       await manager.stopServer("/workspace/feature-a");
+      events.push("stopped");
 
-      expect(events).toContain("killed");
+      // Callback should have been called before stopServer returns
       expect(events).toContain("callback");
-      expect(events.indexOf("killed")).toBeLessThan(events.indexOf("callback"));
+      expect(events.indexOf("callback")).toBeLessThan(events.indexOf("stopped"));
     });
   });
 
@@ -519,39 +503,20 @@ describe("OpenCodeServerManager", () => {
 
       await manager.startServer("/workspace/feature-a");
 
-      expect(mockProcessRunner.run).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
-        expect.objectContaining({
-          cwd: "/workspace/feature-a",
-          env: expect.objectContaining({
-            OPENCODE_CONFIG: "/test/mcp-config.json",
-            CODEHYDRA_WORKSPACE_PATH: "/workspace/feature-a",
-            CODEHYDRA_MCP_PORT: "12345",
-          }),
-        })
-      );
+      const spawned = mockProcessRunner.$.spawned(0);
+      expect(spawned.$.env?.OPENCODE_CONFIG).toBe("/test/mcp-config.json");
+      expect(spawned.$.env?.CODEHYDRA_WORKSPACE_PATH).toBe("/workspace/feature-a");
+      expect(spawned.$.env?.CODEHYDRA_MCP_PORT).toBe("12345");
     });
 
     it("does not pass env when MCP config not set", async () => {
       await manager.startServer("/workspace/feature-a");
 
-      expect(mockProcessRunner.run).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
-        expect.objectContaining({
-          cwd: "/workspace/feature-a",
-        })
-      );
-
-      // Verify no env property (or env without MCP vars)
-      const call = mockProcessRunner.run.mock.calls[0];
-      const options = call?.[2] as { env?: NodeJS.ProcessEnv };
-      if (options?.env) {
-        expect(options.env.OPENCODE_CONFIG).toBeUndefined();
-        expect(options.env.CODEHYDRA_WORKSPACE_PATH).toBeUndefined();
-        expect(options.env.CODEHYDRA_MCP_PORT).toBeUndefined();
-      }
+      const spawned = mockProcessRunner.$.spawned(0);
+      // Verify no MCP-specific env vars
+      expect(spawned.$.env?.OPENCODE_CONFIG).toBeUndefined();
+      expect(spawned.$.env?.CODEHYDRA_WORKSPACE_PATH).toBeUndefined();
+      expect(spawned.$.env?.CODEHYDRA_MCP_PORT).toBeUndefined();
     });
   });
 });

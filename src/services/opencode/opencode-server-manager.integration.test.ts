@@ -12,11 +12,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OpenCodeServerManager } from "./opencode-server-manager";
 import { AgentStatusManager, OpenCodeProvider } from "./agent-status-manager";
-import { createMockProcessRunner, createMockSpawnedProcess } from "../platform/process.test-utils";
+import { createMockProcessRunner, type MockProcessRunner } from "../platform/process.state-mock";
 import { createMockPathProvider } from "../platform/path-provider.test-utils";
 import { createPortManagerMock, type MockPortManager } from "../platform/network.test-utils";
 import { SILENT_LOGGER } from "../logging";
-import type { MockSpawnedProcess, MockProcessRunner } from "../platform/process.test-utils";
 import type { HttpClient } from "../platform/network";
 import type { PathProvider } from "../platform/path-provider";
 import type { WorkspacePath } from "../../shared/ipc";
@@ -65,21 +64,19 @@ describe("OpenCodeServerManager integration", () => {
   let mockPortManager: MockPortManager;
   let mockHttpClient: ReturnType<typeof createTestHttpClient>;
   let mockPathProvider: PathProvider;
-  let processes: MockSpawnedProcess[];
+  let processCount: number;
   let mockSdkFactory: SdkClientFactory;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processes = [];
+    processCount = 0;
 
     // Create a mock process runner that returns new processes for each call
-    const mockProcess = createMockSpawnedProcess({ pid: 1000 });
-    mockProcessRunner = createMockProcessRunner(mockProcess);
-    // Override run to create new processes each time
-    mockProcessRunner.run.mockImplementation(() => {
-      const proc = createMockSpawnedProcess({ pid: 1000 + processes.length });
-      processes.push(proc);
-      return proc;
+    mockProcessRunner = createMockProcessRunner({
+      onSpawn: () => ({
+        pid: 1000 + processCount++,
+        killResult: { success: true, reason: "SIGTERM" },
+      }),
     });
     // Provide enough ports for tests (max ~5 concurrent servers in some tests)
     mockPortManager = createPortManagerMock([
@@ -201,9 +198,9 @@ describe("OpenCodeServerManager integration", () => {
       expect(serverManager.getPort("/project/.worktrees/feature-c")).toBeUndefined();
 
       // All processes should have been killed
-      for (const proc of processes) {
-        expect(proc.kill).toHaveBeenCalled();
-      }
+      expect(mockProcessRunner.$.spawned(0)).toHaveBeenKilled();
+      expect(mockProcessRunner.$.spawned(1)).toHaveBeenKilled();
+      expect(mockProcessRunner.$.spawned(2)).toHaveBeenKilled();
     });
   });
 

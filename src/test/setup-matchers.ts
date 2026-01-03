@@ -10,3 +10,6 @@ import "./state-mock";
 
 // Register filesystem matchers (auto-registers via expect.extend on import)
 import "../services/platform/filesystem.state-mock";
+
+// Register process runner matchers (auto-registers via expect.extend on import)
+import "../services/platform/process.state-mock";
